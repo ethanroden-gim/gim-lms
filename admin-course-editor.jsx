@@ -23,30 +23,24 @@ const blankCourse = () => ({
   questionsCount: 5,
 });
 
-const sampleEditCourse = (id) => {
-  const c = COURSES.find(x => x.id === id) || COURSES[0];
+const loadEditCourse = (id) => {
+  const c = COURSES.find(x => x.id === id);
+  if (!c) return null;
   return {
     id: c.id,
-    title: c.title,
-    cat: c.cat,
-    dept: c.dept || c.cat,
+    title: c.title || "",
+    cat: c.cat || "Property Management",
+    dept: c.dept || c.cat || "Property Management",
     required: !!c.required,
     duration: c.duration || 30,
     instructor: c.instructor || "",
-    description: c.description || "Brings together everything a GIM team member needs to know to be effective in this area of work.",
+    description: c.description || "",
     cover: c.cover || "ph-bg-1",
-    status: "published",
-    modules: c.modules || [
-      { title: "Foundations", lessons: [
-        { id: "l1", title: "Introduction", type: "video", dur: "5:00", source: "drive", url: "" },
-        { id: "l2", title: "Core concepts", type: "article", dur: "8 min read" },
-      ]},
-    ],
-    resources: c.resources || [
-      { name: "Reference handout", type: "pdf", size: "1.2 MB" },
-    ],
-    passingScore: 80,
-    questionsCount: c.questionsCount || 5,
+    status: c.status || "published",
+    modules: c.modules || c.sections || [],
+    resources: c.resources || [],
+    passingScore: c.passingScore || 80,
+    questionsCount: c.questionsCount || 0,
   };
 };
 
@@ -61,10 +55,18 @@ const LESSON_TYPES = [
 
 const AdminCourseEditorPage = ({ mode, courseId, goBack }) => {
   const isNew = mode === "new";
-  const [c, setC] = React.useState(() => isNew ? blankCourse() : sampleEditCourse(courseId));
+  const [c, setC] = React.useState(() => isNew ? blankCourse() : (loadEditCourse(courseId) || blankCourse()));
   const [tab, setTab] = React.useState("details");
   const [saving, setSaving] = React.useState(false);
   const set = (patch) => setC(prev => ({ ...prev, ...patch }));
+
+  // If COURSES loads after the editor mounts (e.g. deep-link refresh), hydrate once
+  React.useEffect(() => {
+    if (isNew || !courseId) return;
+    if (c.id === courseId) return;
+    const loaded = loadEditCourse(courseId);
+    if (loaded) setC(loaded);
+  }, [COURSES.length, courseId]);
 
   const onSave = async (publish) => {
     if (saving) return;
@@ -72,9 +74,12 @@ const AdminCourseEditorPage = ({ mode, courseId, goBack }) => {
     if (!window.fbReady) { alert("Firebase isn't configured — can't save."); return; }
 
     setSaving(true);
+    // Persist as both `modules` (editor) and `sections` (player) for compatibility
     const payload = {
       ...c,
       status: publish ? "published" : "draft",
+      modules: c.modules,
+      sections: c.modules,
       lessons: c.modules.reduce((s, m) => s + m.lessons.length, 0),
     };
     try {

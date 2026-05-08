@@ -119,15 +119,18 @@ const AdminOverviewPage = () => {
 // ============================================================
 // Admin: Courses
 // ============================================================
-const AdminCoursesPage = ({ onNew, onEdit }) => {
+const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
   const [q, setQ] = React.useState("");
   const [cat, setCat] = React.useState("All");
+  const [statusFilter, setStatusFilter] = React.useState("All");
   const [assignFor, setAssignFor] = React.useState(null); // courseId or null
+  const [enrollmentsFor, setEnrollmentsFor] = React.useState(null); // course or null
   const openAssign = (id) => setAssignFor(id);
   const cats = ["All", ...CATEGORIES];
   const filtered = COURSES.filter(c => {
     if (q && !c.title.toLowerCase().includes(q.toLowerCase())) return false;
     if (cat !== "All" && c.cat !== cat) return false;
+    if (statusFilter !== "All" && (c.status || "published").toLowerCase() !== statusFilter.toLowerCase()) return false;
     return true;
   });
 
@@ -150,7 +153,9 @@ const AdminCoursesPage = ({ onNew, onEdit }) => {
         <select value={cat} onChange={e => setCat(e.target.value)}>
           {cats.map(c => <option key={c}>{c}</option>)}
         </select>
-        <select><option>All statuses</option><option>Published</option><option>Draft</option><option>Archived</option></select>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+          <option>All</option><option>Published</option><option>Draft</option><option>Archived</option>
+        </select>
         <div className="fb-spacer" />
         <span className="text-xs text-muted">{filtered.length} courses</span>
       </div>
@@ -198,13 +203,18 @@ const AdminCoursesPage = ({ onNew, onEdit }) => {
                   <button className="btn-icon" title="Edit" onClick={() => onEdit(c.id)}><Icon name="edit" size={14}/></button>
                   <RowMenu items={[
                     { label: "Assign to learners", icon: "plus", onClick: () => openAssign(c.id) },
-                    { label: "Preview as learner", icon: "play-o", onClick: () => alert(`Preview ${c.title}`) },
-                    { label: "Duplicate",          icon: "edit",  onClick: () => alert(`Duplicated ${c.title}`) },
-                    { label: "View enrollments",   icon: "users", onClick: () => alert(`Open enrollments for ${c.title}`) },
+                    { label: "Preview as learner", icon: "play-o", onClick: () => onPreview && onPreview(c.id) },
+                    { label: "Duplicate", icon: "edit", onClick: async () => {
+                        try { await duplicateCourse(c.id); showToast?.(`Duplicated "${c.title}"`); }
+                        catch (err) { alert("Duplicate failed: " + err.message); }
+                      } },
+                    { label: "View enrollments", icon: "users", onClick: () => setEnrollmentsFor(c) },
                     "divider",
-                    { label: "Unpublish", icon: "eye-off", onClick: async () => {
-                        try { await saveCourse({ id: c.id, status: "draft" }); showToast?.(`${c.title} unpublished`); }
-                        catch (err) { alert("Unpublish failed: " + err.message); }
+                    { label: c.status === "draft" ? "Publish" : "Unpublish", icon: c.status === "draft" ? "check" : "eye-off",
+                      onClick: async () => {
+                        const next = c.status === "draft" ? "published" : "draft";
+                        try { await saveCourse({ id: c.id, status: next }); showToast?.(`${c.title} ${next === "published" ? "published" : "unpublished"}`); }
+                        catch (err) { alert("Failed: " + err.message); }
                       } },
                     { label: "Archive", icon: "trash", danger: true, onClick: async () => {
                         if (!confirm(`Archive "${c.title}"? It will disappear from the catalog.`)) return;
@@ -222,6 +232,11 @@ const AdminCoursesPage = ({ onNew, onEdit }) => {
         open={!!assignFor}
         onClose={() => setAssignFor(null)}
         preset={assignFor ? { courseId: assignFor } : null}
+      />
+      <EnrollmentsModal
+        open={!!enrollmentsFor}
+        onClose={() => setEnrollmentsFor(null)}
+        course={enrollmentsFor}
       />
     </div>
   );
@@ -285,23 +300,38 @@ const AdminUsersPage = () => {
           </tr>
         </thead>
         <tbody>
-          {filtered.map((u, i) => (
-            <tr key={i}>
+          {filtered.map((u) => {
+            const deptOptions = (DEPARTMENT_DOCS.length > 0 ? DEPARTMENT_DOCS.map(d => d.name) : DEPARTMENTS);
+            const updateRole = async (e) => {
+              const newRole = e.target.value;
+              try {
+                await updateUser(u.id, { role: newRole, isAdmin: newRole === "Admin", isManager: newRole !== "Learner" });
+                showToast?.(`${u.name} → ${newRole}`);
+              } catch (err) { alert("Update failed: " + err.message); }
+            };
+            const updateDept = async (e) => {
+              try {
+                await updateUser(u.id, { dept: e.target.value });
+                showToast?.(`${u.name} moved to ${e.target.value}`);
+              } catch (err) { alert("Update failed: " + err.message); }
+            };
+            return (
+            <tr key={u.id}>
               <td>
                 <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                   <Avatar name={u.name} size={32} />
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{u.name}</div>
-                    <div style={{ fontSize: 11, color: "#5f635f" }}>{u.name.toLowerCase().replace(/[^a-z]/g, ".")}@getgim.com</div>
+                    <div style={{ fontSize: 11, color: "#5f635f" }}>{u.email || "—"}</div>
                   </div>
                 </div>
               </td>
               <td>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <select defaultValue={u.role} disabled={u.adminSource === "google"} title={u.adminSource === "google" ? "Inherited from Google Workspace Super Admin — cannot change here" : ""} style={{
+                  <select value={u.role || "Learner"} onChange={updateRole} disabled={u.adminSource === "google" && u.id !== CURRENT_USER.uid} title={u.adminSource === "google" ? "Inherited from Google Workspace" : ""} style={{
                     border: "1px solid transparent", background: "transparent", borderRadius: 6, padding: "3px 22px 3px 8px",
-                    fontSize: 12, fontWeight: 600, cursor: u.adminSource === "google" ? "not-allowed" : "pointer", appearance: "none",
-                    color: u.adminSource === "google" ? "#5f635f" : "#111",
+                    fontSize: 12, fontWeight: 600, cursor: "pointer", appearance: "none",
+                    color: "#111",
                     backgroundImage: 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" stroke="%235f635f" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>\')',
                     backgroundRepeat: "no-repeat", backgroundPosition: "right 4px center",
                   }}>
@@ -311,24 +341,26 @@ const AdminUsersPage = () => {
                 </div>
               </td>
               <td>
-                <select defaultValue={u.dept} style={{
+                <select value={u.dept || ""} onChange={updateDept} style={{
                   border: "1px solid transparent", background: "transparent", borderRadius: 6, padding: "3px 22px 3px 8px",
                   fontSize: 12, cursor: "pointer", appearance: "none",
                   backgroundImage: 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" stroke="%235f635f" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>\')',
                   backgroundRepeat: "no-repeat", backgroundPosition: "right 4px center",
                 }}>
-                  {DEPARTMENTS.map(d => <option key={d}>{d}</option>)}
+                  <option value="">Unassigned</option>
+                  {deptOptions.map(d => <option key={d}>{d}</option>)}
                 </select>
               </td>
               <td>
                 {u.status === "active" && <span className="chip chip-green">Active</span>}
                 {u.status === "onboarding" && <span className="chip chip-amber">Onboarding</span>}
                 {u.status === "leave" && <span className="chip chip-grey">On leave</span>}
+                {u.status === "inactive" && <span className="chip chip-grey">Inactive</span>}
               </td>
-              <td style={{ fontVariantNumeric: "tabular-nums" }}>{u.assigned}</td>
-              <td style={{ fontVariantNumeric: "tabular-nums" }}>{u.completed}</td>
+              <td style={{ fontVariantNumeric: "tabular-nums" }}>{u.assigned || 0}</td>
+              <td style={{ fontVariantNumeric: "tabular-nums" }}>{u.completed || 0}</td>
               <td>
-                {u.due > 0 ? (
+                {(u.due || 0) > 0 ? (
                   <span style={{ color: "#a8232b", fontWeight: 600, fontSize: 12 }}>{u.due} overdue</span>
                 ) : (
                   <span style={{ color: "#5f635f", fontSize: 12 }}>None</span>
@@ -336,19 +368,24 @@ const AdminUsersPage = () => {
               </td>
               <td>
                 <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
-                  <button className="btn-icon" title="Assign training" onClick={() => openAssign(u.name)}><Icon name="plus" size={14}/></button>
+                  <button className="btn-icon" title="Assign training" onClick={() => openAssign(u.id)}><Icon name="plus" size={14}/></button>
                   <RowMenu items={[
-                    { label: "View profile",    icon: "user",     onClick: () => alert(`Profile: ${u.name}`) },
-                    { label: "Assign training", icon: "plus",     onClick: () => openAssign(u.name) },
-                    { label: "Send reminder",   icon: "send",     onClick: () => alert(`Reminder sent to ${u.name}`) },
-                    { label: "Reset progress",  icon: "refresh",  onClick: () => alert(`Progress reset for ${u.name}`) },
+                    { label: "Assign training", icon: "plus",     onClick: () => openAssign(u.id) },
+                    { label: "Send reminder",   icon: "send",     onClick: () => showToast?.(`Reminder queued for ${u.name}`) },
                     "divider",
-                    { label: "Deactivate",      icon: "lock", danger: true, onClick: () => alert(`${u.name} deactivated`) },
+                    { label: u.status === "inactive" ? "Reactivate" : "Deactivate",
+                      icon: "lock", danger: u.status !== "inactive",
+                      onClick: async () => {
+                        try {
+                          await updateUser(u.id, { status: u.status === "inactive" ? "active" : "inactive" });
+                          showToast?.(u.status === "inactive" ? `${u.name} reactivated` : `${u.name} deactivated`);
+                        } catch (err) { alert("Update failed: " + err.message); }
+                      } },
                   ]}/>
                 </div>
               </td>
             </tr>
-          ))}
+          )})}
         </tbody>
       </table>
 
@@ -365,7 +402,7 @@ const AdminUsersPage = () => {
       <AssignTrainingModal
         open={!!assignFor}
         onClose={() => setAssignFor(null)}
-        preset={assignFor && assignFor !== "all" ? { userName: assignFor } : null}
+        preset={assignFor && assignFor !== "all" ? { userId: assignFor } : null}
       />
     </div>
   );
@@ -510,16 +547,21 @@ const AdminSettingsPage = () => {
               Used in reporting, filtering, and auto-assignment rules.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {DEPARTMENTS.map((d, i) => (
-                <div key={d} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", border: "1px solid #ececec", borderRadius: 10 }}>
+              {DEPARTMENT_DOCS.length === 0 && (
+                <div className="text-xs text-muted" style={{ padding: "10px 4px" }}>
+                  No departments yet. Click "Add department" to create your first one.
+                </div>
+              )}
+              {DEPARTMENT_DOCS.map(d => (
+                <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", border: "1px solid #ececec", borderRadius: 10 }}>
                   <div style={{ width: 36, height: 36, borderRadius: 8, background: "#f0f9e6", color: "#2e5a12", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <Icon name="house" size={16} />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{d}</div>
-                    <div style={{ fontSize: 11, color: "#5f635f" }}>{ALL_USERS.filter(u => u.dept === d).length} people</div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{d.name}</div>
+                    <div style={{ fontSize: 11, color: "#5f635f" }}>{ALL_USERS.filter(u => u.dept === d.name).length} people</div>
                   </div>
-                  <button className="btn-icon" title="Edit department" onClick={() => setDeptModal({ open: true, initial: { name: d, iconIdx: i, autoAssign: true } })}><Icon name="edit" size={14}/></button>
+                  <button className="btn-icon" title="Edit department" onClick={() => setDeptModal({ open: true, initial: d })}><Icon name="edit" size={14}/></button>
                 </div>
               ))}
               <button className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start", marginTop: 4 }} onClick={() => setDeptModal({ open: true, initial: null })}>

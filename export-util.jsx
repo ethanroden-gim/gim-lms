@@ -86,8 +86,8 @@ const EXPORT_DATASETS = {
       { key: "lessons",    label: "Lessons" },
       { key: "duration",   label: "Duration (min)" },
       { label: "Required",   get: r => r.required ? "Yes" : "No" },
-      { label: "Status",     get: () => "Published" },
-      { label: "Enrolled",   get: r => Math.floor(8 + (r.id.length * 13) % 32) },
+      { label: "Status",     get: r => r.status || "Published" },
+      { label: "Enrolled",   get: r => (window.ENROLLMENT_COUNTS && window.ENROLLMENT_COUNTS[r.id]) || 0 },
     ],
   }),
 
@@ -96,7 +96,7 @@ const EXPORT_DATASETS = {
     rows: ALL_USERS,
     columns: [
       { key: "name",      label: "Name" },
-      { label: "Email",       get: u => `${u.name.toLowerCase().replace(/[^a-z]/g, ".")}@getgim.com` },
+      { key: "email",     label: "Email" },
       { key: "role",      label: "Role" },
       { key: "dept",      label: "Department" },
       { key: "status",    label: "Status" },
@@ -108,14 +108,14 @@ const EXPORT_DATASETS = {
 
   "admin-assess": () => ({
     sheet: "Assessments",
-    rows: COURSES.map((c, i) => ({
+    rows: COURSES.filter(c => c.sections || c.modules).map(c => ({
       title: `${c.title} — Final`,
-      type: i % 3 === 0 ? "Quiz" : "Final exam",
-      questions: i % 3 === 0 ? 5 : 20,
-      passMark: 80,
-      attempts: 8 + ((c.id.length * 11) % 60),
-      avgScore: 75 + ((c.id.length * 3) % 22),
-      passRate: 70 + ((c.id.length * 7) % 30),
+      type: "Final exam",
+      questions: c.questionsCount || 0,
+      passMark: c.passingScore || 80,
+      attempts: 0,
+      avgScore: "",
+      passRate: "",
       category: c.cat,
     })),
     columns: [
@@ -257,70 +257,99 @@ const ToastHost = () => {
 // ---------- Course Enrollments modal ----------
 const EnrollmentsModal = ({ open, onClose, course }) => {
   if (!open || !course) return null;
-  const enrolled = ALL_USERS.slice(0, Math.floor(8 + (course.id.length * 13) % 32));
+
+  const courseEnrollments = (window.ALL_ENROLLMENTS || []).filter(e => e.courseId === course.id);
+  const usersById = Object.fromEntries((window.ALL_USERS || []).map(u => [u.id, u]));
+  const rows = courseEnrollments.map(e => ({
+    e,
+    u: usersById[e.userId] || { id: e.userId, name: e.userId, email: "", dept: "" },
+  }));
+
+  const exportCsv = () => {
+    const csvRows = rows.map(({ u, e }) => ({
+      name: u.name,
+      email: u.email || "",
+      dept: u.dept || "",
+      status: e.status || "",
+      progress: e.progress || 0,
+    }));
+    const cols = [
+      { key: "name",     label: "Name" },
+      { key: "email",    label: "Email" },
+      { key: "dept",     label: "Department" },
+      { key: "status",   label: "Status" },
+      { key: "progress", label: "Progress %" },
+    ];
+    downloadBlob(`${course.id}-enrollments-${stamp()}.csv`, toCSV(csvRows, cols), "text/csv;charset=utf-8");
+  };
+
   return (
-    <Modal open={open} onClose={onClose} width={680}>
+    <Modal open={open} onClose={onClose} width={720}>
       <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #ececec", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
           <div className="eyebrow-sm">Course enrollments</div>
           <div style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>{course.title}</div>
-          <div style={{ fontSize: 12, color: "#5f635f", marginTop: 2 }}>{enrolled.length} learners enrolled</div>
+          <div style={{ fontSize: 12, color: "#5f635f", marginTop: 2 }}>
+            {rows.length} {rows.length === 1 ? "learner" : "learners"} enrolled
+          </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => {
-            const rows = enrolled.map(u => ({ ...u, course: course.title }));
-            const cols = [
-              { key: "name", label: "Name" },
-              { label: "Email", get: u => `${u.name.toLowerCase().replace(/[^a-z]/g, ".")}@getgim.com` },
-              { key: "dept", label: "Department" },
-              { key: "completed", label: "Completed?" },
-              { label: "Progress %", get: u => 20 + (u.name.length * 7) % 80 },
-            ];
-            downloadBlob(`${course.id}-enrollments-${stamp()}.csv`, toCSV(rows, cols), "text/csv;charset=utf-8");
-          }}><Icon name="download" size={13}/> Export</button>
+          {rows.length > 0 && (
+            <button className="btn btn-ghost btn-sm" onClick={exportCsv}><Icon name="download" size={13}/> Export</button>
+          )}
           <button className="btn-icon" onClick={onClose}><Icon name="close" size={18}/></button>
         </div>
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: 0 }}>
-        <table className="tbl" style={{ margin: 0 }}>
-          <thead>
-            <tr>
-              <th>Learner</th>
-              <th>Department</th>
-              <th>Progress</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {enrolled.map(u => {
-              const progress = 20 + (u.name.length * 7) % 80;
-              const done = progress >= 95;
-              return (
-                <tr key={u.name}>
-                  <td>
-                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                      <Avatar name={u.name} size={28}/>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600 }}>{u.name}</div>
-                        <div style={{ fontSize: 11, color: "#5f635f" }}>{u.role}</div>
+        {rows.length === 0 ? (
+          <div className="empty" style={{ padding: 32 }}>
+            No one is enrolled in this course yet. Use "Assign to learners" from the row menu to add some.
+          </div>
+        ) : (
+          <table className="tbl" style={{ margin: 0 }}>
+            <thead>
+              <tr>
+                <th>Learner</th>
+                <th>Department</th>
+                <th>Progress</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(({ u, e }) => {
+                const progress = e.progress || 0;
+                const status = e.status || "assigned";
+                return (
+                  <tr key={e.id}>
+                    <td>
+                      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                        <Avatar name={u.name} size={28}/>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600 }}>{u.name}</div>
+                          <div style={{ fontSize: 11, color: "#5f635f" }}>{u.email || ""}</div>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td><span className="chip chip-grey">{u.dept}</span></td>
-                  <td>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div className="bar bar-thin" style={{ width: 80 }}>
-                        <div style={{ width: `${progress}%`, background: done ? "#7ac142" : "#f5a524" }}/>
+                    </td>
+                    <td>{u.dept ? <span className="chip chip-grey">{u.dept}</span> : <span className="text-muted text-xs">—</span>}</td>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div className="bar bar-thin" style={{ width: 80 }}>
+                          <div style={{ width: `${progress}%`, background: progress >= 95 ? "#7ac142" : "#f5a524" }}/>
+                        </div>
+                        <span style={{ fontSize: 12, fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{progress}%</span>
                       </div>
-                      <span style={{ fontSize: 12, fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{progress}%</span>
-                    </div>
-                  </td>
-                  <td>{done ? <span className="chip chip-green">Completed</span> : <span className="chip chip-amber">In progress</span>}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    </td>
+                    <td>
+                      {status === "completed" && <span className="chip chip-green">Completed</span>}
+                      {status === "in_progress" && <span className="chip chip-amber">In progress</span>}
+                      {status === "assigned" && <span className="chip chip-grey">Assigned</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
     </Modal>
   );

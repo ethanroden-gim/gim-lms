@@ -589,21 +589,41 @@ const DepartmentEditModal = ({ open, onClose, initial }) => {
 
   const peopleCount = initial ? (ALL_USERS.filter(u => u.dept === initial.name).length) : 0;
   const valid = name.trim().length >= 2;
+  const [busy, setBusy] = React.useState(false);
 
-  const save = () => {
-    alert(`${isNew ? "Created" : "Updated"} department "${name}". (mock)`);
-    onClose();
+  const save = async () => {
+    if (busy) return;
+    if (!window.fbReady) { alert("Firebase isn't configured — can't save."); return; }
+    setBusy(true);
+    try {
+      await saveDepartment({
+        id: initial?.id,
+        name: name.trim(),
+        autoAssign,
+        iconIdx,
+      });
+      showToast?.(`${isNew ? "Created" : "Updated"} department "${name.trim()}"`);
+      onClose();
+    } catch (err) {
+      alert("Save failed: " + err.message);
+    } finally { setBusy(false); }
   };
 
-  const remove = () => {
+  const remove = async () => {
+    if (busy) return;
     if (peopleCount > 0) {
       alert(`Cannot delete: ${peopleCount} ${peopleCount === 1 ? "person is" : "people are"} still in this department.\nReassign them first.`);
       return;
     }
-    if (confirm(`Delete department "${initial.name}"?`)) {
-      alert(`Department "${initial.name}" deleted. (mock)`);
+    if (!confirm(`Delete department "${initial.name}"?`)) return;
+    setBusy(true);
+    try {
+      await deleteDepartment(initial.id);
+      showToast?.(`Department "${initial.name}" deleted`);
       onClose();
-    }
+    } catch (err) {
+      alert("Delete failed: " + err.message);
+    } finally { setBusy(false); }
   };
 
   return (

@@ -21,13 +21,13 @@ const Modal = ({ open, onClose, children, width = 720 }) => {
 };
 
 // ---------- Assign Training modal ----------
-// preset can be: { courseId } to lock the course / { userName } to lock a person / null
+// preset can be: { courseId } to lock the course / { userId } to lock a person / null
 const AssignTrainingModal = ({ open, onClose, preset }) => {
   const [step, setStep] = React.useState(1);
   const [courseIds, setCourseIds] = React.useState(() => preset?.courseId ? [preset.courseId] : []);
-  const [audience, setAudience] = React.useState(() => preset?.userName ? "people" : "department");
+  const [audience, setAudience] = React.useState(() => preset?.userId ? "people" : "department");
   const [depts, setDepts] = React.useState([]);
-  const [people, setPeople] = React.useState(() => preset?.userName ? [preset.userName] : []);
+  const [people, setPeople] = React.useState(() => preset?.userId ? [preset.userId] : []);
   const [dueOption, setDueOption] = React.useState("30");
   const [dueDate, setDueDate] = React.useState("");
   const [required, setRequired] = React.useState(true);
@@ -35,40 +35,54 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
   const [reminderCadence, setReminderCadence] = React.useState("weekly");
   const [courseQuery, setCourseQuery] = React.useState("");
   const [peopleQuery, setPeopleQuery] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
 
   // Reset on open
   React.useEffect(() => {
     if (!open) return;
     setStep(1);
     setCourseIds(preset?.courseId ? [preset.courseId] : []);
-    setAudience(preset?.userName ? "people" : "department");
+    setAudience(preset?.userId ? "people" : "department");
     setDepts([]);
-    setPeople(preset?.userName ? [preset.userName] : []);
+    setPeople(preset?.userId ? [preset.userId] : []);
     setDueOption("30");
     setDueDate("");
     setRequired(true);
     setNotify(true);
     setReminderCadence("weekly");
     setCourseQuery(""); setPeopleQuery("");
+    setSubmitting(false);
   }, [open, preset]);
 
   const toggleCourse = (id) => setCourseIds(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
   const toggleDept   = (d)  => setDepts(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d]);
-  const togglePerson = (n)  => setPeople(p => p.includes(n) ? p.filter(x => x !== n) : [...p, n]);
+  const togglePerson = (id) => setPeople(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
-  const filteredCourses = COURSES.filter(c => !courseQuery || c.title.toLowerCase().includes(courseQuery.toLowerCase()));
+  const filteredCourses = COURSES.filter(c => (c.status !== "archived") && (!courseQuery || c.title.toLowerCase().includes(courseQuery.toLowerCase())));
   const filteredPeople  = ALL_USERS.filter(u => !peopleQuery || u.name.toLowerCase().includes(peopleQuery.toLowerCase()));
+  const deptOptions = DEPARTMENT_DOCS.length > 0 ? DEPARTMENT_DOCS.map(d => d.name) : DEPARTMENTS;
 
-  // Compute affected count
-  const affected = React.useMemo(() => {
-    if (audience === "all") return ALL_USERS.filter(u => u.status !== "leave").length;
-    if (audience === "department") return ALL_USERS.filter(u => depts.includes(u.dept) && u.status !== "leave").length;
-    if (audience === "role-onboarding") return ALL_USERS.filter(u => u.status === "onboarding").length;
-    if (audience === "people") return people.length;
-    return 0;
+  // Resolve audience to actual user IDs
+  const targetUserIds = React.useMemo(() => {
+    if (audience === "all")            return ALL_USERS.filter(u => u.status !== "leave" && u.status !== "inactive").map(u => u.id);
+    if (audience === "department")     return ALL_USERS.filter(u => depts.includes(u.dept) && u.status !== "leave" && u.status !== "inactive").map(u => u.id);
+    if (audience === "role-onboarding")return ALL_USERS.filter(u => u.status === "onboarding").map(u => u.id);
+    if (audience === "people")         return people;
+    return [];
   }, [audience, depts, people]);
 
+  const affected = targetUserIds.length;
   const totalEnrollments = affected * courseIds.length;
+
+  const dueDays = (() => {
+    if (dueOption === "none") return null;
+    if (dueOption === "custom") {
+      if (!dueDate) return null;
+      const ms = new Date(dueDate).getTime() - Date.now();
+      return Math.max(0, Math.round(ms / 86400000));
+    }
+    return parseInt(dueOption, 10);
+  })();
 
   const dueLabel = () => {
     if (dueOption === "none") return "No due date";
@@ -79,16 +93,27 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
   const canProceed = () => {
     if (step === 1) return courseIds.length > 0;
     if (step === 2) {
-      if (audience === "all" || audience === "role-onboarding") return true;
-      if (audience === "department") return depts.length > 0;
+      if (audience === "all" || audience === "role-onboarding") return targetUserIds.length > 0;
+      if (audience === "department") return depts.length > 0 && targetUserIds.length > 0;
       if (audience === "people") return people.length > 0;
     }
     return true;
   };
 
-  const submit = () => {
-    alert(`Assigned ${courseIds.length} course${courseIds.length === 1 ? "" : "s"} to ${affected} learner${affected === 1 ? "" : "s"} (${totalEnrollments} enrollments).${notify ? " Email notifications queued." : ""}`);
-    onClose();
+  const submit = async () => {
+    if (submitting) return;
+    if (!window.fbReady) { alert("Firebase isn't configured — can't assign."); return; }
+    if (targetUserIds.length === 0) { alert("No learners selected."); return; }
+    setSubmitting(true);
+    try {
+      const n = await assignTraining({ userIds: targetUserIds, courseIds, dueDays, required });
+      showToast?.(`Created ${n} enrolment${n === 1 ? "" : "s"}.`);
+      onClose();
+    } catch (err) {
+      alert("Assign failed: " + err.message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -170,7 +195,9 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
               <div style={{ marginTop: 16 }}>
                 <div className="cd-section-title">Departments</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-                  {DEPARTMENTS.map(d => (
+                  {deptOptions.length === 0 ? (
+                    <div className="text-xs text-muted">No departments yet — create one in Admin → Roles &amp; departments.</div>
+                  ) : deptOptions.map(d => (
                     <button key={d} onClick={() => toggleDept(d)} style={{
                       padding: "6px 12px", borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: "pointer",
                       border: depts.includes(d) ? "1px solid #7ac142" : "1px solid #ddd",
@@ -189,16 +216,19 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
                   <input className="cd-input" placeholder="Search by name…" value={peopleQuery} onChange={e => setPeopleQuery(e.target.value)} />
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, maxHeight: 240, overflow: "auto" }}>
+                  {filteredPeople.length === 0 && (
+                    <div className="text-xs text-muted" style={{ padding: 8 }}>No users yet — they'll appear here once they sign in for the first time.</div>
+                  )}
                   {filteredPeople.map(u => (
-                    <label key={u.name} style={{
+                    <label key={u.id} style={{
                       display: "flex", alignItems: "center", gap: 10, padding: 8, borderRadius: 6,
-                      cursor: "pointer", background: people.includes(u.name) ? "#f0f9e6" : "transparent",
+                      cursor: "pointer", background: people.includes(u.id) ? "#f0f9e6" : "transparent",
                     }}>
-                      <input type="checkbox" checked={people.includes(u.name)} onChange={() => togglePerson(u.name)} disabled={preset?.userName === u.name} />
+                      <input type="checkbox" checked={people.includes(u.id)} onChange={() => togglePerson(u.id)} disabled={preset?.userId === u.id} />
                       <Avatar name={u.name} size={26} />
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 12, fontWeight: 600 }}>{u.name}</div>
-                        <div style={{ fontSize: 11, color: "#5f635f" }}>{u.dept} · {u.role}</div>
+                        <div style={{ fontSize: 11, color: "#5f635f" }}>{u.dept || "Unassigned"} · {u.role || "Learner"}</div>
                       </div>
                     </label>
                   ))}
@@ -268,7 +298,7 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
               <ReviewLine label="Audience"  value={`${affected} learner${affected === 1 ? "" : "s"}`}
                 detail={
                   audience === "department" ? depts.join(", ") || "—" :
-                  audience === "people" ? people.join(", ") || "—" :
+                  audience === "people" ? people.map(id => ALL_USERS.find(u => u.id === id)?.name || id).join(", ") || "—" :
                   audience === "role-onboarding" ? "All onboarding employees" :
                   "All active employees"
                 } />
@@ -286,7 +316,9 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
         <div style={{ display: "flex", gap: 8 }}>
           {step > 1 && <button className="btn btn-ghost btn-sm" onClick={() => setStep(s => s - 1)}>← Back</button>}
           {step < 3 && <button className="btn btn-primary btn-sm" disabled={!canProceed()} onClick={() => setStep(s => s + 1)} style={{ opacity: canProceed() ? 1 : 0.5 }}>Continue →</button>}
-          {step === 3 && <button className="btn btn-primary btn-sm" onClick={submit}><Icon name="check" size={14}/> Assign training</button>}
+          {step === 3 && <button className="btn btn-primary btn-sm" onClick={submit} disabled={submitting}>
+            <Icon name="check" size={14}/> {submitting ? "Assigning…" : "Assign training"}
+          </button>}
         </div>
       </div>
     </Modal>

@@ -101,17 +101,27 @@ const subscribeToData = (onChange) => {
     onChange();
   }, err => console.error("enrollments listener:", err)));
 
-  // Aggregate enrolment counts per course (for the admin courses table)
+  // Mirror every enrollment doc + maintain per-course counts (admin views)
   subs.push(fbDb.collection("enrollments").onSnapshot(s => {
     const counts = {};
+    const all = [];
     s.docs.forEach(d => {
-      const cid = d.data().courseId;
-      if (cid) counts[cid] = (counts[cid] || 0) + 1;
+      const e = { id: d.id, ...d.data() };
+      all.push(e);
+      if (e.courseId) counts[e.courseId] = (counts[e.courseId] || 0) + 1;
     });
     setObj(ENROLLMENT_COUNTS, counts);
+    setArr(ALL_ENROLLMENTS, all);
     onChange();
   }, err => {
-    if (err.code !== "permission-denied") console.error("enrollment counts listener:", err);
+    if (err.code !== "permission-denied") console.error("all enrollments listener:", err);
+  }));
+
+  subs.push(fbDb.collection("departments").onSnapshot(s => {
+    setArr(DEPARTMENT_DOCS, s.docs.map(d => ({ id: d.id, ...d.data() })));
+    onChange();
+  }, err => {
+    if (err.code !== "permission-denied") console.error("departments listener:", err);
   }));
 
   subs.push(fbDb.collection("activity")
@@ -151,6 +161,57 @@ const hydrateUserFromFirebase = async (fbUser) => {
   });
 };
 
+// ---- Generic field updates ------------------------------------------------
+const updateUser = (uid, fields) =>
+  fbReady ? fbDb.collection("users").doc(uid).set(fields, { merge: true })
+          : Promise.reject(new Error("Firebase not configured"));
+
+// ---- Departments ----------------------------------------------------------
+const saveDepartment = async (dept) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  const { id, ...data } = dept;
+  data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+  if (id) {
+    await fbDb.collection("departments").doc(id).set(data, { merge: true });
+    return id;
+  }
+  data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+  const ref = await fbDb.collection("departments").add(data);
+  return ref.id;
+};
+
+const deleteDepartment = (id) =>
+  fbReady ? fbDb.collection("departments").doc(id).delete()
+          : Promise.reject(new Error("Firebase not configured"));
+
+// ---- Bulk training assignment --------------------------------------------
+// payload = { userIds:[], courseIds:[], dueDays?, required? }
+const assignTraining = async ({ userIds, courseIds, dueDays, required }) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  if (!userIds?.length || !courseIds?.length) return 0;
+  const batch = fbDb.batch();
+  const now = firebase.firestore.FieldValue.serverTimestamp();
+  let n = 0;
+  for (const uid of userIds) {
+    for (const cid of courseIds) {
+      const ref = fbDb.collection("enrollments").doc(`${uid}_${cid}`);
+      batch.set(ref, {
+        userId: uid,
+        courseId: cid,
+        status: "assigned",
+        progress: 0,
+        dueDays: dueDays ?? null,
+        required: !!required,
+        assignedBy: window.CURRENT_USER?.uid || null,
+        assignedAt: now,
+      }, { merge: true });
+      n++;
+    }
+  }
+  await batch.commit();
+  return n;
+};
+
 // ---- Course CRUD ----------------------------------------------------------
 const saveCourse = async (course) => {
   if (!fbReady) throw new Error("Firebase not configured");
@@ -172,6 +233,20 @@ const archiveCourse = (id) =>
   fbReady ? fbDb.collection("courses").doc(id).set({ status: "archived" }, { merge: true })
           : Promise.reject(new Error("Firebase not configured"));
 
+const duplicateCourse = async (sourceId) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  const snap = await fbDb.collection("courses").doc(sourceId).get();
+  if (!snap.exists) throw new Error("Source course not found");
+  const { id, createdAt, updatedAt, ...data } = snap.data();
+  data.title = `Copy of ${data.title || "Untitled"}`;
+  data.status = "draft";
+  data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+  data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+  if (window.CURRENT_USER?.uid) data.createdBy = window.CURRENT_USER.uid;
+  const ref = await fbDb.collection("courses").add(data);
+  return ref.id;
+};
+
 const deleteCourse = (id) =>
   fbReady ? fbDb.collection("courses").doc(id).delete()
           : Promise.reject(new Error("Firebase not configured"));
@@ -186,5 +261,9 @@ const signOutEverywhere = async () => {
 Object.assign(window, {
   fbReady, fbAuth, fbDb,
   signIntoFirebase, upsertUserDoc, subscribeToData,
-  hydrateUserFromFirebase, saveCourse, archiveCourse, deleteCourse, signOutEverywhere,
+  hydrateUserFromFirebase,
+  saveCourse, archiveCourse, deleteCourse, duplicateCourse,
+  saveDepartment, deleteDepartment,
+  assignTraining, updateUser,
+  signOutEverywhere,
 });

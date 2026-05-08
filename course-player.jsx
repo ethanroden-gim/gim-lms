@@ -9,6 +9,17 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
   const course = COURSES.find(c => c.id === courseId);
   const enrollment = ENROLLMENTS[courseId];
 
+  if (!course) {
+    return (
+      <div className="page">
+        <button className="btn btn-ghost btn-sm" onClick={goBack} style={{ marginBottom: 12 }}>
+          <Icon name="arrow-left" size={12}/> Back
+        </button>
+        <div className="empty">Course not found. It may have been archived or deleted.</div>
+      </div>
+    );
+  }
+
   // Build flat lesson list with section context
   const flatLessons = [];
   (course.sections || []).forEach((sec, sIdx) => {
@@ -158,11 +169,23 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
             </p>
 
             {/* Resources */}
-            <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" }}>
-              <button className="btn btn-ghost btn-sm"><Icon name="download" size={14} /> Slides (PDF)</button>
-              <button className="btn btn-ghost btn-sm"><Icon name="download" size={14} /> Transcript</button>
-              <button className="btn btn-ghost btn-sm"><Icon name="external" size={14} /> Reference: MA G.L. c. 151B</button>
-            </div>
+            {(course.resources?.length > 0) && (
+              <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" }}>
+                {course.resources.map((r, i) => (
+                  <a key={i}
+                    href={r.url || "#"}
+                    target={r.url ? "_blank" : undefined}
+                    rel={r.url ? "noopener noreferrer" : undefined}
+                    onClick={r.url ? undefined : (e) => e.preventDefault()}
+                    className="btn btn-ghost btn-sm"
+                    style={{ textDecoration: "none" }}>
+                    <Icon name={r.type === "link" ? "external" : "download"} size={14} />
+                    {r.name || (r.type === "link" ? "Reference" : "Resource")}
+                    {r.size ? ` · ${r.size}` : ""}
+                  </a>
+                ))}
+              </div>
+            )}
 
             {/* Footer actions */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 22, paddingTop: 18, borderTop: "1px solid #ececec" }}>
@@ -236,8 +259,28 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
 // Assessment
 // ============================================================
 const AssessmentPage = ({ courseId, goCert, goBack }) => {
-  const course = COURSES.find(c => c.id === courseId) || COURSES[1];
+  const course = COURSES.find(c => c.id === courseId);
   const quiz = SAMPLE_QUIZ;
+  if (!course) {
+    return (
+      <div className="page">
+        <button className="btn btn-ghost btn-sm" onClick={goBack} style={{ marginBottom: 12 }}>
+          <Icon name="arrow-left" size={12}/> Back
+        </button>
+        <div className="empty">Course not found.</div>
+      </div>
+    );
+  }
+  if (!quiz?.questions?.length) {
+    return (
+      <div className="page" style={{ maxWidth: 720 }}>
+        <button className="btn btn-ghost btn-sm" onClick={goBack} style={{ marginBottom: 12 }}>
+          <Icon name="arrow-left" size={12}/> Back
+        </button>
+        <div className="empty">This course doesn't have an assessment yet.</div>
+      </div>
+    );
+  }
   const [answers, setAnswers] = React.useState({});
   const [qIdx, setQIdx] = React.useState(0);
   const [submitted, setSubmitted] = React.useState(false);
@@ -369,8 +412,18 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
 // Certificate
 // ============================================================
 const CertificatePage = ({ courseId, goBack }) => {
-  const course = COURSES.find(c => c.id === courseId) || COURSES[0];
+  const course = COURSES.find(c => c.id === courseId);
   const e = ENROLLMENTS[courseId] || { completedOn: "Today", score: 95 };
+  if (!course) {
+    return (
+      <div className="page">
+        <button className="btn btn-ghost btn-sm" onClick={goBack} style={{ marginBottom: 12 }}>
+          <Icon name="arrow-left" size={12}/> Back
+        </button>
+        <div className="empty">Course not found.</div>
+      </div>
+    );
+  }
   const certNo = "GIM-" + (course.id.toUpperCase().replace(/[^A-Z]/g, "")) + "-" + (1000 + Math.abs(course.id.length * 137) % 9000);
   const template = window.CERTIFICATE_TEMPLATE || CERTIFICATE_DEFAULTS;
   const PREVIEW_W = 920;

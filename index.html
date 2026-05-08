@@ -168,7 +168,8 @@
         if (route === "admin-overview")    body = <AdminOverviewPage />;
         if (route === "admin-courses")     body = <AdminCoursesPage
           onNew={() => { setCourseId(null); setRoute("admin-course-new"); }}
-          onEdit={(id) => { setCourseId(id); setRoute("admin-course-edit"); }} />;
+          onEdit={(id) => { setCourseId(id); setRoute("admin-course-edit"); }}
+          onPreview={(id) => { setMode("learner"); setCourseId(id); setRoute("course"); }} />;
         if (route === "admin-course-new")  body = <AdminCourseEditorPage mode="new"  goBack={() => setRoute("admin-courses")} />;
         if (route === "admin-course-edit") body = <AdminCourseEditorPage mode="edit" courseId={courseId} goBack={() => setRoute("admin-courses")} />;
         if (route === "admin-users")       body = <AdminUsersPage />;
