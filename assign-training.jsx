@@ -304,26 +304,59 @@ const ReviewLine = ({ label, value, detail, last }) => (
 );
 
 // ---------- Row action menu (3-dot) ----------
+// Uses a portal + fixed positioning so the dropdown is never clipped by
+// the table or scroll container, and auto-flips above the button when
+// there isn't enough room below.
 const RowMenu = ({ items }) => {
   const [open, setOpen] = React.useState(false);
-  const ref = React.useRef(null);
+  const [pos, setPos] = React.useState({ top: 0, left: 0 });
+  const btnRef = React.useRef(null);
+  const menuRef = React.useRef(null);
+
+  const MENU_W = 220;
+  const itemRows = items.filter(x => x !== "divider").length;
+  const dividers = items.filter(x => x === "divider").length;
+  const MENU_H = itemRows * 34 + dividers * 9 + 8;
+
+  const openMenu = () => {
+    if (!btnRef.current) return;
+    const r = btnRef.current.getBoundingClientRect();
+    const placeBelow = r.bottom + 4 + MENU_H <= window.innerHeight;
+    setPos({
+      top: placeBelow ? r.bottom + 4 : r.top - MENU_H - 4,
+      left: Math.max(8, Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8)),
+    });
+    setOpen(true);
+  };
+
   React.useEffect(() => {
     if (!open) return;
-    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onDoc = (e) => {
+      if (menuRef.current?.contains(e.target)) return;
+      if (btnRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
+    const onScroll = () => setOpen(false);
     document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    document.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
   }, [open]);
 
   return (
-    <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
-      <button className="btn-icon" title="More" onClick={() => setOpen(o => !o)}>
+    <>
+      <button ref={btnRef} className="btn-icon" title="More" onClick={() => open ? setOpen(false) : openMenu()}>
         <Icon name="more" size={14}/>
       </button>
-      {open && (
-        <div style={{
-          position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 50,
+      {open && ReactDOM.createPortal(
+        <div ref={menuRef} style={{
+          position: "fixed", top: pos.top, left: pos.left, zIndex: 1000,
           background: "#fff", border: "1px solid #ececec", borderRadius: 8, padding: 4,
-          minWidth: 200, boxShadow: "0 8px 24px rgba(0,0,0,.12)",
+          width: MENU_W, boxShadow: "0 8px 24px rgba(0,0,0,.12)",
         }}>
           {items.map((it, i) => it === "divider" ? (
             <div key={i} style={{ height: 1, background: "#ececec", margin: "4px 0" }} />
@@ -340,9 +373,10 @@ const RowMenu = ({ items }) => {
               <span>{it.label}</span>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 };
 

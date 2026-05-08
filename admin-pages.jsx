@@ -186,7 +186,7 @@ const AdminCoursesPage = ({ onNew, onEdit }) => {
               <td>{c.instructor}</td>
               <td>{c.lessons}</td>
               <td style={{ fontVariantNumeric: "tabular-nums" }}>
-                {Math.floor(8 + (c.id.length * 13) % 32)}
+                {ENROLLMENT_COUNTS[c.id] || 0}
               </td>
               <td>{
                 c.status === "archived" ? <span className="chip chip-grey">Archived</span> :

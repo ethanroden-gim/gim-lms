@@ -95,6 +95,7 @@ const ENROLLMENTS = {};
 const ASSIGNED = [];
 const ACTIVITY = [];
 const ALL_USERS = [];
+const ENROLLMENT_COUNTS = {}; // { courseId: number } — admin-wide counts
 
 const SAMPLE_QUIZ = { courseId: null, title: "", questions: [] };
 
@@ -136,6 +137,6 @@ const lessonIcon = (t) => {
 Object.assign(window, {
   Icon, Avatar,
   CURRENT_USER, DEPARTMENTS, CATEGORIES, COURSES, ENROLLMENTS, ASSIGNED, ACTIVITY,
-  ALL_USERS, SAMPLE_QUIZ, TEAM_MEMBERS,
+  ALL_USERS, SAMPLE_QUIZ, TEAM_MEMBERS, ENROLLMENT_COUNTS,
   classNames, lessonIcon,
 });

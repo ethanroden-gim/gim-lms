@@ -122,10 +122,22 @@
       </div>
     );
 
+    const ROUTE_KEY = "gim-lms-route";
+    const loadRoute = () => {
+      try { return JSON.parse(localStorage.getItem(ROUTE_KEY) || "{}"); }
+      catch { return {}; }
+    };
+
     const LmsApp = () => {
-      const [mode, setMode] = React.useState("learner");
-      const [route, setRoute] = React.useState("home");
-      const [courseId, setCourseId] = React.useState(null);
+      const saved = React.useMemo(loadRoute, []);
+      const [mode, setMode] = React.useState(saved.mode === "admin" && CURRENT_USER.isAdmin ? "admin" : "learner");
+      const [route, setRoute] = React.useState(saved.route || (mode === "admin" ? "admin-overview" : "home"));
+      const [courseId, setCourseId] = React.useState(saved.courseId || null);
+
+      // Persist route across reloads
+      React.useEffect(() => {
+        localStorage.setItem(ROUTE_KEY, JSON.stringify({ mode, route, courseId }));
+      }, [mode, route, courseId]);
 
       const switchMode = (m) => {
         setMode(m);

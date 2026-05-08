@@ -101,6 +101,19 @@ const subscribeToData = (onChange) => {
     onChange();
   }, err => console.error("enrollments listener:", err)));
 
+  // Aggregate enrolment counts per course (for the admin courses table)
+  subs.push(fbDb.collection("enrollments").onSnapshot(s => {
+    const counts = {};
+    s.docs.forEach(d => {
+      const cid = d.data().courseId;
+      if (cid) counts[cid] = (counts[cid] || 0) + 1;
+    });
+    setObj(ENROLLMENT_COUNTS, counts);
+    onChange();
+  }, err => {
+    if (err.code !== "permission-denied") console.error("enrollment counts listener:", err);
+  }));
+
   subs.push(fbDb.collection("activity")
     .where("userId", "==", uid)
     .orderBy("createdAt", "desc")
