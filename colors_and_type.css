@@ -1,0 +1,338 @@
+/* =========================================================================
+   GIM Property Management — Colors & Type
+   Brand: Rent | Manage | Maintain
+   ========================================================================= */
+
+/* -- Switzer (body / UI sans) -------------------------------------------- */
+@font-face {
+  font-family: "Switzer";
+  src: url("./fonts/Switzer-Thin.otf") format("opentype");
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("./fonts/Switzer-Extralight.otf") format("opentype");
+  font-weight: 200;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("./fonts/Switzer-Light.otf") format("opentype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("./fonts/Switzer-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("./fonts/Switzer-Italic.otf") format("opentype");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("./fonts/Switzer-Medium.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("./fonts/Switzer-MediumItalic.otf") format("opentype");
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("./fonts/Switzer-Semibold.otf") format("opentype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("./fonts/Switzer-SemiboldItalic.otf") format("opentype");
+  font-weight: 600;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("./fonts/Switzer-Bold.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("./fonts/Switzer-BoldItalic.otf") format("opentype");
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("./fonts/Switzer-Extrabold.otf") format("opentype");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("./fonts/Switzer-Black.otf") format("opentype");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* -- Alfa Slab One (display slab — echoes the GIM wordmark) -------------- */
+@font-face {
+  font-family: "Alfa Slab One";
+  src: url("./fonts/AlfaSlabOne-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* -- Copperplate Gothic (small-caps accent — RENT | MANAGE | MAINTAIN) --- */
+@font-face {
+  font-family: "Copperplate Gothic";
+  src: url("./fonts/CopperplateGothic-31AB.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Copperplate Gothic";
+  src: url("./fonts/CopperplateGothic-32AB.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Copperplate Gothic";
+  src: url("./fonts/CopperplateGothic-33BC.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* =========================================================================
+   Tokens
+   ========================================================================= */
+:root {
+  /* -- Brand color — verified against live getgim.com (button bg + hover) -- */
+  --gim-green:       #7ac142;  /* PRIMARY brand green — button bg, accents */
+  --gim-green-hover: #2e5a12;  /* deep green hover — buttons */
+  --gim-green-soft:  #9ed458;  /* mid-tint, used in gradient */
+  --gim-green-pale:  #cfeab0;  /* pale tint, gradient end + soft surfaces */
+  --gim-black:       #111111;  /* brand near-black (NOT pure #000) */
+  --gim-white:       #ffffff;
+
+  /* Green scale (anchored to #7ac142 = 500) */
+  --green-50:   #f0f9e6;
+  --green-100:  #dff1c8;
+  --green-200:  #cfeab0;   /* = --gim-green-pale */
+  --green-300:  #b3df84;
+  --green-400:  #9ed458;   /* = --gim-green-soft */
+  --green-500:  #7ac142;   /* = --gim-green */
+  --green-600:  #6ba83a;
+  --green-700:  #5a8e2f;
+  --green-800:  #46731f;
+  --green-900:  #2e5a12;   /* = --gim-green-hover */
+  --green-950:  #1a3608;
+
+  /* Neutral scale */
+  --ink-0:    #ffffff;
+  --ink-50:   #f7f8f7;
+  --ink-100:  #ececec;
+  --ink-200:  #d8d9d8;
+  --ink-300:  #b9bbb9;
+  --ink-400:  #8a8d8a;
+  --ink-500:  #5f635f;
+  --ink-600:  #3f433f;
+  --ink-700:  #2a2d2a;
+  --ink-800:  #181a18;
+  --ink-900:  #0a0a0a;
+
+  /* -- Semantic foreground / background -- */
+  --fg-1: var(--ink-900);          /* primary text */
+  --fg-2: var(--ink-600);          /* secondary text */
+  --fg-3: var(--ink-400);          /* muted / hint */
+  --fg-on-green: var(--ink-900);   /* near-black text on the bright green */
+  --fg-on-dark:  var(--ink-0);
+
+  --bg-1: var(--ink-0);            /* page bg (light) */
+  --bg-2: #f5f5f5;                 /* surface (verified site neutral) */
+  --bg-3: var(--ink-100);          /* sunken */
+  --bg-dark: var(--gim-black);     /* dark hero bg */
+  --bg-deep-green: var(--green-900);
+  --bg-hero-gradient: linear-gradient(180deg, #ffffff 50%, #f5f5f5 100%);
+  --bg-text-gradient: linear-gradient(90deg, #7ac142 28%, #9ed458 70%, #cfeab0 100%);
+
+  /* -- Lines / borders -- */
+  --line-1: var(--ink-200);
+  --line-2: var(--ink-300);
+  --line-strong: var(--ink-900);
+
+  /* -- Status -- */
+  --status-success: #2bb24a;
+  --status-warning: #f5a524;
+  --status-danger:  #e5484d;
+  --status-info:    #2a7fd6;
+
+  /* -- Type families -- */
+  --font-sans:    "Switzer", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Alfa Slab One", "Switzer", ui-serif, Georgia, serif;
+  --font-accent:  "Copperplate Gothic", "Switzer", ui-sans-serif, sans-serif; /* small-caps — sparingly */
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* -- Type scale (clamp(min, fluid, max)) -- */
+  --fs-display-xl: clamp(56px, 8vw, 96px);
+  --fs-display-l:  clamp(44px, 6vw, 72px);
+  --fs-display-m:  clamp(36px, 5vw, 56px);
+  --fs-h1:         clamp(32px, 4vw, 44px);
+  --fs-h2:         clamp(26px, 3vw, 34px);
+  --fs-h3:         22px;
+  --fs-h4:         18px;
+  --fs-body-l:     18px;
+  --fs-body:       16px;
+  --fs-body-s:     14px;
+  --fs-caption:    12px;
+  --fs-eyebrow:    13px;
+
+  /* Line heights */
+  --lh-tight:  1.05;
+  --lh-snug:   1.2;
+  --lh-normal: 1.45;
+  --lh-relaxed:1.6;
+
+  /* Tracking */
+  --tr-tight:   -0.02em;
+  --tr-normal:   0;
+  --tr-wide:     0.04em;
+  --tr-eyebrow:  0.16em;   /* used on Copperplate accents */
+
+  /* Radii */
+  --r-xs:  4px;
+  --r-sm:  6px;
+  --r-md:  10px;
+  --r-lg:  14px;
+  --r-xl:  20px;
+  --r-pill: 999px;
+
+  /* Spacing scale (4px base) */
+  --s-1:  4px;
+  --s-2:  8px;
+  --s-3:  12px;
+  --s-4:  16px;
+  --s-5:  20px;
+  --s-6:  24px;
+  --s-7:  32px;
+  --s-8:  40px;
+  --s-9:  56px;
+  --s-10: 72px;
+  --s-11: 96px;
+
+  /* Shadow / elevation */
+  --shadow-1: 0 1px 2px rgba(10,10,10,0.06), 0 1px 1px rgba(10,10,10,0.04);
+  --shadow-2: 0 4px 12px rgba(10,10,10,0.08), 0 2px 4px rgba(10,10,10,0.05);
+  --shadow-3: 0 12px 32px rgba(10,10,10,0.12), 0 4px 10px rgba(10,10,10,0.06);
+  --shadow-green-glow: 0 8px 24px rgba(95,209,47,0.32);
+
+  /* Motion */
+  --ease-standard: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast:   120ms;
+  --dur-base:   200ms;
+  --dur-slow:   320ms;
+}
+
+/* =========================================================================
+   Semantic element styles
+   ========================================================================= */
+html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+body {
+  font-family: var(--font-sans);
+  color: var(--fg-1);
+  background: var(--bg-1);
+  font-size: var(--fs-body);
+  line-height: var(--lh-normal);
+  font-weight: 400;
+}
+
+h1, .h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--fs-h1);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-tight);
+  color: var(--fg-1);
+  margin: 0 0 var(--s-4);
+}
+h2, .h2 {
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: var(--fs-h2);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tr-tight);
+  color: var(--fg-1);
+  margin: 0 0 var(--s-3);
+}
+h3, .h3 {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: var(--fs-h3);
+  line-height: var(--lh-snug);
+  margin: 0 0 var(--s-2);
+}
+h4, .h4 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--fs-h4);
+  line-height: var(--lh-snug);
+  margin: 0 0 var(--s-2);
+}
+
+p { margin: 0 0 var(--s-3); }
+.lead { font-size: var(--fs-body-l); color: var(--fg-2); line-height: var(--lh-relaxed); }
+.muted { color: var(--fg-2); }
+.caption { font-size: var(--fs-caption); color: var(--fg-2); }
+
+.eyebrow {
+  font-family: var(--font-accent);
+  font-weight: 700;
+  font-size: var(--fs-eyebrow);
+  letter-spacing: var(--tr-eyebrow);
+  text-transform: uppercase;
+  color: var(--green-900);
+}
+
+.display-xl { font-family: var(--font-display); font-size: var(--fs-display-xl); line-height: var(--lh-tight); letter-spacing: var(--tr-tight); }
+.display-l  { font-family: var(--font-display); font-size: var(--fs-display-l);  line-height: var(--lh-tight); letter-spacing: var(--tr-tight); }
+.display-m  { font-family: var(--font-display); font-size: var(--fs-display-m);  line-height: var(--lh-tight); letter-spacing: var(--tr-tight); }
+
+code, kbd, samp, pre { font-family: var(--font-mono); font-size: 0.95em; }
+code { background: var(--bg-3); padding: 2px 6px; border-radius: var(--r-xs); }
+
+a {
+  color: var(--green-900);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--green-500);
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+a:hover { color: var(--green-700); }
+
+::selection { background: var(--green-200); color: var(--ink-900); }

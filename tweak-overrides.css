@@ -1,0 +1,269 @@
+/* =========================================================================
+   GIM LMS — Tweak overrides
+   Vars are set on the .app[data-mood][data-accent][data-density] root.
+   These rules use those vars + higher specificity to override the
+   hardcoded values in app.css without rewriting the whole stylesheet.
+   ========================================================================= */
+
+.app {
+  /* ---- Defaults (Operator / GIM Green / Comfortable) ---- */
+  --t-display-font:      var(--font-sans);
+  --t-display-weight:    800;
+  --t-display-tracking:  -0.02em;
+  --t-display-transform: none;
+  --t-display-leading:   1.1;
+
+  --t-radius-card:       14px;
+  --t-radius-card-lg:    18px;
+  --t-radius-button:     999px;
+  --t-radius-input:      8px;
+  --t-card-border:       1px solid rgba(0,0,0,0.06);
+  --t-card-shadow:       0 1px 2px rgba(10,10,10,0.03);
+  --t-bg-page:           #f7f8f7;
+
+  --t-accent:            #7ac142;
+  --t-accent-hover:      #2e5a12;
+  --t-accent-pale:       #cfeab0;
+  --t-accent-soft:       #f0f9e6;
+  --t-accent-deep:       #2e5a12;
+  --t-accent-fg:         #111;        /* foreground on accent bg */
+
+  --t-pad-page-y:        32px;
+  --t-pad-page-x:        40px;
+  --t-pad-card:          18px 20px;
+  --t-pad-card-lg:       28px 32px;
+  --t-gap-grid:          16px;
+  --t-row-pad:           12px 14px;
+  --t-btn-pad:           9px 18px;
+  --t-btn-pad-sm:        7px 14px;
+}
+
+/* ============== AESTHETIC MOOD ============== */
+.app[data-mood="editorial"] {
+  --t-display-font:      'AlfaSlabOne', Georgia, serif;
+  --t-display-weight:    400;
+  --t-display-tracking:  -0.005em;
+  --t-display-transform: none;
+  --t-display-leading:   1.05;
+  --t-radius-card:       22px;
+  --t-radius-card-lg:    28px;
+  --t-radius-button:     999px;
+  --t-radius-input:      12px;
+  --t-card-border:       1px solid rgba(0,0,0,0.04);
+  --t-card-shadow:       0 4px 18px rgba(20,20,20,0.05);
+  --t-bg-page:           #f5f0e6;
+}
+.app[data-mood="field"] {
+  --t-display-font:      'CopperplateGothic-32AB', 'CopperplateGothic-31AB', Georgia, serif;
+  --t-display-weight:    400;
+  --t-display-tracking:  0.08em;
+  --t-display-transform: uppercase;
+  --t-display-leading:   1.15;
+  --t-radius-card:       4px;
+  --t-radius-card-lg:    4px;
+  --t-radius-button:     4px;
+  --t-radius-input:      2px;
+  --t-card-border:       1.5px solid #1a1a1a;
+  --t-card-shadow:       2px 2px 0 #1a1a1a;
+  --t-bg-page:           #ededea;
+}
+
+/* ============== ACCENT PALETTE ============== */
+.app[data-accent="forest"] {
+  --t-accent:       #2e5a12;
+  --t-accent-hover: #1a3608;
+  --t-accent-pale:  #9ed458;
+  --t-accent-soft:  #ebf3e0;
+  --t-accent-deep:  #1a3608;
+  --t-accent-fg:    #fff;
+}
+.app[data-accent="clay"] {
+  --t-accent:       #d97757;
+  --t-accent-hover: #a8553c;
+  --t-accent-pale:  #f4cdb8;
+  --t-accent-soft:  #fbeee5;
+  --t-accent-deep:  #7a3a24;
+  --t-accent-fg:    #111;
+}
+.app[data-accent="ink"] {
+  --t-accent:       #1f2937;
+  --t-accent-hover: #0b1220;
+  --t-accent-pale:  #b7c4d4;
+  --t-accent-soft:  #e8eef6;
+  --t-accent-deep:  #0b1220;
+  --t-accent-fg:    #fff;
+}
+
+/* ============== DENSITY ============== */
+.app[data-density="cozy"] {
+  --t-pad-page-y:  44px;
+  --t-pad-page-x:  56px;
+  --t-pad-card:    24px 28px;
+  --t-pad-card-lg: 36px 40px;
+  --t-gap-grid:    24px;
+  --t-row-pad:     16px 18px;
+  --t-btn-pad:     12px 22px;
+  --t-btn-pad-sm:  9px 16px;
+}
+.app[data-density="compact"] {
+  --t-pad-page-y:  20px;
+  --t-pad-page-x:  24px;
+  --t-pad-card:    12px 14px;
+  --t-pad-card-lg: 18px 22px;
+  --t-gap-grid:    10px;
+  --t-row-pad:     8px 10px;
+  --t-btn-pad:     6px 14px;
+  --t-btn-pad-sm:  5px 11px;
+}
+
+/* =========================================================================
+   APPLY VARS — re-state hot selectors with higher specificity (.app .X)
+   so they win against app.css.
+   ========================================================================= */
+
+/* Page surface */
+.app .app__main { background: var(--t-bg-page); }
+.app .page { padding: var(--t-pad-page-y) var(--t-pad-page-x) calc(var(--t-pad-page-y) * 2); }
+.app[data-mood="field"] .app__main { background-image:
+  repeating-linear-gradient(0deg, transparent 0 39px, rgba(0,0,0,.04) 39px 40px),
+  repeating-linear-gradient(90deg, transparent 0 39px, rgba(0,0,0,.04) 39px 40px);
+}
+
+/* Display type — page titles, hero name, course-card title, ip-card title */
+.app .page-head__title,
+.app .hero-card__name,
+.app .course-card__title,
+.app .ip-card__title,
+.app .stat-card__num,
+.app .quiz-q-text {
+  font-family: var(--t-display-font);
+  font-weight: var(--t-display-weight);
+  letter-spacing: var(--t-display-tracking);
+  text-transform: var(--t-display-transform);
+  line-height: var(--t-display-leading);
+}
+/* Editorial keeps its slab on big titles only — make the smaller card titles still feel different */
+.app[data-mood="editorial"] .course-card__title,
+.app[data-mood="editorial"] .ip-card__title { font-size: 17px; }
+.app[data-mood="editorial"] .page-head__title { font-size: 38px; }
+.app[data-mood="editorial"] .hero-card__name { font-size: 40px; }
+.app[data-mood="field"] .page-head__title { font-size: 26px; }
+.app[data-mood="field"] .hero-card__name { font-size: 28px; }
+.app[data-mood="field"] .course-card__title,
+.app[data-mood="field"] .ip-card__title { font-size: 13px; letter-spacing: 0.04em; }
+.app[data-mood="field"] .stat-card__num { font-size: 30px; }
+
+/* Cards / surfaces — radius + border + shadow */
+.app .card,
+.app .tbl,
+.app .empty,
+.app .lesson-list,
+.app .video-frame,
+.app .quiz-question,
+.app .course-card,
+.app .ip-card {
+  border-radius: var(--t-radius-card);
+  border: var(--t-card-border);
+  box-shadow: var(--t-card-shadow);
+}
+.app .hero-card,
+.app .stat-card,
+.app .filterbar { border-radius: var(--t-radius-card-lg); }
+
+/* Cards — padding (density) */
+.app .card { padding: var(--t-pad-card); }
+.app .hero-card { padding: var(--t-pad-card-lg); }
+.app .stat-card { padding: var(--t-pad-card); }
+.app .quiz-question { padding: var(--t-pad-card-lg); }
+.app .course-card__body { padding: var(--t-pad-card); gap: calc(var(--t-gap-grid) * 0.6); }
+
+/* Buttons */
+.app .btn { border-radius: var(--t-radius-button); padding: var(--t-btn-pad); }
+.app .btn-sm { padding: var(--t-btn-pad-sm); }
+.app .btn-primary { background: var(--t-accent); color: var(--t-accent-fg); }
+.app .btn-primary:hover { background: var(--t-accent-hover); color: #fff; }
+.app[data-mood="field"] .btn { text-transform: uppercase; letter-spacing: 0.06em; font-size: 12px; }
+
+/* Inputs */
+.app .cd-input,
+.app .filterbar input[type="search"],
+.app .filterbar select { border-radius: var(--t-radius-input); }
+.app .cd-input:focus,
+.app .filterbar input[type="search"]:focus,
+.app .ce-module-title:focus { border-color: var(--t-accent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--t-accent) 22%, transparent); }
+
+/* Sidebar accents */
+.app .sidebar-link.active { background: var(--t-accent-soft); color: var(--t-accent-deep); }
+.app .sidebar-link.active svg { color: var(--t-accent-deep); }
+.app .sidebar-link__badge { background: var(--t-accent); color: var(--t-accent-fg); }
+.app .sidebar-callout::before { background: var(--t-accent); }
+.app .sidebar-callout__eyebrow { color: var(--t-accent-pale); }
+
+/* Topbar mode pill */
+.app .topbar-mode button.active { background: var(--t-accent); color: var(--t-accent-fg); }
+.app .topbar-user__avatar { background: linear-gradient(135deg, var(--t-accent), var(--t-accent-deep)); }
+
+/* Eyebrows + brand-accent text */
+.app .page-head__eyebrow,
+.app .eyebrow-sm,
+.app .course-card__cat,
+.app .ip-card__cat,
+.app .quiz-q-num,
+.app .cert__brand-tag,
+.app .cert__eyebrow { color: var(--t-accent-deep); }
+
+/* Chips */
+.app .chip-green { background: var(--t-accent-soft); color: var(--t-accent-deep); border-color: var(--t-accent-pale); }
+
+/* Progress bars */
+.app .bar > div,
+.app .video-frame__bar > div,
+.app .ip-card__bar > div { background: var(--t-accent); }
+.app .hero-card__bar > div { background: linear-gradient(90deg, var(--t-accent), var(--t-accent-pale)); }
+.app .hero-card__greeting,
+.app .hero-card__progress-label { color: var(--t-accent-pale); }
+.app .hero-card::before { background: radial-gradient(circle, color-mix(in oklab, var(--t-accent) 45%, transparent), transparent 65%) !important; }
+
+/* Tabs */
+.app .tab.active { border-bottom-color: var(--t-accent); }
+
+/* Lesson rows */
+.app .lesson-row.active { background: var(--t-accent-soft); color: var(--t-accent-deep); }
+.app .lesson-row__check.done { background: var(--t-accent); border-color: var(--t-accent); color: var(--t-accent-fg); }
+
+/* Quiz */
+.app .quiz-option.selected { border-color: var(--t-accent); background: var(--t-accent-soft); }
+.app .quiz-option.selected .quiz-option__radio { border-color: var(--t-accent-deep); }
+.app .quiz-option.selected .quiz-option__radio::after { background: var(--t-accent-deep); }
+
+/* Tables — row spacing follows density */
+.app .tbl th, .app .tbl td { padding-top: calc(var(--t-row-pad) * 0); }
+.app .tbl td { padding: var(--t-row-pad); }
+
+/* Assigned rows */
+.app .assigned-row { padding: var(--t-row-pad); }
+.app .assigned-row__icon { background: var(--t-accent-soft); color: var(--t-accent-deep); }
+
+/* Certificate accents */
+.app .cert::before { border-color: var(--t-accent); }
+.app .cert__seal { background: radial-gradient(circle at 30% 30%, var(--t-accent-pale), var(--t-accent-deep)); }
+
+/* Course-card cover gradient — recolor in non-default accents */
+.app[data-accent="clay"] .cv-1 { background: linear-gradient(135deg, #2a1810 0%, #7a3a24 60%, #d97757 110%); }
+.app[data-accent="clay"] .cv-2 { background: linear-gradient(135deg, #3a2418 0%, #c0664a 110%); }
+.app[data-accent="ink"]  .cv-1 { background: linear-gradient(135deg, #0a0e16 0%, #1f2937 60%, #4a6585 110%); }
+.app[data-accent="ink"]  .cv-2 { background: linear-gradient(135deg, #0e1a2c 0%, #486a92 110%); }
+.app[data-accent="forest"] .cv-1 { background: linear-gradient(135deg, #0a1a04 0%, #1a3608 60%, #2e5a12 110%); }
+
+/* Field mood — flatten card shadows except cert */
+.app[data-mood="field"] .course-card,
+.app[data-mood="field"] .ip-card,
+.app[data-mood="field"] .stat-card,
+.app[data-mood="field"] .card { box-shadow: 2px 2px 0 #1a1a1a; }
+.app[data-mood="field"] .cv-1, .app[data-mood="field"] .cv-2, .app[data-mood="field"] .cv-3,
+.app[data-mood="field"] .cv-4, .app[data-mood="field"] .cv-5, .app[data-mood="field"] .cv-6,
+.app[data-mood="field"] .cv-7, .app[data-mood="field"] .cv-8 { filter: contrast(1.1) saturate(0.85); }
+
+/* Editorial — softer borders, no sharp lines on cards */
+.app[data-mood="editorial"] .course-card,
+.app[data-mood="editorial"] .ip-card { box-shadow: 0 8px 24px rgba(20,20,20,0.06); border-color: transparent; }

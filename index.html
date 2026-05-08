@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GIM Learning</title>
+  <link rel="stylesheet" href="colors_and_type.css">
+  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="tweak-overrides.css">
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body style="background-color: rgb(206, 222, 206)">
+  <div id="root"></div>
+
+  <script type="text/babel" src="data.jsx"></script>
+  <script type="text/babel" src="shell.jsx"></script>
+  <script type="text/babel" src="learner-pages.jsx"></script>
+  <script type="text/babel" src="course-player.jsx"></script>
+  <script type="text/babel" src="team-page.jsx"></script>
+  <script type="text/babel" src="certificate-template.jsx"></script>
+  <script type="text/babel" src="assign-training.jsx"></script>
+  <script type="text/babel" src="export-util.jsx"></script>
+  <script type="text/babel" src="admin-modals.jsx"></script>
+  <script type="text/babel" src="admin-pages.jsx"></script>
+  <script type="text/babel" src="admin-course-editor.jsx"></script>
+  <script type="text/babel" src="admin-certificate.jsx"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="tweaks.jsx"></script>
+
+  <script type="text/babel">
+    const App = () => {
+      const [mode, setMode] = React.useState("learner");
+      const [route, setRoute] = React.useState("home");
+      const [courseId, setCourseId] = React.useState(null);
+
+      // Reset to first page of mode when switching
+      const switchMode = (m) => {
+        setMode(m);
+        setRoute(m === "admin" ? "admin-overview" : "home");
+        setCourseId(null);
+      };
+
+      const goCourse     = (id) => { setCourseId(id); setRoute("course"); };
+      const goAssessment = (id) => { setCourseId(id); setRoute("assessment"); };
+      const goCert       = (id) => { setCourseId(id); setRoute("certificate"); };
+      const goBack       = ()   => { setRoute(mode === "admin" ? "admin-overview" : "home"); setCourseId(null); };
+
+      // Reset main scroll on route change
+      React.useEffect(() => {
+        const main = document.querySelector(".app__main");
+        if (main) main.scrollTop = 0;
+      }, [route, courseId]);
+
+      let body = null;
+      if (mode === "learner") {
+        if (route === "home")      body = <DashboardPage     goCourse={goCourse} setRoute={setRoute} />;
+        if (route === "catalog")   body = <CatalogPage       goCourse={goCourse} />;
+        if (route === "learning")  body = <MyLearningPage    goCourse={goCourse} />;
+        if (route === "certs")     body = <CertificatesPage  goCert={goCert} />;
+        if (route === "team")      body = <MyTeamPage />;
+        if (route === "course")    body = <CoursePage        courseId={courseId} goBack={() => setRoute("learning")} goAssessment={goAssessment} />;
+        if (route === "assessment")body = <AssessmentPage    courseId={courseId} goCert={goCert} goBack={() => setRoute("course")} />;
+        if (route === "certificate") body = <CertificatePage courseId={courseId} goBack={() => setRoute("certs")} />;
+      } else {
+        if (route === "admin-overview") body = <AdminOverviewPage />;
+        if (route === "admin-courses")  body = <AdminCoursesPage
+          onNew={() => { setCourseId(null); setRoute("admin-course-new"); }}
+          onEdit={(id) => { setCourseId(id); setRoute("admin-course-edit"); }} />;
+        if (route === "admin-course-new")  body = <AdminCourseEditorPage mode="new"  goBack={() => setRoute("admin-courses")} />;
+        if (route === "admin-course-edit") body = <AdminCourseEditorPage mode="edit" courseId={courseId} goBack={() => setRoute("admin-courses")} />;
+        if (route === "admin-users")    body = <AdminUsersPage />;
+        if (route === "admin-assess")   body = <AdminAssessmentsPage />;
+        if (route === "admin-settings") body = <AdminSettingsPage />;
+        if (route === "admin-cert")     body = <AdminCertificateDesignerPage />;
+      }
+      if (!body) body = <div className="page"><div className="empty">Page not found.</div></div>;
+
+      return (
+        <div className="app" data-mood={GIM_TWEAK_DEFAULTS.mood} data-accent={GIM_TWEAK_DEFAULTS.accent} data-density={GIM_TWEAK_DEFAULTS.density}>
+          <Topbar mode={mode} setMode={switchMode} isAdmin={CURRENT_USER.isAdmin} goCourse={(id) => { setMode("learner"); goCourse(id); }} />
+          <ToastHost />
+          <Sidebar route={route} setRoute={setRoute} mode={mode} />
+          <main className="app__main">{body}</main>
+          <GimTweaks />
+        </div>
+      );
+    };
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
