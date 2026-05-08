@@ -13,6 +13,11 @@
   <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
   <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <!-- Firebase compat SDK (Auth + Firestore) -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
 </head>
 <body style="background-color: rgb(206, 222, 206)">
   <div id="root"></div>
@@ -31,10 +36,23 @@
       // Emails that can see the "My Team" manager view.
       // Leave empty ([]) to grant manager access to every signed-in user.
       managerEmails: [],
+
+      // Firebase config — paste from Firebase Console → Project settings →
+      // Your apps → Web app. Leave projectId empty to run in demo mode
+      // (no persistence — page reload clears everything).
+      firebaseConfig: {
+        apiKey: "",
+        authDomain: "",
+        projectId: "",
+        storageBucket: "",
+        messagingSenderId: "",
+        appId: "",
+      },
     };
   </script>
 
   <script type="text/babel" src="data.jsx"></script>
+  <script type="text/babel" src="firebase-init.jsx"></script>
   <script type="text/babel" src="shell.jsx"></script>
   <script type="text/babel" src="learner-pages.jsx"></script>
   <script type="text/babel" src="course-player.jsx"></script>
@@ -161,31 +179,57 @@
     const App = () => {
       const [signedIn, setSignedIn] = React.useState(false);
       const [showSignIn, setShowSignIn] = React.useState(false);
+      const [, forceRerender] = React.useReducer(x => x + 1, 0);
       const btnRef = React.useRef(null);
 
       const cfg = window.GIM_CONFIG || {};
       const configMissing = !cfg.googleClientId || cfg.googleClientId.startsWith("YOUR_");
 
-      const handleCredential = React.useCallback((resp) => {
-        const payload = decodeJwt(resp.credential);
+      const applyLocalProfile = (payload) => {
         const name = payload.name || payload.email.split("@")[0];
         const email = payload.email || "";
         const adminList = cfg.adminEmails || [];
         const managerList = cfg.managerEmails || [];
-        const isAdmin   = adminList.length === 0   || adminList.includes(email);
-        const isManager = managerList.length === 0 || managerList.includes(email) || isAdmin;
-
         Object.assign(window.CURRENT_USER, {
           name,
           email,
           initials: name.split(" ").slice(0, 2).map(n => n[0]).join("").toUpperCase(),
           role: "Staff",
           picture: payload.picture || null,
-          isAdmin,
-          isManager,
+          isAdmin:   adminList.length === 0   || adminList.includes(email),
+          isManager: managerList.length === 0 || managerList.includes(email) || (adminList.length === 0 || adminList.includes(email)),
         });
+      };
+
+      const handleCredential = React.useCallback(async (resp) => {
+        const payload = decodeJwt(resp.credential);
+        applyLocalProfile(payload);
+
+        if (window.fbReady) {
+          try {
+            const fbUser = await signIntoFirebase(resp.credential);
+            const userDoc = await upsertUserDoc(fbUser, payload);
+            Object.assign(window.CURRENT_USER, {
+              uid: fbUser.uid,
+              isAdmin: !!userDoc.isAdmin,
+              isManager: !!userDoc.isManager,
+              role: userDoc.role || "Learner",
+              dept: userDoc.dept || "",
+            });
+          } catch (err) {
+            console.error("Firebase sign-in failed — running in local mode:", err);
+          }
+        }
+
         setSignedIn(true);
       }, []);
+
+      // Once signed in, attach Firestore listeners (they mirror into globals)
+      React.useEffect(() => {
+        if (!signedIn || !window.fbReady) return;
+        const unsubscribe = subscribeToData(() => forceRerender());
+        return () => unsubscribe && unsubscribe();
+      }, [signedIn]);
 
       React.useEffect(() => {
         if (configMissing) { setShowSignIn(true); return; }
