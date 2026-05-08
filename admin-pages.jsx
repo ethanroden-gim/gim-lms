@@ -201,27 +201,54 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
               <td>
                 <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
                   <button className="btn-icon" title="Edit" onClick={() => onEdit(c.id)}><Icon name="edit" size={14}/></button>
-                  <RowMenu items={[
-                    { label: "Assign to learners", icon: "plus", onClick: () => openAssign(c.id) },
-                    { label: "Preview as learner", icon: "play-o", onClick: () => onPreview && onPreview(c.id) },
-                    { label: "Duplicate", icon: "edit", onClick: async () => {
-                        try { await duplicateCourse(c.id); showToast?.(`Duplicated "${c.title}"`); }
-                        catch (err) { alert("Duplicate failed: " + err.message); }
-                      } },
-                    { label: "View enrollments", icon: "users", onClick: () => setEnrollmentsFor(c) },
-                    "divider",
-                    { label: c.status === "draft" ? "Publish" : "Unpublish", icon: c.status === "draft" ? "check" : "eye-off",
-                      onClick: async () => {
-                        const next = c.status === "draft" ? "published" : "draft";
-                        try { await saveCourse({ id: c.id, status: next }); showToast?.(`${c.title} ${next === "published" ? "published" : "unpublished"}`); }
-                        catch (err) { alert("Failed: " + err.message); }
-                      } },
-                    { label: "Archive", icon: "trash", danger: true, onClick: async () => {
-                        if (!confirm(`Archive "${c.title}"? It will disappear from the catalog.`)) return;
-                        try { await archiveCourse(c.id); showToast?.(`${c.title} archived`); }
-                        catch (err) { alert("Archive failed: " + err.message); }
-                      } },
-                  ]}/>
+                  <RowMenu items={(() => {
+                    const isArchived = c.status === "archived";
+                    const items = [
+                      { label: "Assign to learners", icon: "plus", onClick: () => openAssign(c.id) },
+                      { label: "Preview as learner", icon: "play-o", onClick: () => onPreview && onPreview(c.id) },
+                      { label: "Duplicate", icon: "edit", onClick: async () => {
+                          try { await duplicateCourse(c.id); showToast?.(`Duplicated "${c.title}"`); }
+                          catch (err) { alert("Duplicate failed: " + err.message); }
+                        } },
+                      { label: "View enrollments", icon: "users", onClick: () => setEnrollmentsFor(c) },
+                      "divider",
+                    ];
+                    if (isArchived) {
+                      // Restore + permanent delete only available for archived courses
+                      items.push(
+                        { label: "Restore (unarchive)", icon: "refresh", onClick: async () => {
+                            try { await saveCourse({ id: c.id, status: "draft" }); showToast?.(`${c.title} restored as draft`); }
+                            catch (err) { alert("Restore failed: " + err.message); }
+                          } },
+                        { label: "Delete permanently", icon: "trash", danger: true, onClick: async () => {
+                            const enrolledCount = (window.ENROLLMENT_COUNTS || {})[c.id] || 0;
+                            const detail = enrolledCount > 0
+                              ? `\n\nThis course has ${enrolledCount} enrolment record${enrolledCount === 1 ? "" : "s"} attached. Those records will remain but will reference a missing course.`
+                              : "";
+                            if (!confirm(`Permanently delete "${c.title}"?${detail}\n\nThis cannot be undone. Type-confirm in the next prompt.`)) return;
+                            const typed = prompt(`Type the course title to confirm deletion:\n\n${c.title}`);
+                            if (typed !== c.title) { showToast?.("Deletion cancelled — title didn't match"); return; }
+                            try { await deleteCourse(c.id); showToast?.(`"${c.title}" deleted`); }
+                            catch (err) { alert("Delete failed: " + err.message); }
+                          } },
+                      );
+                    } else {
+                      items.push(
+                        { label: c.status === "draft" ? "Publish" : "Unpublish", icon: c.status === "draft" ? "check" : "eye-off",
+                          onClick: async () => {
+                            const next = c.status === "draft" ? "published" : "draft";
+                            try { await saveCourse({ id: c.id, status: next }); showToast?.(`${c.title} ${next === "published" ? "published" : "unpublished"}`); }
+                            catch (err) { alert("Failed: " + err.message); }
+                          } },
+                        { label: "Archive", icon: "trash", danger: true, onClick: async () => {
+                            if (!confirm(`Archive "${c.title}"? It will disappear from the catalog. You can permanently delete it from the Archived view afterwards.`)) return;
+                            try { await archiveCourse(c.id); showToast?.(`${c.title} archived`); }
+                            catch (err) { alert("Archive failed: " + err.message); }
+                          } },
+                      );
+                    }
+                    return items;
+                  })()}/>
                 </div>
               </td>
             </tr>
