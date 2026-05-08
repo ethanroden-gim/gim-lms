@@ -6,7 +6,7 @@ const Sidebar = ({ route, setRoute, mode }) => {
   const learnerLinks = [
     { id: "home", label: "Dashboard", icon: "home" },
     { id: "catalog", label: "Course catalog", icon: "compass" },
-    { id: "learning", label: "My learning", icon: "book", badge: 3 },
+    { id: "learning", label: "My learning", icon: "book", badge: ASSIGNED.length || null },
     { id: "certs", label: "Certificates", icon: "award" },
     ...(CURRENT_USER.isManager ? [{ id: "team", label: "My team", icon: "users" }] : []),
   ];

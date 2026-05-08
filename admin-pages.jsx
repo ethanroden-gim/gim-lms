@@ -7,14 +7,21 @@
 // ============================================================
 const AdminOverviewPage = () => {
   const [assignOpen, setAssignOpen] = React.useState(false);
-  // Compliance by department
-  const deptCompliance = [
-    { dept: "Property Management", complete: 92, assigned: 18, on_track: true },
-    { dept: "Maintenance",         complete: 78, assigned: 14, on_track: false },
-    { dept: "Sales/Marketing",     complete: 88, assigned: 11, on_track: true },
-    { dept: "Finance",             complete: 95, assigned: 9,  on_track: true },
-    { dept: "Admin/Back Office",   complete: 84, assigned: 7,  on_track: true },
-  ];
+
+  const activeLearners = ALL_USERS.filter(u => u.status === "active").length;
+  const totalAssigned   = ALL_USERS.reduce((s, u) => s + (u.assigned  || 0), 0);
+  const totalCompleted  = ALL_USERS.reduce((s, u) => s + (u.completed || 0), 0);
+  const totalOverdue    = ALL_USERS.reduce((s, u) => s + (u.due       || 0), 0);
+  const learnersOverdue = ALL_USERS.filter(u => (u.due || 0) > 0).length;
+  const complianceRate  = totalAssigned ? Math.round((totalCompleted / totalAssigned) * 100) : null;
+
+  const deptCompliance = DEPARTMENTS.map(dept => {
+    const people = ALL_USERS.filter(u => u.dept === dept);
+    const a = people.reduce((s, u) => s + (u.assigned  || 0), 0);
+    const c = people.reduce((s, u) => s + (u.completed || 0), 0);
+    const pct = a ? Math.round((c / a) * 100) : null;
+    return { dept, headcount: people.length, assigned: a, complete: pct, on_track: pct === null ? true : pct >= 85 };
+  });
 
   return (
     <div className="page page--wide">
@@ -32,24 +39,26 @@ const AdminOverviewPage = () => {
 
       <div className="dash-grid">
         <div className="stat">
-          <div className="stat__label">Active Learners</div>
-          <div className="stat__value">{ALL_USERS.filter(u => u.status === "active").length}</div>
+          <div className="stat__label">Active learners</div>
+          <div className="stat__value">{activeLearners}</div>
           <div className="stat__sub">across {DEPARTMENTS.length} departments</div>
         </div>
         <div className="stat">
           <div className="stat__label">Compliance rate</div>
-          <div className="stat__value" style={{ color: "#2e5a12" }}>87<span style={{ fontSize: 18, color: "#5f635f" }}>%</span></div>
+          <div className="stat__value" style={{ color: complianceRate === null ? "#5f635f" : "#2e5a12" }}>
+            {complianceRate === null ? "—" : <>{complianceRate}<span style={{ fontSize: 18, color: "#5f635f" }}>%</span></>}
+          </div>
           <div className="stat__sub">Required courses, last 90d</div>
         </div>
         <div className="stat">
           <div className="stat__label">Overdue assignments</div>
-          <div className="stat__value" style={{ color: "#a8232b" }}>4</div>
-          <div className="stat__sub">across 3 learners</div>
+          <div className="stat__value" style={{ color: totalOverdue ? "#a8232b" : "#5f635f" }}>{totalOverdue}</div>
+          <div className="stat__sub">{learnersOverdue ? `across ${learnersOverdue} learner${learnersOverdue === 1 ? "" : "s"}` : "no overdue work"}</div>
         </div>
         <div className="stat">
           <div className="stat__label">Courses published</div>
           <div className="stat__value">{COURSES.length}</div>
-          <div className="stat__sub">2 drafts pending</div>
+          <div className="stat__sub">{COURSES.length ? "in catalog" : "no courses yet"}</div>
         </div>
       </div>
 
@@ -57,7 +66,6 @@ const AdminOverviewPage = () => {
         <div>
           <div className="section-head">
             <h3>Compliance by department</h3>
-            <a>View all departments →</a>
           </div>
           <div className="card">
             <div style={{ padding: 8 }}>
@@ -66,17 +74,21 @@ const AdminOverviewPage = () => {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 14 }}>{d.dept}</div>
-                      <div style={{ fontSize: 12, color: "#5f635f" }}>{d.assigned} required courses · {ALL_USERS.filter(u => u.dept === d.dept).length} people</div>
+                      <div style={{ fontSize: 12, color: "#5f635f" }}>{d.assigned} assigned · {d.headcount} {d.headcount === 1 ? "person" : "people"}</div>
                     </div>
                     <div style={{ textAlign: "right" }}>
-                      <div style={{ fontSize: 18, fontWeight: 800, color: d.complete >= 85 ? "#2e5a12" : "#a8232b" }}>{d.complete}%</div>
-                      <div className="chip chip-grey" style={{ background: d.on_track ? "#f0f9e6" : "#fff5e0", color: d.on_track ? "#2e5a12" : "#8a5a00", borderColor: d.on_track ? "#cfeab0" : "#f3d999" }}>
-                        {d.on_track ? "On track" : "Needs attention"}
+                      <div style={{ fontSize: 18, fontWeight: 800, color: d.complete === null ? "#5f635f" : (d.complete >= 85 ? "#2e5a12" : "#a8232b") }}>
+                        {d.complete === null ? "—" : `${d.complete}%`}
                       </div>
+                      {d.complete !== null && (
+                        <div className="chip chip-grey" style={{ background: d.on_track ? "#f0f9e6" : "#fff5e0", color: d.on_track ? "#2e5a12" : "#8a5a00", borderColor: d.on_track ? "#cfeab0" : "#f3d999" }}>
+                          {d.on_track ? "On track" : "Needs attention"}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="bar bar-thin">
-                    <div style={{ width: `${d.complete}%`, background: d.complete >= 85 ? "#7ac142" : "#f5a524" }} />
+                    <div style={{ width: `${d.complete || 0}%`, background: d.complete === null ? "#ececec" : (d.complete >= 85 ? "#7ac142" : "#f5a524") }} />
                   </div>
                 </div>
               ))}
@@ -89,17 +101,9 @@ const AdminOverviewPage = () => {
             <h3>Top courses this month</h3>
           </div>
           <div className="card card-pad">
-            {[
-              { title: "GIM New Hire Orientation", enrolls: 28 },
-              { title: "MA Fair Housing Law",       enrolls: 22 },
-              { title: "Emergency Response Playbook", enrolls: 15 },
-              { title: "Resident Communication",   enrolls: 11 },
-            ].map((r, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < 3 ? "1px solid #f3f3f3" : "none" }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{r.title}</div>
-                <div style={{ fontSize: 13, color: "#5f635f", fontVariantNumeric: "tabular-nums" }}>{r.enrolls} enrolls</div>
-              </div>
-            ))}
+            <div style={{ padding: "20px 4px", textAlign: "center", color: "#5f635f", fontSize: 13 }}>
+              {COURSES.length ? "No enrolment data yet." : "Add courses to see enrolment activity."}
+            </div>
           </div>
         </div>
       </div>
@@ -362,6 +366,8 @@ const AdminUsersPage = () => {
 const AdminAssessmentsPage = () => {
   const [newOpen, setNewOpen] = React.useState(false);
   const assessmentCourses = COURSES.filter(c => c.sections);
+  const totalAssessments = assessmentCourses.length;
+
   return (
     <div className="page page--wide">
       <div className="page-head">
@@ -379,81 +385,84 @@ const AdminAssessmentsPage = () => {
       <div className="dash-grid mb-6">
         <div className="stat">
           <div className="stat__label">Total assessments</div>
-          <div className="stat__value">14</div>
-          <div className="stat__sub">3 quizzes · 11 final exams</div>
+          <div className="stat__value">{totalAssessments}</div>
+          <div className="stat__sub">{totalAssessments ? "tied to courses" : "none yet"}</div>
         </div>
         <div className="stat">
           <div className="stat__label">Avg. pass rate</div>
-          <div className="stat__value">89<span style={{ fontSize: 18, color: "#5f635f" }}>%</span></div>
-          <div className="stat__sub">First-attempt</div>
+          <div className="stat__value">—</div>
+          <div className="stat__sub">No attempts yet</div>
         </div>
         <div className="stat">
           <div className="stat__label">Attempts last 30d</div>
-          <div className="stat__value">142</div>
-          <div className="stat__sub">↑ 18 vs prev 30d</div>
+          <div className="stat__value">0</div>
+          <div className="stat__sub">No activity</div>
         </div>
         <div className="stat">
           <div className="stat__label">Lowest scoring</div>
-          <div className="stat__value" style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.3 }}>RI Landlord-Tenant<br/>Final Exam</div>
-          <div className="stat__sub">71% avg · review questions</div>
+          <div className="stat__value" style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.3 }}>—</div>
+          <div className="stat__sub">No data</div>
         </div>
       </div>
 
-      <table className="tbl">
-        <thead>
-          <tr>
-            <th style={{ width: "32%" }}>Assessment</th>
-            <th>Type</th>
-            <th>Questions</th>
-            <th>Pass mark</th>
-            <th>Attempts</th>
-            <th>Avg. score</th>
-            <th>Pass rate</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {assessmentCourses.concat(COURSES.slice(2, 10)).map((c, i) => {
-            const passRate = 70 + ((c.id.length * 7) % 30);
-            const avgScore = 75 + ((c.id.length * 3) % 22);
-            const attempts = 8 + ((c.id.length * 11) % 60);
-            return (
-              <tr key={c.id + i}>
-                <td>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>{c.title} — Final</div>
-                  <div style={{ fontSize: 11, color: "#5f635f" }}>{c.cat}</div>
-                </td>
-                <td><span className="chip chip-grey">{i % 3 === 0 ? "Quiz" : "Final exam"}</span></td>
-                <td>{i % 3 === 0 ? 5 : 20}</td>
-                <td>80%</td>
-                <td style={{ fontVariantNumeric: "tabular-nums" }}>{attempts}</td>
-                <td style={{ fontVariantNumeric: "tabular-nums" }}>{avgScore}%</td>
-                <td>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div className="bar bar-thin" style={{ width: 60 }}>
-                      <div style={{ width: `${passRate}%`, background: passRate >= 85 ? "#7ac142" : "#f5a524" }} />
+      {totalAssessments === 0 ? (
+        <div className="empty">No assessments yet. Create one with the button above.</div>
+      ) : (
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th style={{ width: "32%" }}>Assessment</th>
+              <th>Type</th>
+              <th>Questions</th>
+              <th>Pass mark</th>
+              <th>Attempts</th>
+              <th>Avg. score</th>
+              <th>Pass rate</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {assessmentCourses.map(c => {
+              const quizLessons = (c.sections || []).flatMap(s => s.lessons.filter(l => l.type === "quiz"));
+              const questionCount = quizLessons.length;
+              return (
+                <tr key={c.id}>
+                  <td>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{c.title} — Final</div>
+                    <div style={{ fontSize: 11, color: "#5f635f" }}>{c.cat}</div>
+                  </td>
+                  <td><span className="chip chip-grey">Final exam</span></td>
+                  <td>{questionCount || "—"}</td>
+                  <td>80%</td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>0</td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>—</td>
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div className="bar bar-thin" style={{ width: 60 }}>
+                        <div style={{ width: "0%", background: "#ececec" }} />
+                      </div>
+                      <span style={{ fontVariantNumeric: "tabular-nums", fontSize: 12, fontWeight: 600 }}>—</span>
                     </div>
-                    <span style={{ fontVariantNumeric: "tabular-nums", fontSize: 12, fontWeight: 600 }}>{passRate}%</span>
-                  </div>
-                </td>
-                <td>
-                  <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
-                    <button className="btn-icon" title="Edit"><Icon name="edit" size={14}/></button>
-                    <RowMenu items={[
-                      { label: "Edit questions",  icon: "edit",     onClick: () => alert(`Edit ${c.title} — Final`) },
-                      { label: "View attempts",   icon: "chart",    onClick: () => alert(`Attempts for ${c.title}`) },
-                      { label: "Preview",         icon: "play-o",   onClick: () => alert(`Preview ${c.title}`) },
-                      { label: "Duplicate",       icon: "edit",     onClick: () => alert(`Duplicated ${c.title} — Final`) },
-                      "divider",
-                      { label: "Archive",         icon: "trash", danger: true, onClick: () => alert(`Archived ${c.title} — Final`) },
-                    ]}/>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                  </td>
+                  <td>
+                    <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
+                      <button className="btn-icon" title="Edit"><Icon name="edit" size={14}/></button>
+                      <RowMenu items={[
+                        { label: "Edit questions",  icon: "edit",     onClick: () => alert(`Edit ${c.title} — Final`) },
+                        { label: "View attempts",   icon: "chart",    onClick: () => alert(`Attempts for ${c.title}`) },
+                        { label: "Preview",         icon: "play-o",   onClick: () => alert(`Preview ${c.title}`) },
+                        { label: "Duplicate",       icon: "edit",     onClick: () => alert(`Duplicated ${c.title} — Final`) },
+                        "divider",
+                        { label: "Archive",         icon: "trash", danger: true, onClick: () => alert(`Archived ${c.title} — Final`) },
+                      ]}/>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 };
@@ -552,8 +561,8 @@ const AdminSettingsPage = () => {
                   Anyone with the <strong>Super Admin</strong> role in Google Workspace is automatically granted LMS Admin on first sign-in. From there, those admins can promote any other user to LMS Admin or Manager from the People page — those roles persist in the LMS regardless of Google group changes.
                 </div>
                 <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <span className="chip chip-green">3 inherited from Google</span>
-                  <span className="chip chip-grey">1 manually granted</span>
+                  <span className="chip chip-green">{ALL_USERS.filter(u => u.adminSource === "google").length} inherited from Google</span>
+                  <span className="chip chip-grey">{ALL_USERS.filter(u => u.adminSource === "granted").length} manually granted</span>
                 </div>
               </div>
             </div>

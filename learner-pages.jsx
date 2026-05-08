@@ -47,18 +47,34 @@ const DashboardPage = ({ goCourse, setRoute }) => {
   const assigned   = ASSIGNED.map(a => ({ ...a, course: COURSES.find(c => c.id === a.id) }));
   const totalAssigned = ASSIGNED.length + inProgress.length;
   const completedCount = completed.length;
-  const overallPct = Math.round((completedCount / (completedCount + totalAssigned)) * 100);
+  const totalForPct = completedCount + totalAssigned;
+  const overallPct = totalForPct ? Math.round((completedCount / totalForPct) * 100) : 0;
+  const requiredDueSoon = ASSIGNED.filter(a => a.required && a.dueDays <= 30).length;
+  const earliestDue = ASSIGNED.length ? Math.min(...ASSIGNED.map(a => a.dueDays)) : null;
+  const scoredCourses = completed.filter(c => typeof ENROLLMENTS[c.id]?.score === "number");
+  const avgScore = scoredCourses.length
+    ? Math.round(scoredCourses.reduce((s, c) => s + ENROLLMENTS[c.id].score, 0) / scoredCourses.length)
+    : null;
+  const firstName = (CURRENT_USER.name || "there").split(" ")[0];
 
   return (
     <div className="page">
       {/* Hero */}
       <div className="hero-card">
         <div>
-          <div className="hero-card__greeting">Good afternoon</div>
-          <div className="hero-card__name">{CURRENT_USER.name.split(" ")[0]}, you're {overallPct}% through your training.</div>
+          <div className="hero-card__greeting">Welcome</div>
+          <div className="hero-card__name">
+            {firstName}{totalForPct ? `, you're ${overallPct}% through your training.` : `, you have no training assigned yet.`}
+          </div>
           <div className="hero-card__sub">
-            You have <strong style={{ color: "#fff" }}>2 required courses</strong> due this month and{" "}
-            <strong style={{ color: "#fff" }}>{inProgress.length} in progress</strong>. Pick up where you left off below.
+            {totalForPct ? (
+              <>
+                You have <strong style={{ color: "#fff" }}>{requiredDueSoon} required course{requiredDueSoon === 1 ? "" : "s"}</strong> due this month and{" "}
+                <strong style={{ color: "#fff" }}>{inProgress.length} in progress</strong>.
+              </>
+            ) : (
+              <>An admin will assign training shortly. Browse the catalog any time.</>
+            )}
           </div>
         </div>
         <div className="hero-card__progress">
@@ -72,23 +88,23 @@ const DashboardPage = ({ goCourse, setRoute }) => {
       <div className="dash-grid mt-6">
         <div className="stat">
           <div className="stat__label">Required · due ≤ 30d</div>
-          <div className="stat__value">2</div>
-          <div className="stat__sub">Earliest due: in 7 days</div>
+          <div className="stat__value">{requiredDueSoon}</div>
+          <div className="stat__sub">{earliestDue !== null ? `Earliest due: in ${earliestDue} days` : "Nothing due"}</div>
         </div>
         <div className="stat">
           <div className="stat__label">In progress</div>
           <div className="stat__value">{inProgress.length}</div>
-          <div className="stat__sub">Last active: today</div>
+          <div className="stat__sub">{inProgress.length ? "Keep going" : "No courses started"}</div>
         </div>
         <div className="stat">
           <div className="stat__label">Completed YTD</div>
           <div className="stat__value">{completedCount}</div>
-          <div className="stat__sub">+1 this month</div>
+          <div className="stat__sub">{completedCount ? "Nice work" : "Nothing yet"}</div>
         </div>
         <div className="stat">
           <div className="stat__label">Avg. assessment score</div>
-          <div className="stat__value">94<span style={{ fontSize: 18, color: "#5f635f" }}>%</span></div>
-          <div className="stat__sub">Across 4 graded courses</div>
+          <div className="stat__value">{avgScore !== null ? <>{avgScore}<span style={{ fontSize: 18, color: "#5f635f" }}>%</span></> : "—"}</div>
+          <div className="stat__sub">{scoredCourses.length ? `Across ${scoredCourses.length} graded course${scoredCourses.length === 1 ? "" : "s"}` : "No graded courses yet"}</div>
         </div>
       </div>
 
