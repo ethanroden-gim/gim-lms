@@ -97,6 +97,8 @@ const ACTIVITY = [];
 const ALL_USERS = [];
 const ENROLLMENT_COUNTS = {}; // { courseId: number } — admin-wide counts
 const DEPARTMENT_DOCS = []; // Firestore-backed department records (id, name, ...)
+const ROLE_DOCS = [];       // Firestore-backed custom role records
+const ASSESSMENTS = [];     // Firestore-backed assessments
 const ALL_ENROLLMENTS = []; // every enrollment doc (admin-wide)
 
 const SAMPLE_QUIZ = { courseId: null, title: "", questions: [] };
@@ -139,6 +141,7 @@ const lessonIcon = (t) => {
 Object.assign(window, {
   Icon, Avatar,
   CURRENT_USER, DEPARTMENTS, CATEGORIES, COURSES, ENROLLMENTS, ASSIGNED, ACTIVITY,
-  ALL_USERS, SAMPLE_QUIZ, TEAM_MEMBERS, ENROLLMENT_COUNTS, DEPARTMENT_DOCS, ALL_ENROLLMENTS,
+  ALL_USERS, SAMPLE_QUIZ, TEAM_MEMBERS, ENROLLMENT_COUNTS, DEPARTMENT_DOCS, ROLE_DOCS,
+  ASSESSMENTS, ALL_ENROLLMENTS,
   classNames, lessonIcon,
 });

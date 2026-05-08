@@ -38,23 +38,38 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
   })();
   const [activeIdx, setActiveIdx] = React.useState(initialIdx);
 
-  // Mark earlier lessons as completed
-  const completedSet = React.useMemo(() => {
-    const s = new Set();
-    if (!course.sections) return s;
-    const pct = enrollment?.progress ?? 0;
-    const cnt = Math.floor((pct / 100) * flatLessons.length);
-    for (let i = 0; i < cnt; i++) s.add(flatLessons[i].id);
-    return s;
-  }, [courseId]);
-  const [completed, setCompleted] = React.useState(completedSet);
+  // Completed set comes from Firestore enrollment.completedLessons (live)
+  const completed = React.useMemo(() => {
+    return new Set(enrollment?.completedLessons || []);
+  }, [enrollment?.completedLessons?.length, courseId]);
 
   const active = flatLessons[activeIdx] || flatLessons[0];
-  const progressPct = Math.round((completed.size / Math.max(1, flatLessons.length)) * 100);
+  const progressPct = flatLessons.length
+    ? Math.round((completed.size / flatLessons.length) * 100)
+    : 0;
 
-  const markDoneAndNext = () => {
-    setCompleted(prev => new Set([...prev, active.id]));
-    if (activeIdx < flatLessons.length - 1) setActiveIdx(activeIdx + 1);
+  const [marking, setMarking] = React.useState(false);
+
+  const markDoneAndNext = async () => {
+    if (marking || !active) return;
+    setMarking(true);
+    try {
+      if (window.fbReady && window.markLessonComplete) {
+        await markLessonComplete(course, active.id);
+        const isLast = activeIdx >= flatLessons.length - 1;
+        if (isLast && completed.size + 1 >= flatLessons.length) {
+          await recordActivity(`Completed course "${course.title}"`, course.id);
+        } else {
+          await recordActivity(`Completed lesson "${active.title}" in ${course.title}`, course.id);
+        }
+      }
+    } catch (err) {
+      console.error("markLessonComplete:", err);
+      showToast?.("Couldn't save progress: " + err.message);
+    } finally {
+      setMarking(false);
+      if (activeIdx < flatLessons.length - 1) setActiveIdx(activeIdx + 1);
+    }
   };
 
   return (
@@ -203,8 +218,8 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
                     Start assessment <Icon name="arrow-right" size={14}/>
                   </button>
                 ) : (
-                  <button className="btn btn-primary" onClick={markDoneAndNext}>
-                    Mark complete & continue <Icon name="arrow-right" size={14}/>
+                  <button className="btn btn-primary" onClick={markDoneAndNext} disabled={marking}>
+                    {marking ? "Saving…" : "Mark complete & continue"} <Icon name="arrow-right" size={14}/>
                   </button>
                 )}
               </div>
@@ -260,7 +275,17 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
 // ============================================================
 const AssessmentPage = ({ courseId, goCert, goBack }) => {
   const course = COURSES.find(c => c.id === courseId);
-  const quiz = SAMPLE_QUIZ;
+
+  // Prefer a real assessment from Firestore (linked by courseId); otherwise fall back to SAMPLE_QUIZ
+  const linkedAssessment = (window.ASSESSMENTS || []).find(a => a.courseId === courseId && a.status !== "archived");
+  const quiz = linkedAssessment || SAMPLE_QUIZ;
+  const passMark = linkedAssessment?.passMark || 80;
+
+  const [answers, setAnswers] = React.useState({});
+  const [qIdx, setQIdx] = React.useState(0);
+  const [submitted, setSubmitted] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
+
   if (!course) {
     return (
       <div className="page">
@@ -281,9 +306,6 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
       </div>
     );
   }
-  const [answers, setAnswers] = React.useState({});
-  const [qIdx, setQIdx] = React.useState(0);
-  const [submitted, setSubmitted] = React.useState(false);
 
   const total = quiz.questions.length;
   const q = quiz.questions[qIdx];
@@ -295,8 +317,26 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
     return Math.round((correct / total) * 100);
   }, [answers, total]);
 
+  const handleSubmit = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      if (window.fbReady && score >= passMark) {
+        await recordCompletion(course, score);
+        await recordActivity(`Passed assessment for "${course.title}" with ${score}%`, course.id);
+      } else if (window.fbReady) {
+        await recordActivity(`Attempted assessment for "${course.title}" — ${score}%`, course.id);
+      }
+    } catch (err) {
+      console.error("recordCompletion:", err);
+    } finally {
+      setSubmitted(true);
+      setSubmitting(false);
+    }
+  };
+
   if (submitted) {
-    const passed = score >= 80;
+    const passed = score >= passMark;
     return (
       <div className="page" style={{ maxWidth: 720 }}>
         <div className="card card-pad-lg" style={{ textAlign: "center" }}>
@@ -314,7 +354,7 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
             {score}%
           </h1>
           <div className="text-muted" style={{ fontSize: 14, marginBottom: 24 }}>
-            {course.title} · {Object.values(answers).filter((a, i) => a === quiz.questions[i].correct).length} of {total} correct · 80% required to pass
+            {course.title} · {Object.values(answers).filter((a, i) => a === quiz.questions[i].correct).length} of {total} correct · {passMark}% required to pass
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
             <button className="btn btn-ghost" onClick={goBack}>Back to course</button>
@@ -395,11 +435,11 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
           ) : (
             <button
               className="btn btn-primary"
-              disabled={!allAnswered}
-              onClick={() => setSubmitted(true)}
-              style={!allAnswered ? { opacity: 0.5, cursor: "not-allowed" } : {}}
+              disabled={!allAnswered || submitting}
+              onClick={handleSubmit}
+              style={(!allAnswered || submitting) ? { opacity: 0.5, cursor: "not-allowed" } : {}}
             >
-              Submit assessment <Icon name="checkb" size={14}/>
+              {submitting ? "Submitting…" : "Submit assessment"} <Icon name="checkb" size={14}/>
             </button>
           )}
         </div>

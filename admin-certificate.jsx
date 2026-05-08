@@ -5,18 +5,43 @@
 const AdminCertificateDesignerPage = () => {
   // Live, mutable template state. Persists in window so other pages reflect edits.
   const [t, setT] = React.useState(() => window.CERTIFICATE_TEMPLATE || { ...CERTIFICATE_DEFAULTS });
+  const [saving, setSaving] = React.useState(false);
   const update = (patch) => {
     const next = { ...t, ...patch };
     setT(next);
     window.CERTIFICATE_TEMPLATE = next;
   };
 
+  // Refresh local state when the Firestore listener pushes new template data
+  React.useEffect(() => {
+    if (window.CERTIFICATE_TEMPLATE) setT({ ...window.CERTIFICATE_TEMPLATE });
+  }, [window.CERTIFICATE_TEMPLATE]);
+
+  const onSave = async () => {
+    if (saving) return;
+    if (!window.fbReady) { alert("Firebase isn't configured — can't save."); return; }
+    setSaving(true);
+    try {
+      await saveCertificateTemplate(t);
+      window.CERTIFICATE_TEMPLATE = t;
+      showToast?.("Certificate template saved");
+    } catch (err) {
+      alert("Save failed: " + err.message);
+    } finally { setSaving(false); }
+  };
+
+  const onResetDefaults = () => {
+    if (!confirm("Reset the certificate template to defaults? Unsaved changes will be lost.")) return;
+    setT({ ...CERTIFICATE_DEFAULTS });
+    window.CERTIFICATE_TEMPLATE = { ...CERTIFICATE_DEFAULTS };
+  };
+
   // Sample data for the preview
-  const sampleCourse  = COURSES[0] || { id: "demo", title: "MA Fair Housing Law" };
-  const sampleLearner = "Maya Donovan";
+  const sampleCourse  = COURSES[0] || { id: "demo", title: "Sample course title" };
+  const sampleLearner = CURRENT_USER.name || "Sample Learner";
   const sampleDate    = "Mar 14, 2025";
   const sampleScore   = 95;
-  const sampleCertNo  = "GIM-MAFHL-2317";
+  const sampleCertNo  = "GIM-SAMPLE-0001";
 
   // Logo upload
   const fileRef = React.useRef(null);
@@ -40,14 +65,14 @@ const AdminCertificateDesignerPage = () => {
           <div className="page-head__sub">Brand the certificate every learner receives. Updates apply to all courses.</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => { setT({ ...CERTIFICATE_DEFAULTS }); window.CERTIFICATE_TEMPLATE = { ...CERTIFICATE_DEFAULTS }; }}>
+          <button className="btn btn-ghost btn-sm" onClick={onResetDefaults}>
             <Icon name="refresh" size={14}/> Reset to default
           </button>
           <button className="btn btn-ghost btn-sm" onClick={() => printCertificate(t, sampleCourse, sampleLearner, sampleDate, sampleScore, sampleCertNo)}>
             <Icon name="download" size={14}/> Download sample PDF
           </button>
-          <button className="btn btn-primary btn-sm" onClick={() => { window.CERTIFICATE_TEMPLATE = t; alert("Certificate template saved."); }}>
-            <Icon name="check" size={14}/> Save template
+          <button className="btn btn-primary btn-sm" onClick={onSave} disabled={saving}>
+            <Icon name="check" size={14}/> {saving ? "Saving…" : "Save template"}
           </button>
         </div>
       </div>

@@ -106,13 +106,35 @@ const NewAssessmentModal = ({ open, onClose }) => {
 
   const valid1 = title.trim().length > 0 && courseId;
   const valid2 = questions.length >= 1;
+  const [submitting, setSubmitting] = React.useState(false);
 
   const next = () => setStep(s => Math.min(4, s + 1));
   const back = () => setStep(s => Math.max(1, s - 1));
 
-  const submit = () => {
-    alert(`Assessment "${title}" created with ${questions.length} questions. (mock)`);
-    onClose();
+  const submit = async () => {
+    if (submitting) return;
+    if (!window.fbReady) { alert("Firebase isn't configured — can't save."); return; }
+    setSubmitting(true);
+    try {
+      await saveAssessment({
+        title: title.trim(),
+        description: description.trim(),
+        courseId,
+        type,
+        passMark,
+        attemptsAllowed: attemptsAllowed === "unlimited" ? null : parseInt(attemptsAllowed, 10),
+        timeLimit: timeLimit === "none" ? null : timeLimitMin,
+        shuffleQuestions,
+        showAnswers,
+        certOnPass,
+        questions,
+        status: "published",
+      });
+      showToast?.(`Assessment "${title}" created`);
+      onClose();
+    } catch (err) {
+      alert("Save failed: " + err.message);
+    } finally { setSubmitting(false); }
   };
 
   const upsertQuestion = (q) => {
@@ -305,8 +327,25 @@ const NewAssessmentModal = ({ open, onClose }) => {
           )}
           {step === 4 && (
             <>
-              <button className="btn btn-ghost btn-sm" onClick={() => alert("Saved as draft. (mock)")}>Save as draft</button>
-              <button className="btn btn-primary btn-sm" onClick={submit}>Publish assessment</button>
+              <button className="btn btn-ghost btn-sm" disabled={submitting} onClick={async () => {
+                if (submitting) return;
+                if (!window.fbReady) { alert("Firebase isn't configured — can't save."); return; }
+                try {
+                  await saveAssessment({
+                    title: title.trim(), description: description.trim(),
+                    courseId, type, passMark,
+                    attemptsAllowed: attemptsAllowed === "unlimited" ? null : parseInt(attemptsAllowed, 10),
+                    timeLimit: timeLimit === "none" ? null : timeLimitMin,
+                    shuffleQuestions, showAnswers, certOnPass,
+                    questions, status: "draft",
+                  });
+                  showToast?.("Saved as draft");
+                  onClose();
+                } catch (err) { alert("Save failed: " + err.message); }
+              }}>Save as draft</button>
+              <button className="btn btn-primary btn-sm" onClick={submit} disabled={submitting}>
+                {submitting ? "Publishing…" : "Publish assessment"}
+              </button>
             </>
           )}
         </div>
@@ -757,12 +796,26 @@ const RoleEditModal = ({ open, onClose, initial }) => {
 
   const togglePerm = (id) => setPerms(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
   const valid = name.trim().length >= 2 && perms.length >= 1;
+  const [busy, setBusy] = React.useState(false);
 
   const peopleCount = initial ? ALL_USERS.filter(u => u.role === initial.name).length : 0;
 
-  const save = () => {
-    alert(`${isNew ? "Created" : "Updated"} role "${name}" with ${perms.length} permissions. (mock)`);
-    onClose();
+  const save = async () => {
+    if (busy) return;
+    if (!window.fbReady) { alert("Firebase isn't configured — can't save."); return; }
+    setBusy(true);
+    try {
+      await saveRole({
+        id: initial?.id,
+        name: name.trim(),
+        desc: desc.trim(),
+        perms,
+      });
+      showToast?.(`${isNew ? "Created" : "Updated"} role "${name.trim()}"`);
+      onClose();
+    } catch (err) {
+      alert("Save failed: " + err.message);
+    } finally { setBusy(false); }
   };
 
   return (

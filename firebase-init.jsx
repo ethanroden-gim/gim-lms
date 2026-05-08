@@ -124,6 +124,30 @@ const subscribeToData = (onChange) => {
     if (err.code !== "permission-denied") console.error("departments listener:", err);
   }));
 
+  subs.push(fbDb.collection("roles").onSnapshot(s => {
+    setArr(ROLE_DOCS, s.docs.map(d => ({ id: d.id, ...d.data() })));
+    onChange();
+  }, err => {
+    if (err.code !== "permission-denied") console.error("roles listener:", err);
+  }));
+
+  subs.push(fbDb.collection("assessments").onSnapshot(s => {
+    setArr(ASSESSMENTS, s.docs.map(d => ({ id: d.id, ...d.data() })));
+    onChange();
+  }, err => {
+    if (err.code !== "permission-denied") console.error("assessments listener:", err);
+  }));
+
+  // Certificate template — single doc at /settings/certificate
+  subs.push(fbDb.collection("settings").doc("certificate").onSnapshot(d => {
+    if (d.exists) {
+      window.CERTIFICATE_TEMPLATE = { ...(window.CERTIFICATE_DEFAULTS || {}), ...d.data() };
+      onChange();
+    }
+  }, err => {
+    if (err.code !== "permission-denied") console.error("certificate settings listener:", err);
+  }));
+
   subs.push(fbDb.collection("activity")
     .where("userId", "==", uid)
     .orderBy("createdAt", "desc")
@@ -166,6 +190,94 @@ const updateUser = (uid, fields) =>
   fbReady ? fbDb.collection("users").doc(uid).set(fields, { merge: true })
           : Promise.reject(new Error("Firebase not configured"));
 
+// ---- Activity log ---------------------------------------------------------
+const recordActivity = (text, courseId, extra = {}) => {
+  if (!fbReady || !fbAuth.currentUser) return Promise.resolve();
+  return fbDb.collection("activity").add({
+    userId: fbAuth.currentUser.uid,
+    text,
+    courseId: courseId || null,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    ...extra,
+  });
+};
+
+// ---- Enrollment progress --------------------------------------------------
+const enrollmentDocRef = (courseId, uid = fbAuth.currentUser?.uid) => {
+  if (!uid) throw new Error("Not signed in");
+  return fbDb.collection("enrollments").doc(`${uid}_${courseId}`);
+};
+
+// Self-enroll the current user in a course (idempotent)
+const enrollSelf = async (courseId) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  const ref = enrollmentDocRef(courseId);
+  const snap = await ref.get();
+  if (snap.exists) return ref.id;
+  await ref.set({
+    userId: fbAuth.currentUser.uid,
+    courseId,
+    status: "in_progress",
+    progress: 0,
+    completedLessons: [],
+    assignedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    startedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+  return ref.id;
+};
+
+// Mark a single lesson complete; recomputes progress against the course
+const markLessonComplete = async (course, lessonId) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  const ref = enrollmentDocRef(course.id);
+  const snap = await ref.get();
+  const totalLessons = (course.sections || course.modules || [])
+    .reduce((s, sec) => s + (sec.lessons?.length || 0), 0) || 1;
+
+  const existing = snap.exists ? snap.data() : {};
+  const completedLessons = Array.from(new Set([...(existing.completedLessons || []), lessonId]));
+  const progress = Math.min(100, Math.round((completedLessons.length / totalLessons) * 100));
+
+  await ref.set({
+    userId: fbAuth.currentUser.uid,
+    courseId: course.id,
+    completedLessons,
+    progress,
+    currentLessonId: lessonId,
+    lastLesson: lessonId,
+    status: progress >= 100 ? "completed" : "in_progress",
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    ...(progress >= 100 && !existing.completedOn ? {
+      completedOn: firebase.firestore.FieldValue.serverTimestamp(),
+    } : {}),
+  }, { merge: true });
+};
+
+// Record assessment completion (called from AssessmentPage on pass)
+const recordCompletion = async (course, score) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  const ref = enrollmentDocRef(course.id);
+  await ref.set({
+    userId: fbAuth.currentUser.uid,
+    courseId: course.id,
+    status: "completed",
+    progress: 100,
+    score,
+    completedOn: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+};
+
+// Wipe all enrollments for a user (admin-only)
+const resetUserProgress = async (userId) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  const snap = await fbDb.collection("enrollments").where("userId", "==", userId).get();
+  const batch = fbDb.batch();
+  snap.forEach(d => batch.delete(d.ref));
+  await batch.commit();
+  return snap.size;
+};
+
 // ---- Departments ----------------------------------------------------------
 const saveDepartment = async (dept) => {
   if (!fbReady) throw new Error("Firebase not configured");
@@ -182,6 +294,52 @@ const saveDepartment = async (dept) => {
 
 const deleteDepartment = (id) =>
   fbReady ? fbDb.collection("departments").doc(id).delete()
+          : Promise.reject(new Error("Firebase not configured"));
+
+// ---- Roles ----------------------------------------------------------------
+const saveRole = async (role) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  const { id, ...data } = role;
+  data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+  if (id) {
+    await fbDb.collection("roles").doc(id).set(data, { merge: true });
+    return id;
+  }
+  data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+  const ref = await fbDb.collection("roles").add(data);
+  return ref.id;
+};
+
+const deleteRole = (id) =>
+  fbReady ? fbDb.collection("roles").doc(id).delete()
+          : Promise.reject(new Error("Firebase not configured"));
+
+// ---- Assessments ----------------------------------------------------------
+const saveAssessment = async (a) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  const { id, ...data } = a;
+  data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+  if (id) {
+    await fbDb.collection("assessments").doc(id).set(data, { merge: true });
+    return id;
+  }
+  data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+  if (window.CURRENT_USER?.uid) data.createdBy = window.CURRENT_USER.uid;
+  const ref = await fbDb.collection("assessments").add(data);
+  return ref.id;
+};
+
+const deleteAssessment = (id) =>
+  fbReady ? fbDb.collection("assessments").doc(id).delete()
+          : Promise.reject(new Error("Firebase not configured"));
+
+const archiveAssessment = (id) =>
+  fbReady ? fbDb.collection("assessments").doc(id).set({ status: "archived" }, { merge: true })
+          : Promise.reject(new Error("Firebase not configured"));
+
+// ---- Certificate template -------------------------------------------------
+const saveCertificateTemplate = (template) =>
+  fbReady ? fbDb.collection("settings").doc("certificate").set(template, { merge: true })
           : Promise.reject(new Error("Firebase not configured"));
 
 // ---- Bulk training assignment --------------------------------------------
@@ -264,6 +422,10 @@ Object.assign(window, {
   hydrateUserFromFirebase,
   saveCourse, archiveCourse, deleteCourse, duplicateCourse,
   saveDepartment, deleteDepartment,
-  assignTraining, updateUser,
+  saveRole, deleteRole,
+  saveAssessment, archiveAssessment, deleteAssessment,
+  saveCertificateTemplate,
+  assignTraining, updateUser, resetUserProgress,
+  enrollSelf, markLessonComplete, recordCompletion, recordActivity,
   signOutEverywhere,
 });

@@ -98,12 +98,30 @@ const AdminOverviewPage = () => {
 
         <div>
           <div className="section-head">
-            <h3>Top courses this month</h3>
+            <h3>Top courses by enrolment</h3>
           </div>
           <div className="card card-pad">
-            <div style={{ padding: "20px 4px", textAlign: "center", color: "#5f635f", fontSize: 13 }}>
-              {COURSES.length ? "No enrolment data yet." : "Add courses to see enrolment activity."}
-            </div>
+            {(() => {
+              const ranked = COURSES
+                .filter(c => c.status !== "archived")
+                .map(c => ({ c, n: ENROLLMENT_COUNTS[c.id] || 0 }))
+                .filter(r => r.n > 0)
+                .sort((a, b) => b.n - a.n)
+                .slice(0, 4);
+              if (ranked.length === 0) {
+                return <div style={{ padding: "12px 4px", textAlign: "center", color: "#5f635f", fontSize: 13 }}>
+                  {COURSES.length ? "No enrolments yet." : "Add courses to see enrolment activity."}
+                </div>;
+              }
+              return ranked.map((r, i) => (
+                <div key={r.c.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < ranked.length - 1 ? "1px solid #f3f3f3" : "none" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{r.c.title}</div>
+                  <div style={{ fontSize: 13, color: "#5f635f", fontVariantNumeric: "tabular-nums" }}>
+                    {r.n} {r.n === 1 ? "enrolment" : "enrolments"}
+                  </div>
+                </div>
+              ));
+            })()}
           </div>
         </div>
       </div>
@@ -399,6 +417,13 @@ const AdminUsersPage = () => {
                   <RowMenu items={[
                     { label: "Assign training", icon: "plus",     onClick: () => openAssign(u.id) },
                     { label: "Send reminder",   icon: "send",     onClick: () => showToast?.(`Reminder queued for ${u.name}`) },
+                    { label: "Reset progress",  icon: "refresh",  onClick: async () => {
+                        if (!confirm(`Reset all training progress for ${u.name}?\n\nThis deletes their enrolments and completion history. This cannot be undone.`)) return;
+                        try {
+                          const n = await resetUserProgress(u.id);
+                          showToast?.(`Cleared ${n} enrolment${n === 1 ? "" : "s"} for ${u.name}`);
+                        } catch (err) { alert("Reset failed: " + err.message); }
+                      } },
                     "divider",
                     { label: u.status === "inactive" ? "Reactivate" : "Deactivate",
                       icon: "lock", danger: u.status !== "inactive",
@@ -440,8 +465,8 @@ const AdminUsersPage = () => {
 // ============================================================
 const AdminAssessmentsPage = () => {
   const [newOpen, setNewOpen] = React.useState(false);
-  const assessmentCourses = COURSES.filter(c => c.sections);
-  const totalAssessments = assessmentCourses.length;
+  const visible = ASSESSMENTS.filter(a => a.status !== "archived");
+  const totalAssessments = visible.length;
 
   return (
     <div className="page page--wide">
@@ -461,12 +486,12 @@ const AdminAssessmentsPage = () => {
         <div className="stat">
           <div className="stat__label">Total assessments</div>
           <div className="stat__value">{totalAssessments}</div>
-          <div className="stat__sub">{totalAssessments ? "tied to courses" : "none yet"}</div>
+          <div className="stat__sub">{totalAssessments ? `${ASSESSMENTS.filter(a => a.status === "archived").length} archived` : "none yet"}</div>
         </div>
         <div className="stat">
           <div className="stat__label">Avg. pass rate</div>
           <div className="stat__value">—</div>
-          <div className="stat__sub">No attempts yet</div>
+          <div className="stat__sub">Attempt tracking coming soon</div>
         </div>
         <div className="stat">
           <div className="stat__label">Attempts last 30d</div>
@@ -487,48 +512,55 @@ const AdminAssessmentsPage = () => {
           <thead>
             <tr>
               <th style={{ width: "32%" }}>Assessment</th>
+              <th>Linked course</th>
               <th>Type</th>
               <th>Questions</th>
               <th>Pass mark</th>
-              <th>Attempts</th>
-              <th>Avg. score</th>
-              <th>Pass rate</th>
+              <th>Status</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {assessmentCourses.map(c => {
-              const quizLessons = (c.sections || []).flatMap(s => s.lessons.filter(l => l.type === "quiz"));
-              const questionCount = quizLessons.length;
+            {visible.map(a => {
+              const linked = COURSES.find(c => c.id === a.courseId);
               return (
-                <tr key={c.id}>
+                <tr key={a.id}>
                   <td>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{c.title} — Final</div>
-                    <div style={{ fontSize: 11, color: "#5f635f" }}>{c.cat}</div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{a.title}</div>
+                    {a.description && <div style={{ fontSize: 11, color: "#5f635f" }}>{a.description}</div>}
                   </td>
-                  <td><span className="chip chip-grey">Final exam</span></td>
-                  <td>{questionCount || "—"}</td>
-                  <td>80%</td>
-                  <td style={{ fontVariantNumeric: "tabular-nums" }}>0</td>
-                  <td style={{ fontVariantNumeric: "tabular-nums" }}>—</td>
                   <td>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div className="bar bar-thin" style={{ width: 60 }}>
-                        <div style={{ width: "0%", background: "#ececec" }} />
-                      </div>
-                      <span style={{ fontVariantNumeric: "tabular-nums", fontSize: 12, fontWeight: 600 }}>—</span>
-                    </div>
+                    {linked ? <span className="chip chip-grey">{linked.title}</span>
+                            : <span className="text-xs text-muted">— missing —</span>}
+                  </td>
+                  <td><span className="chip chip-grey">{a.type === "quiz" ? "Quiz" : a.type === "cert" ? "Certification" : "Final exam"}</span></td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>{a.questions?.length || 0}</td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>{a.passMark || 80}%</td>
+                  <td>
+                    {a.status === "draft" ? <span className="chip chip-amber">Draft</span> :
+                     a.status === "archived" ? <span className="chip chip-grey">Archived</span> :
+                                               <span className="chip chip-green">Published</span>}
                   </td>
                   <td>
                     <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
-                      <button className="btn-icon" title="Edit"><Icon name="edit" size={14}/></button>
                       <RowMenu items={[
-                        { label: "Edit questions",  icon: "edit",     onClick: () => alert(`Edit ${c.title} — Final`) },
-                        { label: "View attempts",   icon: "chart",    onClick: () => alert(`Attempts for ${c.title}`) },
-                        { label: "Preview",         icon: "play-o",   onClick: () => alert(`Preview ${c.title}`) },
-                        { label: "Duplicate",       icon: "edit",     onClick: () => alert(`Duplicated ${c.title} — Final`) },
+                        { label: a.status === "draft" ? "Publish" : "Unpublish", icon: a.status === "draft" ? "check" : "eye-off",
+                          onClick: async () => {
+                            const next = a.status === "draft" ? "published" : "draft";
+                            try { await saveAssessment({ id: a.id, status: next }); showToast?.(`${a.title} ${next === "published" ? "published" : "unpublished"}`); }
+                            catch (err) { alert("Failed: " + err.message); }
+                          } },
                         "divider",
-                        { label: "Archive",         icon: "trash", danger: true, onClick: () => alert(`Archived ${c.title} — Final`) },
+                        { label: "Archive", icon: "trash", danger: true, onClick: async () => {
+                            if (!confirm(`Archive "${a.title}"?`)) return;
+                            try { await archiveAssessment(a.id); showToast?.(`${a.title} archived`); }
+                            catch (err) { alert("Archive failed: " + err.message); }
+                          } },
+                        { label: "Delete permanently", icon: "trash", danger: true, onClick: async () => {
+                            if (!confirm(`Permanently delete "${a.title}"? This cannot be undone.`)) return;
+                            try { await deleteAssessment(a.id); showToast?.(`"${a.title}" deleted`); }
+                            catch (err) { alert("Delete failed: " + err.message); }
+                          } },
                       ]}/>
                     </div>
                   </td>
@@ -617,13 +649,41 @@ const AdminSettingsPage = () => {
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                         <div style={{ fontWeight: 700, fontSize: 14 }}>{r.name}</div>
                         <span className="chip chip-grey">{count} {count === 1 ? "person" : "people"}</span>
+                        <span className="chip chip-grey" style={{ background: "#f0f9e6", color: "#2e5a12", borderColor: "#cfeab0" }}>Built-in</span>
                       </div>
                       <div className="text-muted text-sm">{r.desc}</div>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
                         {r.chips.map(p => <span key={p} className="chip chip-green">{p}</span>)}
                       </div>
                     </div>
-                    <button className="btn-icon" title="Edit role" onClick={() => setRoleModal({ open: true, initial: { name: r.name, desc: r.desc, perms: r.perms[0] === "all" ? ROLE_PRESETS.Admin : r.perms } })}><Icon name="edit" size={14}/></button>
+                  </div>
+                </div>
+              );
+            })}
+            {ROLE_DOCS.map(r => {
+              const count = ALL_USERS.filter(u => u.role === r.name).length;
+              return (
+                <div key={r.id} style={{ padding: "14px 0", borderBottom: "1px solid #ececec" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                        <div style={{ fontWeight: 700, fontSize: 14 }}>{r.name}</div>
+                        <span className="chip chip-grey">{count} {count === 1 ? "person" : "people"}</span>
+                      </div>
+                      {r.desc && <div className="text-muted text-sm">{r.desc}</div>}
+                      <div className="text-xs text-muted" style={{ marginTop: 6 }}>
+                        {r.perms?.length || 0} permission{r.perms?.length === 1 ? "" : "s"}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button className="btn-icon" title="Edit role" onClick={() => setRoleModal({ open: true, initial: r })}><Icon name="edit" size={14}/></button>
+                      <button className="btn-icon" title="Delete role" style={{ color: "#a8232b" }} onClick={async () => {
+                        if (count > 0) { alert(`Cannot delete: ${count} ${count === 1 ? "person has" : "people have"} this role. Reassign them first.`); return; }
+                        if (!confirm(`Delete role "${r.name}"?`)) return;
+                        try { await deleteRole(r.id); showToast?.(`Role "${r.name}" deleted`); }
+                        catch (err) { alert("Delete failed: " + err.message); }
+                      }}><Icon name="trash" size={14}/></button>
+                    </div>
                   </div>
                 </div>
               );
