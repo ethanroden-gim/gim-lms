@@ -116,4 +116,62 @@ const subscribeToData = (onChange) => {
   return () => subs.forEach(fn => fn());
 };
 
-Object.assign(window, { fbReady, fbAuth, fbDb, signIntoFirebase, upsertUserDoc, subscribeToData });
+// Hydrate CURRENT_USER from an existing Firebase session (returning visitor)
+const hydrateUserFromFirebase = async (fbUser) => {
+  if (!fbReady || !fbUser) return;
+  let u = {};
+  try {
+    const snap = await fbDb.collection("users").doc(fbUser.uid).get();
+    if (snap.exists) u = snap.data();
+  } catch (e) { console.error("hydrate user:", e); }
+  const name = u.name || fbUser.displayName || fbUser.email || "";
+  Object.assign(window.CURRENT_USER, {
+    uid: fbUser.uid,
+    name,
+    email: fbUser.email || u.email || "",
+    initials: name.split(" ").slice(0, 2).map(n => n[0]).join("").toUpperCase(),
+    picture: u.photoURL || fbUser.photoURL || null,
+    isAdmin: !!u.isAdmin,
+    isManager: !!u.isManager || !!u.isAdmin,
+    role: u.role || "Learner",
+    dept: u.dept || "",
+  });
+};
+
+// ---- Course CRUD ----------------------------------------------------------
+const saveCourse = async (course) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  const { id, ...data } = course;
+  data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+  if (window.CURRENT_USER?.uid) data.updatedBy = window.CURRENT_USER.uid;
+
+  if (!id || id === "new") {
+    data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    if (window.CURRENT_USER?.uid) data.createdBy = window.CURRENT_USER.uid;
+    const ref = await fbDb.collection("courses").add(data);
+    return ref.id;
+  }
+  await fbDb.collection("courses").doc(id).set(data, { merge: true });
+  return id;
+};
+
+const archiveCourse = (id) =>
+  fbReady ? fbDb.collection("courses").doc(id).set({ status: "archived" }, { merge: true })
+          : Promise.reject(new Error("Firebase not configured"));
+
+const deleteCourse = (id) =>
+  fbReady ? fbDb.collection("courses").doc(id).delete()
+          : Promise.reject(new Error("Firebase not configured"));
+
+const signOutEverywhere = async () => {
+  if (window.google?.accounts?.id) {
+    try { google.accounts.id.disableAutoSelect(); } catch {}
+  }
+  if (fbReady) await fbAuth.signOut();
+};
+
+Object.assign(window, {
+  fbReady, fbAuth, fbDb,
+  signIntoFirebase, upsertUserDoc, subscribeToData,
+  hydrateUserFromFirebase, saveCourse, archiveCourse, deleteCourse, signOutEverywhere,
+});

@@ -188,7 +188,11 @@ const AdminCoursesPage = ({ onNew, onEdit }) => {
               <td style={{ fontVariantNumeric: "tabular-nums" }}>
                 {Math.floor(8 + (c.id.length * 13) % 32)}
               </td>
-              <td><span className="chip chip-green">Published</span></td>
+              <td>{
+                c.status === "archived" ? <span className="chip chip-grey">Archived</span> :
+                c.status === "draft"    ? <span className="chip chip-amber">Draft</span> :
+                                          <span className="chip chip-green">Published</span>
+              }</td>
               <td>
                 <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
                   <button className="btn-icon" title="Edit" onClick={() => onEdit(c.id)}><Icon name="edit" size={14}/></button>
@@ -198,8 +202,15 @@ const AdminCoursesPage = ({ onNew, onEdit }) => {
                     { label: "Duplicate",          icon: "edit",  onClick: () => alert(`Duplicated ${c.title}`) },
                     { label: "View enrollments",   icon: "users", onClick: () => alert(`Open enrollments for ${c.title}`) },
                     "divider",
-                    { label: "Unpublish",          icon: "eye-off", onClick: () => alert(`${c.title} unpublished`) },
-                    { label: "Archive",            icon: "trash", danger: true, onClick: () => alert(`${c.title} archived`) },
+                    { label: "Unpublish", icon: "eye-off", onClick: async () => {
+                        try { await saveCourse({ id: c.id, status: "draft" }); showToast?.(`${c.title} unpublished`); }
+                        catch (err) { alert("Unpublish failed: " + err.message); }
+                      } },
+                    { label: "Archive", icon: "trash", danger: true, onClick: async () => {
+                        if (!confirm(`Archive "${c.title}"? It will disappear from the catalog.`)) return;
+                        try { await archiveCourse(c.id); showToast?.(`${c.title} archived`); }
+                        catch (err) { alert("Archive failed: " + err.message); }
+                      } },
                   ]}/>
                 </div>
               </td>

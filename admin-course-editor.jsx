@@ -63,7 +63,34 @@ const AdminCourseEditorPage = ({ mode, courseId, goBack }) => {
   const isNew = mode === "new";
   const [c, setC] = React.useState(() => isNew ? blankCourse() : sampleEditCourse(courseId));
   const [tab, setTab] = React.useState("details");
+  const [saving, setSaving] = React.useState(false);
   const set = (patch) => setC(prev => ({ ...prev, ...patch }));
+
+  const onSave = async (publish) => {
+    if (saving) return;
+    if (!c.title?.trim()) { alert("Please give the course a title."); return; }
+    if (!window.fbReady) { alert("Firebase isn't configured — can't save."); return; }
+
+    setSaving(true);
+    const payload = {
+      ...c,
+      status: publish ? "published" : "draft",
+      lessons: c.modules.reduce((s, m) => s + m.lessons.length, 0),
+    };
+    try {
+      const newId = await saveCourse(payload);
+      if (typeof showToast === "function") {
+        showToast(publish ? (isNew ? "Course published" : "Course updated") : "Saved as draft");
+      }
+      if (publish) goBack();
+      else if (isNew) setC(prev => ({ ...prev, id: newId, status: "draft" }));
+    } catch (err) {
+      console.error("saveCourse:", err);
+      alert("Save failed: " + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // ---------- module helpers ----------
   const addModule = () => set({ modules: [...c.modules, { title: `Module ${c.modules.length + 1}`, lessons: [] }] });
@@ -126,12 +153,12 @@ const AdminCourseEditorPage = ({ mode, courseId, goBack }) => {
           <div className="page-head__sub">{isNew ? "Build a new training module from scratch." : c.title || "Untitled course"}</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-ghost btn-sm" onClick={goBack}>Cancel</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => alert("Saved as draft.")}>
-            <Icon name="check" size={14}/> Save draft
+          <button className="btn btn-ghost btn-sm" onClick={goBack} disabled={saving}>Cancel</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => onSave(false)} disabled={saving}>
+            <Icon name="check" size={14}/> {saving ? "Saving…" : "Save draft"}
           </button>
-          <button className="btn btn-primary btn-sm" onClick={() => { alert(isNew ? "Course created and published." : "Course updated."); goBack(); }}>
-            <Icon name="check" size={14}/> {isNew ? "Publish course" : "Save changes"}
+          <button className="btn btn-primary btn-sm" onClick={() => onSave(true)} disabled={saving}>
+            <Icon name="check" size={14}/> {saving ? "Saving…" : (isNew ? "Publish course" : "Save changes")}
           </button>
         </div>
       </div>

@@ -177,100 +177,102 @@
       );
     };
 
+    const LoadingScreen = () => (
+      <div style={{
+        minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
+        background: "linear-gradient(160deg,#0d1a08 0%,#1a3608 50%,#0d1a08 100%)",
+        color: "rgba(255,255,255,0.6)", fontSize: 14, fontFamily: "'Switzer', sans-serif",
+      }}>Loading…</div>
+    );
+
     const App = () => {
-      const [signedIn, setSignedIn] = React.useState(false);
-      const [showSignIn, setShowSignIn] = React.useState(false);
+      // "checking" → "signed-in" | "signed-out"
+      const [authState, setAuthState] = React.useState(window.fbReady ? "checking" : "signed-out");
       const [, forceRerender] = React.useReducer(x => x + 1, 0);
       const btnRef = React.useRef(null);
 
       const cfg = window.GIM_CONFIG || {};
       const configMissing = !cfg.googleClientId || cfg.googleClientId.startsWith("YOUR_");
 
-      const applyLocalProfile = (payload) => {
-        const name = payload.name || payload.email.split("@")[0];
-        const email = payload.email || "";
-        const adminList = cfg.adminEmails || [];
-        const managerList = cfg.managerEmails || [];
-        Object.assign(window.CURRENT_USER, {
-          name,
-          email,
-          initials: name.split(" ").slice(0, 2).map(n => n[0]).join("").toUpperCase(),
-          role: "Staff",
-          picture: payload.picture || null,
-          isAdmin:   adminList.length === 0   || adminList.includes(email),
-          isManager: managerList.length === 0 || managerList.includes(email) || (adminList.length === 0 || adminList.includes(email)),
-        });
-      };
-
-      const handleCredential = React.useCallback(async (resp) => {
-        const payload = decodeJwt(resp.credential);
-        applyLocalProfile(payload);
-
-        if (window.fbReady) {
-          try {
-            const fbUser = await signIntoFirebase(resp.credential);
-            const userDoc = await upsertUserDoc(fbUser, payload);
-            Object.assign(window.CURRENT_USER, {
-              uid: fbUser.uid,
-              isAdmin: !!userDoc.isAdmin,
-              isManager: !!userDoc.isManager,
-              role: userDoc.role || "Learner",
-              dept: userDoc.dept || "",
-            });
-          } catch (err) {
-            console.error("Firebase sign-in failed — running in local mode:", err);
+      // 1. Watch Firebase auth state — covers existing sessions on reload
+      React.useEffect(() => {
+        if (!window.fbReady) return;
+        const unsub = fbAuth.onAuthStateChanged(async (fbUser) => {
+          if (fbUser) {
+            await hydrateUserFromFirebase(fbUser);
+            setAuthState("signed-in");
+          } else {
+            setAuthState("signed-out");
           }
-        }
-
-        setSignedIn(true);
+        });
+        return unsub;
       }, []);
 
-      // Once signed in, attach Firestore listeners (they mirror into globals)
+      // 2. When Firebase says "signed-out", run the GIS sign-in flow
       React.useEffect(() => {
-        if (!signedIn || !window.fbReady) return;
-        const unsubscribe = subscribeToData(() => forceRerender());
-        return () => unsubscribe && unsubscribe();
-      }, [signedIn]);
+        if (authState !== "signed-out" || configMissing) return;
 
-      React.useEffect(() => {
-        if (configMissing) { setShowSignIn(true); return; }
+        const onCredential = async (resp) => {
+          const payload = decodeJwt(resp.credential);
+          const name = payload.name || (payload.email || "").split("@")[0];
+          const email = payload.email || "";
+          Object.assign(window.CURRENT_USER, {
+            name, email,
+            initials: name.split(" ").slice(0, 2).map(n => n[0]).join("").toUpperCase(),
+            picture: payload.picture || null,
+          });
+
+          if (window.fbReady) {
+            try {
+              const fbUser = await signIntoFirebase(resp.credential);
+              await upsertUserDoc(fbUser, payload);
+              // onAuthStateChanged fires next → flips to "signed-in"
+              return;
+            } catch (err) {
+              console.error("Firebase sign-in failed — running local-only:", err);
+            }
+          }
+
+          // Local-only fallback (no Firebase or it errored)
+          const adminList = cfg.adminEmails || [];
+          const managerList = cfg.managerEmails || [];
+          const isAdmin   = adminList.length === 0   || adminList.includes(email);
+          const isManager = managerList.length === 0 || managerList.includes(email) || isAdmin;
+          Object.assign(window.CURRENT_USER, { isAdmin, isManager, role: "Staff" });
+          setAuthState("signed-in");
+        };
 
         const init = () => {
           google.accounts.id.initialize({
             client_id: cfg.googleClientId,
-            callback: handleCredential,
+            callback: onCredential,
             auto_select: true,
           });
-          // Try silent One Tap first; fall back to explicit button
-          google.accounts.id.prompt((notification) => {
-            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-              setShowSignIn(true);
-            }
-          });
+          google.accounts.id.prompt(); // best-effort One Tap
+          if (btnRef.current) {
+            google.accounts.id.renderButton(btnRef.current, {
+              theme: "outline", size: "large", shape: "rectangular",
+              text: "signin_with", logo_alignment: "left",
+            });
+          }
         };
 
         if (window.google) { init(); }
         else {
           const s = document.querySelector('script[src*="accounts.google.com/gsi"]');
           if (s) s.addEventListener("load", init);
-          else setShowSignIn(true);
         }
-      }, []);
+      }, [authState, configMissing]);
 
-      // Render the Google button once the sign-in screen is visible
+      // 3. Once signed in, attach Firestore live listeners
       React.useEffect(() => {
-        if (showSignIn && !configMissing && btnRef.current && window.google) {
-          google.accounts.id.renderButton(btnRef.current, {
-            theme: "outline", size: "large", shape: "rectangular",
-            text: "signin_with", logo_alignment: "left",
-          });
-        }
-      }, [showSignIn]);
+        if (authState !== "signed-in" || !window.fbReady) return;
+        const unsubscribe = subscribeToData(() => forceRerender());
+        return () => unsubscribe && unsubscribe();
+      }, [authState]);
 
-      if (!signedIn) {
-        return <SignInScreen btnRef={btnRef} configMissing={configMissing} />;
-      }
-
+      if (authState === "checking") return <LoadingScreen />;
+      if (authState === "signed-out") return <SignInScreen btnRef={btnRef} configMissing={configMissing} />;
       return <LmsApp />;
     };
 
