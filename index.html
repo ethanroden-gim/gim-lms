@@ -11,9 +11,28 @@
   <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body style="background-color: rgb(206, 222, 206)">
   <div id="root"></div>
+
+  <!-- ── GIM configuration ── Edit these values before deploying ── -->
+  <script>
+    window.GIM_CONFIG = {
+      // Your Google OAuth Client ID from console.cloud.google.com
+      // Authorised origins must include your GitHub Pages URL
+      googleClientId: "YOUR_CLIENT_ID.apps.googleusercontent.com",
+
+      // Emails that receive full Admin access in the LMS.
+      // Leave empty ([]) to grant admin to every signed-in user.
+      adminEmails: [],
+
+      // Emails that can see the "My Team" manager view.
+      // Leave empty ([]) to grant manager access to every signed-in user.
+      managerEmails: [],
+    };
+  </script>
 
   <script type="text/babel" src="data.jsx"></script>
   <script type="text/babel" src="shell.jsx"></script>
@@ -31,12 +50,64 @@
   <script type="text/babel" src="tweaks.jsx"></script>
 
   <script type="text/babel">
-    const App = () => {
+    // Decode a Google Identity Services JWT credential (no library needed)
+    const decodeJwt = (credential) => {
+      const b64 = credential.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      const padded = b64 + "=".repeat((4 - b64.length % 4) % 4);
+      return JSON.parse(atob(padded));
+    };
+
+    // Sign-in screen shown before (or instead of) the One Tap prompt
+    const SignInScreen = ({ btnRef, configMissing }) => (
+      <div style={{
+        minHeight: "100vh", display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center",
+        background: "linear-gradient(160deg,#0d1a08 0%,#1a3608 50%,#0d1a08 100%)",
+        gap: 32, padding: 24,
+      }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{
+            fontFamily: "'AlfaSlabOne', serif", fontSize: 36, color: "#7ac142",
+            letterSpacing: "-0.02em", marginBottom: 6,
+          }}>GIM Learning</div>
+          <div style={{ color: "rgba(255,255,255,0.55)", fontSize: 14 }}>
+            Sign in with your GIM Google Workspace account
+          </div>
+        </div>
+
+        <div style={{
+          background: "#fff", borderRadius: 16, padding: "28px 32px",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.5)", minWidth: 280,
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 16,
+        }}>
+          {configMissing ? (
+            <div style={{ textAlign: "center", maxWidth: 280 }}>
+              <div style={{ fontWeight: 700, color: "#111", marginBottom: 8 }}>Configuration required</div>
+              <div style={{ fontSize: 12, color: "#5f635f", lineHeight: 1.5 }}>
+                Open <code style={{ background: "#f5f5f5", padding: "1px 4px", borderRadius: 4 }}>index.html</code> and set{" "}
+                <code style={{ background: "#f5f5f5", padding: "1px 4px", borderRadius: 4 }}>GIM_CONFIG.googleClientId</code>{" "}
+                to your OAuth 2.0 Client ID from Google Cloud Console.
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={{ color: "#5f635f", fontSize: 13 }}>Sign in to continue</div>
+              <div ref={btnRef} />
+            </>
+          )}
+        </div>
+
+        <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 11 }}>
+          © {new Date().getFullYear()} GIM Property Management
+        </div>
+      </div>
+    );
+
+    const LmsApp = () => {
       const [mode, setMode] = React.useState("learner");
       const [route, setRoute] = React.useState("home");
       const [courseId, setCourseId] = React.useState(null);
 
-      // Reset to first page of mode when switching
       const switchMode = (m) => {
         setMode(m);
         setRoute(m === "admin" ? "admin-overview" : "home");
@@ -46,9 +117,7 @@
       const goCourse     = (id) => { setCourseId(id); setRoute("course"); };
       const goAssessment = (id) => { setCourseId(id); setRoute("assessment"); };
       const goCert       = (id) => { setCourseId(id); setRoute("certificate"); };
-      const goBack       = ()   => { setRoute(mode === "admin" ? "admin-overview" : "home"); setCourseId(null); };
 
-      // Reset main scroll on route change
       React.useEffect(() => {
         const main = document.querySelector(".app__main");
         if (main) main.scrollTop = 0;
@@ -56,25 +125,25 @@
 
       let body = null;
       if (mode === "learner") {
-        if (route === "home")      body = <DashboardPage     goCourse={goCourse} setRoute={setRoute} />;
-        if (route === "catalog")   body = <CatalogPage       goCourse={goCourse} />;
-        if (route === "learning")  body = <MyLearningPage    goCourse={goCourse} />;
-        if (route === "certs")     body = <CertificatesPage  goCert={goCert} />;
-        if (route === "team")      body = <MyTeamPage />;
-        if (route === "course")    body = <CoursePage        courseId={courseId} goBack={() => setRoute("learning")} goAssessment={goAssessment} />;
-        if (route === "assessment")body = <AssessmentPage    courseId={courseId} goCert={goCert} goBack={() => setRoute("course")} />;
-        if (route === "certificate") body = <CertificatePage courseId={courseId} goBack={() => setRoute("certs")} />;
+        if (route === "home")        body = <DashboardPage    goCourse={goCourse} setRoute={setRoute} />;
+        if (route === "catalog")     body = <CatalogPage      goCourse={goCourse} />;
+        if (route === "learning")    body = <MyLearningPage   goCourse={goCourse} />;
+        if (route === "certs")       body = <CertificatesPage goCert={goCert} />;
+        if (route === "team")        body = <MyTeamPage />;
+        if (route === "course")      body = <CoursePage       courseId={courseId} goBack={() => setRoute("learning")} goAssessment={goAssessment} />;
+        if (route === "assessment")  body = <AssessmentPage   courseId={courseId} goCert={goCert} goBack={() => setRoute("course")} />;
+        if (route === "certificate") body = <CertificatePage  courseId={courseId} goBack={() => setRoute("certs")} />;
       } else {
-        if (route === "admin-overview") body = <AdminOverviewPage />;
-        if (route === "admin-courses")  body = <AdminCoursesPage
+        if (route === "admin-overview")    body = <AdminOverviewPage />;
+        if (route === "admin-courses")     body = <AdminCoursesPage
           onNew={() => { setCourseId(null); setRoute("admin-course-new"); }}
           onEdit={(id) => { setCourseId(id); setRoute("admin-course-edit"); }} />;
         if (route === "admin-course-new")  body = <AdminCourseEditorPage mode="new"  goBack={() => setRoute("admin-courses")} />;
         if (route === "admin-course-edit") body = <AdminCourseEditorPage mode="edit" courseId={courseId} goBack={() => setRoute("admin-courses")} />;
-        if (route === "admin-users")    body = <AdminUsersPage />;
-        if (route === "admin-assess")   body = <AdminAssessmentsPage />;
-        if (route === "admin-settings") body = <AdminSettingsPage />;
-        if (route === "admin-cert")     body = <AdminCertificateDesignerPage />;
+        if (route === "admin-users")       body = <AdminUsersPage />;
+        if (route === "admin-assess")      body = <AdminAssessmentsPage />;
+        if (route === "admin-settings")    body = <AdminSettingsPage />;
+        if (route === "admin-cert")        body = <AdminCertificateDesignerPage />;
       }
       if (!body) body = <div className="page"><div className="empty">Page not found.</div></div>;
 
@@ -87,6 +156,77 @@
           <GimTweaks />
         </div>
       );
+    };
+
+    const App = () => {
+      const [signedIn, setSignedIn] = React.useState(false);
+      const [showSignIn, setShowSignIn] = React.useState(false);
+      const btnRef = React.useRef(null);
+
+      const cfg = window.GIM_CONFIG || {};
+      const configMissing = !cfg.googleClientId || cfg.googleClientId.startsWith("YOUR_");
+
+      const handleCredential = React.useCallback((resp) => {
+        const payload = decodeJwt(resp.credential);
+        const name = payload.name || payload.email.split("@")[0];
+        const email = payload.email || "";
+        const adminList = cfg.adminEmails || [];
+        const managerList = cfg.managerEmails || [];
+        const isAdmin   = adminList.length === 0   || adminList.includes(email);
+        const isManager = managerList.length === 0 || managerList.includes(email) || isAdmin;
+
+        Object.assign(window.CURRENT_USER, {
+          name,
+          email,
+          initials: name.split(" ").slice(0, 2).map(n => n[0]).join("").toUpperCase(),
+          role: "Staff",
+          picture: payload.picture || null,
+          isAdmin,
+          isManager,
+        });
+        setSignedIn(true);
+      }, []);
+
+      React.useEffect(() => {
+        if (configMissing) { setShowSignIn(true); return; }
+
+        const init = () => {
+          google.accounts.id.initialize({
+            client_id: cfg.googleClientId,
+            callback: handleCredential,
+            auto_select: true,
+          });
+          // Try silent One Tap first; fall back to explicit button
+          google.accounts.id.prompt((notification) => {
+            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+              setShowSignIn(true);
+            }
+          });
+        };
+
+        if (window.google) { init(); }
+        else {
+          const s = document.querySelector('script[src*="accounts.google.com/gsi"]');
+          if (s) s.addEventListener("load", init);
+          else setShowSignIn(true);
+        }
+      }, []);
+
+      // Render the Google button once the sign-in screen is visible
+      React.useEffect(() => {
+        if (showSignIn && !configMissing && btnRef.current && window.google) {
+          google.accounts.id.renderButton(btnRef.current, {
+            theme: "outline", size: "large", shape: "rectangular",
+            text: "signin_with", logo_alignment: "left",
+          });
+        }
+      }, [showSignIn]);
+
+      if (!signedIn) {
+        return <SignInScreen btnRef={btnRef} configMissing={configMissing} />;
+      }
+
+      return <LmsApp />;
     };
 
     ReactDOM.createRoot(document.getElementById("root")).render(<App />);

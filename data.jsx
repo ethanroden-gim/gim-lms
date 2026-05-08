@@ -68,48 +68,17 @@ const Icon = ({ name, className = "", size = 18 }) => {
   }
 };
 
-// ====================== Mock data ============================
+// ====================== User (populated at runtime by Google sign-in) ====
 const CURRENT_USER = {
-  name: "Maya Donovan",
-  initials: "MD",
-  email: "maya.donovan@getgim.com",
-  role: "Property Manager",
-  department: "Property Management",
-  manager: "Carlos Reyes",
-  hireDate: "Jul 2024",
-  isManager: true,
-  isAdmin: true, // inherited from Google Workspace Super Admin role
-  googleAdmin: true,
+  name: "",
+  initials: "",
+  email: "",
+  role: "",
+  isAdmin: false,
+  isManager: false,
 };
 
-const TEAM_MEMBERS = [
-  { name: "Anya Kowalski",   role: "Property Coordinator", dept: "Property Management", assigned: 4, completed: 8,  due: 1, avgScore: 91, lastActive: "Today",      overdue: 0,
-    courses: [
-      { title: "MA Fair Housing Law",        progress: 70, status: "in_progress", due: "in 12d", required: true },
-      { title: "Resident Communication",     progress: 100, status: "completed",  required: true },
-      { title: "Working With Condo & HOA Boards", progress: 35, status: "in_progress", required: false },
-      { title: "Emergency Response Playbook", progress: 0,  status: "assigned",  due: "in 7d",  required: true },
-    ]},
-  { name: "Tomás Reyna",     role: "Property Coordinator", dept: "Property Management", assigned: 6, completed: 1,  due: 4, avgScore: 78, lastActive: "Yesterday",  overdue: 1,
-    courses: [
-      { title: "GIM New Hire Orientation",   progress: 100, status: "completed", required: true },
-      { title: "MA Fair Housing Law",        progress: 12,  status: "in_progress", due: "overdue 2d", required: true, overdue: true },
-      { title: "Emergency Response Playbook", progress: 0,  status: "assigned",  due: "in 7d",  required: true },
-      { title: "Resident Communication",     progress: 0,   status: "assigned",  due: "in 21d", required: true },
-    ]},
-  { name: "Elena Park",      role: "Property Manager",     dept: "Property Management", assigned: 4, completed: 10, due: 1, avgScore: 94, lastActive: "Today",      overdue: 0,
-    courses: [
-      { title: "MA Fair Housing Law",         progress: 100, status: "completed", required: true },
-      { title: "Working With Condo & HOA Boards", progress: 100, status: "completed", required: false },
-      { title: "Emergency Response Playbook", progress: 60,  status: "in_progress", due: "in 7d", required: true },
-      { title: "AppFolio: Daily Workflows",   progress: 25,  status: "in_progress", required: false },
-    ]},
-  { name: "Devon Bryce",     role: "Senior Property Manager", dept: "Property Management", assigned: 0, completed: 19, due: 0, avgScore: 96, lastActive: "On leave",  overdue: 0,
-    courses: [
-      { title: "Working With Condo & HOA Boards", progress: 100, status: "completed", required: false },
-      { title: "MA Fair Housing Law",         progress: 100, status: "completed", required: true },
-    ]},
-];
+const TEAM_MEMBERS = [];
 
 const DEPARTMENTS = [
   "Property Management", "Maintenance", "Sales/Marketing", "Finance", "Admin/Back Office"
@@ -237,44 +206,10 @@ const COURSES = [
   },
 ];
 
-// Per-user enrollment / progress
-const ENROLLMENTS = {
-  "c-orient":    { progress: 100, status: "completed", completedOn: "Aug 14, 2025", score: 96 },
-  "c-mafh":      { progress: 62,  status: "in_progress", lastLesson: "Source-of-income protections in MA", currentLessonId: "l2" },
-  "c-resident":  { progress: 30,  status: "in_progress", lastLesson: "De-escalation frameworks", currentLessonId: "l1" },
-  "c-emerg":     { progress: 0,   status: "assigned" },
-  "c-board":     { progress: 100, status: "completed", completedOn: "Mar 02, 2026", score: 92 },
-  "c-vendor":    { progress: 45,  status: "in_progress", lastLesson: "Bid evaluation worksheet", currentLessonId: "l3" },
-};
-
-const ASSIGNED = [
-  { id: "c-mafh",     dueDays: 12, required: true },
-  { id: "c-emerg",    dueDays: 7,  required: true },
-  { id: "c-resident", dueDays: 21, required: true },
-  { id: "c-ri",       dueDays: 18, required: true },
-];
-
-const ACTIVITY = [
-  { when: "Today",       text: "Completed lesson \"Federal vs MA protected classes\"", course: "MA Fair Housing Law" },
-  { when: "Yesterday",   text: "Earned a certificate", course: "Working With Condo & HOA Boards" },
-  { when: "2 days ago",  text: "Started course",     course: "Resident Communication — Hard Conversations" },
-  { when: "Last week",   text: "Scored 96% on assessment", course: "GIM New Hire Orientation" },
-];
-
-const ALL_USERS = [
-  { name: "Maya Donovan",      role: "Admin",   adminSource: "google", dept: "Property Management",  status: "active", assigned: 4, completed: 12, due: 2 },
-  { name: "Carlos Reyes",      role: "Admin",   adminSource: "google", dept: "Property Management",  status: "active", assigned: 2, completed: 18, due: 0 },
-  { name: "Brian Halverson",   role: "Admin",   adminSource: "granted", dept: "Maintenance",         status: "active", assigned: 1, completed: 22, due: 0 },
-  { name: "Priya Shah",        role: "Learner", dept: "Customer Service",     status: "active", assigned: 5, completed: 9,  due: 1 },
-  { name: "Marcus Lee",        role: "Manager", dept: "Finance",              status: "active", assigned: 3, completed: 14, due: 0 },
-  { name: "Dana Whitcomb",     role: "Learner", dept: "Sales/Marketing",      status: "active", assigned: 4, completed: 7,  due: 1 },
-  { name: "Anya Kowalski",     role: "Learner", dept: "Admin/Back Office",    status: "active", assigned: 3, completed: 5,  due: 0 },
-  { name: "Tomás Reyna",       role: "Learner", dept: "Maintenance",          status: "onboarding", assigned: 6, completed: 1, due: 4 },
-  { name: "Elena Park",        role: "Learner", dept: "Property Management",  status: "active", assigned: 4, completed: 10, due: 1 },
-  { name: "Jordan Whitfield",  role: "Learner", dept: "Sales/Marketing",      status: "active", assigned: 4, completed: 8,  due: 0 },
-  { name: "Sarah O'Connor",    role: "Learner", dept: "Customer Service",     status: "active", assigned: 4, completed: 11, due: 0 },
-  { name: "Devon Bryce",       role: "Learner", dept: "Property Management",  status: "leave",  assigned: 0, completed: 19, due: 0 },
-];
+const ENROLLMENTS = {};
+const ASSIGNED = [];
+const ACTIVITY = [];
+const ALL_USERS = [];
 
 // ====== Quiz mock ======================================================
 const SAMPLE_QUIZ = {
