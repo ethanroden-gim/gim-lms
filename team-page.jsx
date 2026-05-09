@@ -33,12 +33,36 @@ const MyTeamPage = () => {
     return { completed, inProgress, assigned: assigned + inProgress, overdue, avgScore, all: list };
   };
 
-  const sendReminderTeamWide = (overdueOnly) => {
-    const recipients = overdueOnly
+  const sendReminderTeamWide = async (overdueOnly) => {
+    const targets = overdueOnly
       ? team.filter(m => memberStats(m.id).overdue > 0)
       : team;
     setReminderOpen(false);
-    showToast?.(`Reminder queued for ${recipients.length} ${recipients.length === 1 ? "report" : "reports"}.`);
+    if (targets.length === 0) { showToast?.("No matching recipients."); return; }
+    const recipients = targets.filter(m => m.email).map(m => ({ email: m.email, name: m.name }));
+    if (recipients.length === 0) { showToast?.("No email addresses on file."); return; }
+    try {
+      const res = await sendEmailReminder({
+        recipients,
+        message: overdueOnly
+          ? "This is a reminder that you have overdue training in GIM Learning. Please complete it as soon as possible."
+          : "This is a reminder to complete your outstanding training in GIM Learning.",
+      });
+      showToast?.(`Reminder sent to ${res.sent} ${res.sent === 1 ? "report" : "reports"}.`);
+    } catch (err) {
+      alert("Reminder failed: " + err.message);
+    }
+  };
+
+  const nudgeMember = async (m) => {
+    if (!m.email) { showToast?.(`No email on file for ${m.name}`); return; }
+    try {
+      const res = await sendEmailReminder({
+        recipients: [{ email: m.email, name: m.name }],
+        message: "Just a friendly nudge to keep your training moving along in GIM Learning.",
+      });
+      showToast?.(res.sent ? `Nudge sent to ${m.name}` : `Failed: ${res.errors?.[0]?.error || "unknown error"}`);
+    } catch (err) { alert("Nudge failed: " + err.message); }
   };
 
   const totalAssigned = team.reduce((s, m) => s + memberStats(m.id).assigned, 0);
@@ -131,7 +155,7 @@ const MyTeamPage = () => {
                             <div className="text-xs text-muted">Avg score</div>
                             <div style={{ fontSize: 18, fontWeight: 800 }}>{s.avgScore !== null ? `${s.avgScore}%` : "—"}</div>
                           </div>
-                          <button className="btn btn-ghost btn-sm" onClick={() => showToast?.(`Reminder queued for ${m.name}`)}>Nudge</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => nudgeMember(m)}>Nudge</button>
                           <button className="btn-icon" title="Assign training" onClick={() => setAssignFor(m.id)}><Icon name="plus" size={14}/></button>
                         </div>
                       </div>

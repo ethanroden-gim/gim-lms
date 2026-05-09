@@ -409,6 +409,35 @@ const deleteCourse = (id) =>
   fbReady ? fbDb.collection("courses").doc(id).delete()
           : Promise.reject(new Error("Firebase not configured"));
 
+// ---- Email reminders (Google Apps Script web app) ------------------------
+// Posts to the deployed Apps Script /exec URL. Uses a "simple" request
+// (text/plain body) so the browser doesn't trigger a CORS preflight.
+const sendEmailReminder = async ({ recipients, subject, message, course, dueDate }) => {
+  const url = (window.GIM_CONFIG || {}).appsScriptReminderUrl;
+  if (!url) throw new Error("Email reminders aren't configured. Add the Apps Script URL to GIM_CONFIG.appsScriptReminderUrl.");
+  if (!recipients?.length) throw new Error("No recipients.");
+
+  const payload = {
+    recipients,
+    subject: subject || (course ? `Reminder: ${course}` : "GIM Learning reminder"),
+    message: message || "",
+    course: course || "",
+    dueDate: dueDate || "",
+    sentBy: window.CURRENT_USER?.email || "",
+    sentByName: window.CURRENT_USER?.name || "",
+  };
+
+  const resp = await fetch(url, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+  });
+  if (!resp.ok) throw new Error(`Reminder service returned HTTP ${resp.status}`);
+  const data = await resp.json().catch(() => ({}));
+  if (data.error) throw new Error(data.error);
+  return data; // { sent: number, errors: [...] }
+};
+
 const signOutEverywhere = async () => {
   if (window.google?.accounts?.id) {
     try { google.accounts.id.disableAutoSelect(); } catch {}
@@ -427,5 +456,6 @@ Object.assign(window, {
   saveCertificateTemplate,
   assignTraining, updateUser, resetUserProgress,
   enrollSelf, markLessonComplete, recordCompletion, recordActivity,
+  sendEmailReminder,
   signOutEverywhere,
 });

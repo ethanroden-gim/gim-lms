@@ -196,18 +196,6 @@ const NewAssessmentModal = ({ open, onClose }) => {
               </div>
             </div>
 
-            <div className="card" style={{ padding: 14, background: "#f8f7f2", border: "1px dashed #d8d9d8" }}>
-              <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                <div style={{ width: 28, height: 28, borderRadius: 6, background: "#111", color: "#7ac142", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <Icon name="shield" size={14}/>
-                </div>
-                <div style={{ fontSize: 12, color: "#3d3f3d", lineHeight: 1.5 }}>
-                  <strong>Tip:</strong> if this is a regulatory exam (e.g. RI/MA license CE),
-                  pick "Certification exam" — passing learners are auto-issued a certificate
-                  with their score and a unique verification ID.
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
@@ -605,12 +593,13 @@ const ReviewStep = ({ title, description, type, courseTitle, questions, passMark
 // Department Editor modal
 // ============================================================
 const DEPT_PRESETS = [
-  { icon: "house",   bg: "#f0f9e6", color: "#2e5a12", label: "House (Property)" },
-  { icon: "tools",   bg: "#fff5e0", color: "#8a5a00", label: "Tools (Maintenance)" },
-  { icon: "users",   bg: "#e6f0ff", color: "#1e3a8a", label: "Users (Sales)" },
-  { icon: "dollar",  bg: "#e6f7ec", color: "#0a6e3a", label: "Dollar (Finance)" },
-  { icon: "folder",  bg: "#f3e8ff", color: "#5b21b6", label: "Folder (Admin)" },
-  { icon: "shield",  bg: "#fee2e2", color: "#991b1b", label: "Shield (Compliance)" },
+  { icon: "house",   bg: "#f0f9e6", color: "#2e5a12", label: "Property"    },
+  { icon: "wrench",  bg: "#e6f7ec", color: "#4a7c2a", label: "Maintenance" },
+  { icon: "tag",     bg: "#f3e8ff", color: "#5b21b6", label: "Sales / Marketing" },
+  { icon: "money",   bg: "#fff7d6", color: "#8a5a00", label: "Finance"     },
+  { icon: "users",   bg: "#e6f0ff", color: "#1e3a8a", label: "People"      },
+  { icon: "list",    bg: "#ffe8d6", color: "#c2410c", label: "Admin"       },
+  { icon: "shield",  bg: "#fee2e2", color: "#991b1b", label: "Compliance"  },
 ];
 
 const DepartmentEditModal = ({ open, onClose, initial }) => {
@@ -916,4 +905,4 @@ const RoleEditModal = ({ open, onClose, initial }) => {
   );
 };
 
-Object.assign(window, { NewAssessmentModal, DepartmentEditModal, RoleEditModal });
+Object.assign(window, { NewAssessmentModal, DepartmentEditModal, RoleEditModal, DEPT_PRESETS });

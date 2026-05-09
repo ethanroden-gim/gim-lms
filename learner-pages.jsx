@@ -108,28 +108,32 @@ const DashboardPage = ({ goCourse, setRoute }) => {
         </div>
       </div>
 
-      {/* Two-col: Continue learning + Assigned */}
-      <div className="dash-2col mt-8">
-        <div>
-          <div className="section-head">
-            <h3>Pick up where you left off</h3>
-            <a onClick={() => setRoute("learning")}>View all →</a>
+      {/* Single-column flow: Pick up where you left off → Assigned → Recent activity */}
+      <div className="mt-8">
+        <div className="section-head">
+          <h3>Pick up where you left off</h3>
+          <a onClick={() => setRoute("learning")}>View all →</a>
+        </div>
+        {inProgress.length === 0 ? (
+          <div className="card card-pad" style={{ textAlign: "center", color: "#5f635f", fontSize: 13 }}>
+            Nothing in progress yet. Browse the catalog or pick something from your assignments below.
           </div>
+        ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {inProgress.map(c => {
-              const e = ENROLLMENTS[c.id];
+              const e = ENROLLMENTS[c.id] || {};
               return (
                 <div key={c.id} className="ip-card" onClick={() => goCourse(c.id)}>
                   <div className={classNames("ip-card__cover", c.cover)} />
                   <div className="ip-card__body">
                     <div className="ip-card__cat">{c.cat}</div>
                     <div className="ip-card__title">{c.title}</div>
-                    <div className="ip-card__meta">
-                      <span>Up next: {e.lastLesson}</span>
-                    </div>
-                    <div className="ip-card__bar"><div style={{ width: `${e.progress}%` }} /></div>
+                    {e.lastLesson && (
+                      <div className="ip-card__meta"><span>Up next: {e.lastLesson}</span></div>
+                    )}
+                    <div className="ip-card__bar"><div style={{ width: `${e.progress || 0}%` }} /></div>
                     <div className="ip-card__meta" style={{ justifyContent: "space-between" }}>
-                      <span>{e.progress}% complete</span>
+                      <span>{e.progress || 0}% complete</span>
                       <span style={{ color: "#2e5a12", fontWeight: 600 }}>Resume <Icon name="arrow-right" size={12}/></span>
                     </div>
                   </div>
@@ -137,17 +141,22 @@ const DashboardPage = ({ goCourse, setRoute }) => {
               );
             })}
           </div>
-        </div>
+        )}
 
-        <div>
-          <div className="section-head">
-            <h3>Assigned to you</h3>
-            <a onClick={() => setRoute("learning")}>All assignments →</a>
+        <div className="section-head mt-8">
+          <h3>Assigned to you</h3>
+          <a onClick={() => setRoute("learning")}>All assignments →</a>
+        </div>
+        {assigned.length === 0 ? (
+          <div className="card card-pad" style={{ textAlign: "center", color: "#5f635f", fontSize: 13 }}>
+            No new assignments right now.
           </div>
+        ) : (
           <div className="card">
             <div style={{ padding: 8 }}>
               {assigned.map(a => {
-                const soon = a.dueDays <= 14;
+                const soon = a.dueDays != null && a.dueDays <= 14;
+                if (!a.course) return null; // silently skip if course was deleted
                 return (
                   <div className="assigned-row" key={a.id} onClick={() => goCourse(a.id)}>
                     <div className={classNames("assigned-row__icon", a.required && "req")}>
@@ -158,9 +167,11 @@ const DashboardPage = ({ goCourse, setRoute }) => {
                       <div className="assigned-row__sub">{a.course.cat} · {a.course.duration} min</div>
                     </div>
                     <div className="assigned-row__due">
-                      <div className={classNames("assigned-row__due-date", soon && "assigned-row__due-soon")}>
-                        Due in {a.dueDays}d
-                      </div>
+                      {a.dueDays != null && (
+                        <div className={classNames("assigned-row__due-date", soon && "assigned-row__due-soon")}>
+                          Due in {a.dueDays}d
+                        </div>
+                      )}
                       <div>{a.required ? "Required" : "Optional"}</div>
                     </div>
                     <Icon name="chevron-right" />
@@ -169,27 +180,38 @@ const DashboardPage = ({ goCourse, setRoute }) => {
               })}
             </div>
           </div>
+        )}
 
-          <div className="section-head mt-6">
-            <h3>Recent activity</h3>
-          </div>
-          <div className="card card-pad">
-            {ACTIVITY.map((a, i) => (
-              <div key={i} style={{ display: "flex", gap: 12, padding: "10px 0", borderBottom: i < ACTIVITY.length - 1 ? "1px solid #f3f3f3" : "none" }}>
-                <div style={{
-                  width: 28, height: 28, borderRadius: 8, background: "#f0f9e6",
-                  color: "#2e5a12", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                }}>
-                  <Icon name="checkb" size={14} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{a.text}</div>
-                  <div style={{ fontSize: 12, color: "#5f635f" }}>{a.course} · {a.when}</div>
-                </div>
-              </div>
-            ))}
-          </div>
+        <div className="section-head mt-8">
+          <h3>Recent activity</h3>
         </div>
+        {ACTIVITY.length === 0 ? (
+          <div className="card card-pad" style={{ textAlign: "center", color: "#5f635f", fontSize: 13 }}>
+            No activity yet. Complete a lesson to start your history.
+          </div>
+        ) : (
+          <div className="card card-pad">
+            {ACTIVITY.map((a, i) => {
+              const ts = a.createdAt?.toDate ? a.createdAt.toDate() : null;
+              const when = ts ? ts.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : (a.when || "");
+              const courseTitle = a.course || (a.courseId && (COURSES.find(c => c.id === a.courseId)?.title)) || "";
+              return (
+                <div key={i} style={{ display: "flex", gap: 12, padding: "10px 0", borderBottom: i < ACTIVITY.length - 1 ? "1px solid #f3f3f3" : "none" }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: 8, background: "#f0f9e6",
+                    color: "#2e5a12", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                  }}>
+                    <Icon name="checkb" size={14} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{a.text}</div>
+                    <div style={{ fontSize: 12, color: "#5f635f" }}>{courseTitle}{courseTitle && when ? " · " : ""}{when}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -249,15 +271,10 @@ const CatalogPage = ({ goCourse }) => {
 // My Learning
 // ============================================================
 const MyLearningPage = ({ goCourse }) => {
-  const [tab, setTab] = React.useState("inprogress");
+  const [tab, setTab] = React.useState("active");
   const inProgress = COURSES.filter(c => ENROLLMENTS[c.id]?.status === "in_progress");
   const completed  = COURSES.filter(c => ENROLLMENTS[c.id]?.status === "completed");
-  const assigned   = ASSIGNED.map(a => COURSES.find(c => c.id === a.id));
-
-  let list = [];
-  if (tab === "inprogress") list = inProgress;
-  if (tab === "assigned")   list = assigned;
-  if (tab === "completed")  list = completed;
+  const assigned   = ASSIGNED.map(a => COURSES.find(c => c.id === a.id)).filter(Boolean);
 
   return (
     <div className="page">
@@ -270,25 +287,58 @@ const MyLearningPage = ({ goCourse }) => {
       </div>
 
       <div className="tabs">
-        <button className={classNames("tab", tab === "inprogress" && "active")} onClick={() => setTab("inprogress")}>
-          In progress · {inProgress.length}
-        </button>
-        <button className={classNames("tab", tab === "assigned" && "active")} onClick={() => setTab("assigned")}>
-          Assigned · {assigned.length}
+        <button className={classNames("tab", tab === "active" && "active")} onClick={() => setTab("active")}>
+          Active · {inProgress.length + assigned.length}
         </button>
         <button className={classNames("tab", tab === "completed" && "active")} onClick={() => setTab("completed")}>
           Completed · {completed.length}
         </button>
       </div>
 
-      {list.length === 0 ? (
-        <div className="empty">Nothing here yet.</div>
-      ) : (
-        <div className="course-grid">
-          {list.map(c => (
-            <CourseCard key={c.id} course={c} enrollment={ENROLLMENTS[c.id]} onOpen={() => goCourse(c.id)} />
-          ))}
-        </div>
+      {tab === "active" && (
+        <>
+          <div className="section-head" style={{ marginTop: 4 }}>
+            <h3>In progress · {inProgress.length}</h3>
+          </div>
+          {inProgress.length === 0 ? (
+            <div className="card card-pad" style={{ textAlign: "center", color: "#5f635f", fontSize: 13 }}>
+              Nothing in progress.
+            </div>
+          ) : (
+            <div className="course-grid">
+              {inProgress.map(c => (
+                <CourseCard key={c.id} course={c} enrollment={ENROLLMENTS[c.id]} onOpen={() => goCourse(c.id)} />
+              ))}
+            </div>
+          )}
+
+          <div className="section-head mt-8">
+            <h3>Assigned · {assigned.length}</h3>
+          </div>
+          {assigned.length === 0 ? (
+            <div className="card card-pad" style={{ textAlign: "center", color: "#5f635f", fontSize: 13 }}>
+              Nothing currently assigned.
+            </div>
+          ) : (
+            <div className="course-grid">
+              {assigned.map(c => (
+                <CourseCard key={c.id} course={c} enrollment={ENROLLMENTS[c.id]} onOpen={() => goCourse(c.id)} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {tab === "completed" && (
+        completed.length === 0 ? (
+          <div className="empty">No completed courses yet.</div>
+        ) : (
+          <div className="course-grid">
+            {completed.map(c => (
+              <CourseCard key={c.id} course={c} enrollment={ENROLLMENTS[c.id]} onOpen={() => goCourse(c.id)} />
+            ))}
+          </div>
+        )
       )}
     </div>
   );

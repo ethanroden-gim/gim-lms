@@ -20,10 +20,12 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
     );
   }
 
-  // Build flat lesson list with section context
+  // Build flat lesson list with section context.
+  // Courses created via the editor save `modules`; legacy/seeded courses use `sections`.
+  const courseSections = course.sections || course.modules || [];
   const flatLessons = [];
-  (course.sections || []).forEach((sec, sIdx) => {
-    sec.lessons.forEach((l, lIdx) => {
+  courseSections.forEach((sec, sIdx) => {
+    (sec.lessons || []).forEach((l, lIdx) => {
       flatLessons.push({ ...l, section: sec.title, sIdx, lIdx });
     });
   });
@@ -47,6 +49,28 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
   const progressPct = flatLessons.length
     ? Math.round((completed.size / flatLessons.length) * 100)
     : 0;
+
+  // No lessons authored yet — show a friendly placeholder instead of crashing
+  if (!active) {
+    return (
+      <div className="page page--wide">
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18, fontSize: 13, color: "#5f635f" }}>
+          <button className="btn-icon" onClick={goBack} title="Back"><Icon name="arrow-left" /></button>
+          <a onClick={goBack} style={{ cursor: "pointer" }}>Back</a>
+          <Icon name="chevron-right" size={12} />
+          <span style={{ color: "#111", fontWeight: 600 }}>{course.title}</span>
+        </div>
+        <div className="card card-pad-lg" style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>📚</div>
+          <h2 style={{ fontSize: 18, fontWeight: 700, margin: "4px 0 6px" }}>No lessons yet</h2>
+          <div className="text-muted text-sm" style={{ marginBottom: 18 }}>
+            This course doesn't have any lesson content authored. An admin needs to add modules and lessons in the course editor before learners can take it.
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={goBack}>Back to catalog</button>
+        </div>
+      </div>
+    );
+  }
 
   const [marking, setMarking] = React.useState(false);
 
@@ -239,10 +263,10 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
             </div>
           </div>
           <div className="lesson-list__scroll">
-            {(course.sections || []).map((sec, sIdx) => (
+            {courseSections.map((sec, sIdx) => (
               <div className="lesson-section" key={sIdx}>
                 <div className="lesson-section__title">Section {sIdx + 1} · {sec.title}</div>
-                {sec.lessons.map((l, lIdx) => {
+                {(sec.lessons || []).map((l, lIdx) => {
                   const idx = flatLessons.findIndex(fl => fl.id === l.id && fl.sIdx === sIdx);
                   const isActive = idx === activeIdx;
                   const isDone = completed.has(l.id);

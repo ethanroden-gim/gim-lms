@@ -321,7 +321,7 @@ const AdminUsersPage = () => {
         <input type="search" placeholder="Search by name or email…" value={q} onChange={e => setQ(e.target.value)} />
         <select value={dept} onChange={e => setDept(e.target.value)}>
           <option>All</option>
-          {DEPARTMENTS.map(d => <option key={d}>{d}</option>)}
+          {(DEPARTMENT_DOCS.length > 0 ? DEPARTMENT_DOCS.map(d => d.name) : DEPARTMENTS).map(d => <option key={d}>{d}</option>)}
         </select>
         <select value={role} onChange={e => setRole(e.target.value)}>
           <option>All</option><option>Learner</option><option>Manager</option><option>Admin</option>
@@ -416,7 +416,16 @@ const AdminUsersPage = () => {
                   <button className="btn-icon" title="Assign training" onClick={() => openAssign(u.id)}><Icon name="plus" size={14}/></button>
                   <RowMenu items={[
                     { label: "Assign training", icon: "plus",     onClick: () => openAssign(u.id) },
-                    { label: "Send reminder",   icon: "send",     onClick: () => showToast?.(`Reminder queued for ${u.name}`) },
+                    { label: "Send reminder",   icon: "send",     onClick: async () => {
+                        if (!u.email) { alert(`No email on file for ${u.name}`); return; }
+                        try {
+                          const res = await sendEmailReminder({
+                            recipients: [{ email: u.email, name: u.name }],
+                            message: `This is a reminder from GIM Learning to complete your outstanding training.`,
+                          });
+                          showToast?.(res.sent ? `Reminder sent to ${u.name}` : `Failed: ${res.errors?.[0]?.error || "unknown error"}`);
+                        } catch (err) { alert("Reminder failed: " + err.message); }
+                      } },
                     { label: "Reset progress",  icon: "refresh",  onClick: async () => {
                         if (!confirm(`Reset all training progress for ${u.name}?\n\nThis deletes their enrolments and completion history. This cannot be undone.`)) return;
                         try {
@@ -611,18 +620,21 @@ const AdminSettingsPage = () => {
                   No departments yet. Click "Add department" to create your first one.
                 </div>
               )}
-              {DEPARTMENT_DOCS.map(d => (
-                <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", border: "1px solid #ececec", borderRadius: 10 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 8, background: "#f0f9e6", color: "#2e5a12", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <Icon name="house" size={16} />
+              {DEPARTMENT_DOCS.map(d => {
+                const preset = (window.DEPT_PRESETS || [])[d.iconIdx ?? 0] || { icon: "house", bg: "#f0f9e6", color: "#2e5a12" };
+                return (
+                  <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", border: "1px solid #ececec", borderRadius: 10 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 8, background: preset.bg, color: preset.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Icon name={preset.icon} size={16} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{d.name}</div>
+                      <div style={{ fontSize: 11, color: "#5f635f" }}>{ALL_USERS.filter(u => u.dept === d.name).length} people</div>
+                    </div>
+                    <button className="btn-icon" title="Edit department" onClick={() => setDeptModal({ open: true, initial: d })}><Icon name="edit" size={14}/></button>
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{d.name}</div>
-                    <div style={{ fontSize: 11, color: "#5f635f" }}>{ALL_USERS.filter(u => u.dept === d.name).length} people</div>
-                  </div>
-                  <button className="btn-icon" title="Edit department" onClick={() => setDeptModal({ open: true, initial: d })}><Icon name="edit" size={14}/></button>
-                </div>
-              ))}
+                );
+              })}
               <button className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start", marginTop: 4 }} onClick={() => setDeptModal({ open: true, initial: null })}>
                 <Icon name="plus" size={14}/> Add department
               </button>

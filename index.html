@@ -37,6 +37,12 @@
       // Leave empty ([]) to grant manager access to every signed-in user.
       managerEmails: [],
 
+      // Google Apps Script Web App URL for sending email reminders.
+      // Deploy the bundled apps-script/Code.gs as a Web App and paste its
+      // /exec URL here. Leave empty to disable email reminders (the
+      // "Send reminder" buttons will fall back to a toast notification).
+      appsScriptReminderUrl: "",
+
       // Firebase config — paste from Firebase Console → Project settings →
       // Your apps → Web app. Leave projectId empty to run in demo mode
       // (no persistence — page reload clears everything).
