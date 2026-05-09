@@ -72,7 +72,8 @@ const Stepper = ({ step, steps }) => (
 // ============================================================
 // New Assessment modal — 4 steps
 // ============================================================
-const NewAssessmentModal = ({ open, onClose }) => {
+const NewAssessmentModal = ({ open, onClose, initial }) => {
+  const isEdit = !!initial;
   const [step, setStep] = React.useState(1);
 
   // Step 1: Details
@@ -94,15 +95,32 @@ const NewAssessmentModal = ({ open, onClose }) => {
   const [showAnswers, setShowAnswers] = React.useState("after-pass");
   const [certOnPass, setCertOnPass] = React.useState(true);
 
-  // Reset on open
+  // Reset / hydrate on open
   React.useEffect(() => {
     if (!open) return;
     setStep(1);
-    setTitle(""); setDescription(""); setCourseId(""); setType("final");
-    setQuestions([]); setEditingQ(null);
-    setPassMark(80); setAttemptsAllowed("3"); setTimeLimit("none"); setTimeLimitMin(30);
-    setShuffleQuestions(true); setShowAnswers("after-pass"); setCertOnPass(true);
-  }, [open]);
+    setEditingQ(null);
+    if (initial) {
+      setTitle(initial.title || "");
+      setDescription(initial.description || "");
+      setCourseId(initial.courseId || "");
+      setType(initial.type || "final");
+      setQuestions(initial.questions || []);
+      setPassMark(initial.passMark || 80);
+      setAttemptsAllowed(initial.attemptsAllowed === null || initial.attemptsAllowed === undefined
+        ? "unlimited" : String(initial.attemptsAllowed));
+      setTimeLimit(initial.timeLimit ? "limit" : "none");
+      setTimeLimitMin(initial.timeLimit || 30);
+      setShuffleQuestions(initial.shuffleQuestions !== false);
+      setShowAnswers(initial.showAnswers || "after-pass");
+      setCertOnPass(initial.certOnPass !== false);
+    } else {
+      setTitle(""); setDescription(""); setCourseId(""); setType("final");
+      setQuestions([]);
+      setPassMark(80); setAttemptsAllowed("3"); setTimeLimit("none"); setTimeLimitMin(30);
+      setShuffleQuestions(true); setShowAnswers("after-pass"); setCertOnPass(true);
+    }
+  }, [open, initial]);
 
   const valid1 = title.trim().length > 0 && courseId;
   const valid2 = questions.length >= 1;
@@ -117,6 +135,7 @@ const NewAssessmentModal = ({ open, onClose }) => {
     setSubmitting(true);
     try {
       await saveAssessment({
+        id: initial?.id,
         title: title.trim(),
         description: description.trim(),
         courseId,
@@ -128,9 +147,9 @@ const NewAssessmentModal = ({ open, onClose }) => {
         showAnswers,
         certOnPass,
         questions,
-        status: "published",
+        status: initial?.status || "published",
       });
-      showToast?.(`Assessment "${title}" created`);
+      showToast?.(isEdit ? `Assessment "${title}" updated` : `Assessment "${title}" created`);
       onClose();
     } catch (err) {
       alert("Save failed: " + err.message);
@@ -151,7 +170,7 @@ const NewAssessmentModal = ({ open, onClose }) => {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
             <div className="eyebrow-sm">Admin · Assessments</div>
-            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 2 }}>New assessment</div>
+            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 2 }}>{isEdit ? "Edit assessment" : "New assessment"}</div>
           </div>
           <button className="btn-icon" onClick={onClose}><Icon name="close" size={18}/></button>
         </div>
@@ -332,7 +351,7 @@ const NewAssessmentModal = ({ open, onClose }) => {
                 } catch (err) { alert("Save failed: " + err.message); }
               }}>Save as draft</button>
               <button className="btn btn-primary btn-sm" onClick={submit} disabled={submitting}>
-                {submitting ? "Publishing…" : "Publish assessment"}
+                {submitting ? "Saving…" : (isEdit ? "Save changes" : "Publish assessment")}
               </button>
             </>
           )}
@@ -594,11 +613,11 @@ const ReviewStep = ({ title, description, type, courseTitle, questions, passMark
 // ============================================================
 const DEPT_PRESETS = [
   { icon: "house",   bg: "#f0f9e6", color: "#2e5a12", label: "Property"    },
-  { icon: "wrench",  bg: "#e6f7ec", color: "#4a7c2a", label: "Maintenance" },
+  { icon: "wrench",  bg: "#f0f9e6", color: "#2e5a12", label: "Maintenance" },
   { icon: "tag",     bg: "#f3e8ff", color: "#5b21b6", label: "Sales / Marketing" },
   { icon: "money",   bg: "#fff7d6", color: "#8a5a00", label: "Finance"     },
   { icon: "users",   bg: "#e6f0ff", color: "#1e3a8a", label: "People"      },
-  { icon: "list",    bg: "#ffe8d6", color: "#c2410c", label: "Admin"       },
+  { icon: "monitor", bg: "#ffe8d6", color: "#c2410c", label: "Admin"       },
   { icon: "shield",  bg: "#fee2e2", color: "#991b1b", label: "Compliance"  },
 ];
 

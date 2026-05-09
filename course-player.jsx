@@ -73,27 +73,39 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
   }
 
   const [marking, setMarking] = React.useState(false);
+  const linkedAssessment = (window.ASSESSMENTS || []).find(a => a.courseId === course.id && a.status !== "archived");
+  const isLast = active && activeIdx >= flatLessons.length - 1;
+  const courseFullyDone = flatLessons.length > 0 && completed.size >= flatLessons.length;
 
-  const markDoneAndNext = async () => {
-    if (marking || !active) return;
-    setMarking(true);
+  const persistLessonComplete = async () => {
+    if (!active || !window.fbReady || !window.markLessonComplete) return;
     try {
-      if (window.fbReady && window.markLessonComplete) {
-        await markLessonComplete(course, active.id);
-        const isLast = activeIdx >= flatLessons.length - 1;
-        if (isLast && completed.size + 1 >= flatLessons.length) {
-          await recordActivity(`Completed course "${course.title}"`, course.id);
-        } else {
-          await recordActivity(`Completed lesson "${active.title}" in ${course.title}`, course.id);
-        }
+      await markLessonComplete(course, active.id);
+      if (isLast && completed.size + 1 >= flatLessons.length) {
+        await recordActivity(`Completed course "${course.title}"`, course.id);
+      } else {
+        await recordActivity(`Completed lesson "${active.title}" in ${course.title}`, course.id);
       }
     } catch (err) {
       console.error("markLessonComplete:", err);
       showToast?.("Couldn't save progress: " + err.message);
-    } finally {
-      setMarking(false);
-      if (activeIdx < flatLessons.length - 1) setActiveIdx(activeIdx + 1);
     }
+  };
+
+  const markDoneAndContinue = async () => {
+    if (marking || !active) return;
+    setMarking(true);
+    await persistLessonComplete();
+    setMarking(false);
+    if (activeIdx < flatLessons.length - 1) setActiveIdx(activeIdx + 1);
+  };
+
+  const markDoneAndAssess = async () => {
+    if (marking || !active) return;
+    setMarking(true);
+    if (!completed.has(active.id)) await persistLessonComplete();
+    setMarking(false);
+    goAssessment(course.id);
   };
 
   return (
@@ -237,15 +249,31 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
                 <Icon name="arrow-left" size={14}/> Previous
               </button>
               <div style={{ display: "flex", gap: 10 }}>
-                {active.type === "quiz" ? (
-                  <button className="btn btn-primary" onClick={() => goAssessment(course.id)}>
-                    Start assessment <Icon name="arrow-right" size={14}/>
-                  </button>
-                ) : (
-                  <button className="btn btn-primary" onClick={markDoneAndNext} disabled={marking}>
+                {(() => {
+                  // Inline quiz lesson — go straight to assessment
+                  if (active.type === "quiz") {
+                    return <button className="btn btn-primary" onClick={() => goAssessment(course.id)}>
+                      Start assessment <Icon name="arrow-right" size={14}/>
+                    </button>;
+                  }
+                  // Last lesson + linked assessment exists in /assessments
+                  if (isLast && linkedAssessment) {
+                    return <button className="btn btn-primary" disabled={marking} onClick={markDoneAndAssess}>
+                      {marking ? "Saving…" : (completed.has(active.id) ? "Take final assessment" : "Mark complete & take assessment")}
+                      <Icon name="arrow-right" size={14}/>
+                    </button>;
+                  }
+                  // Last lesson, no assessment, course fully complete
+                  if (isLast && courseFullyDone) {
+                    return <button className="btn btn-primary" onClick={goBack}>
+                      Back to learning <Icon name="arrow-right" size={14}/>
+                    </button>;
+                  }
+                  // Default: mark + continue
+                  return <button className="btn btn-primary" onClick={markDoneAndContinue} disabled={marking}>
                     {marking ? "Saving…" : "Mark complete & continue"} <Icon name="arrow-right" size={14}/>
-                  </button>
-                )}
+                  </button>;
+                })()}
               </div>
             </div>
           </div>

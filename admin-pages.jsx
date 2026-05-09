@@ -8,17 +8,42 @@
 const AdminOverviewPage = () => {
   const [assignOpen, setAssignOpen] = React.useState(false);
 
-  const activeLearners = ALL_USERS.filter(u => u.status === "active").length;
-  const totalAssigned   = ALL_USERS.reduce((s, u) => s + (u.assigned  || 0), 0);
-  const totalCompleted  = ALL_USERS.reduce((s, u) => s + (u.completed || 0), 0);
-  const totalOverdue    = ALL_USERS.reduce((s, u) => s + (u.due       || 0), 0);
-  const learnersOverdue = ALL_USERS.filter(u => (u.due || 0) > 0).length;
-  const complianceRate  = totalAssigned ? Math.round((totalCompleted / totalAssigned) * 100) : null;
+  // Aggregate per-user enrolment stats from the live ALL_ENROLLMENTS collection
+  const enrollmentsByUser = React.useMemo(() => {
+    const map = {};
+    (window.ALL_ENROLLMENTS || []).forEach(e => {
+      if (!e.userId) return;
+      (map[e.userId] = map[e.userId] || []).push(e);
+    });
+    return map;
+  }, [ALL_ENROLLMENTS.length]);
 
-  const deptCompliance = DEPARTMENTS.map(dept => {
+  const userStats = (uid) => {
+    const list = enrollmentsByUser[uid] || [];
+    const assigned = list.length;
+    const completed = list.filter(e => e.status === "completed").length;
+    const overdue = list.filter(e => e.status !== "completed" && e.dueDays != null && e.dueDays <= 0).length;
+    return { assigned, completed, overdue };
+  };
+
+  const activeLearners = ALL_USERS.filter(u => u.status === "active").length;
+  const totals = ALL_USERS.reduce((acc, u) => {
+    const s = userStats(u.id);
+    acc.assigned += s.assigned;
+    acc.completed += s.completed;
+    acc.overdue += s.overdue;
+    if (s.overdue > 0) acc.learnersOverdue++;
+    return acc;
+  }, { assigned: 0, completed: 0, overdue: 0, learnersOverdue: 0 });
+
+  const complianceRate = totals.assigned ? Math.round((totals.completed / totals.assigned) * 100) : null;
+
+  // Department list — Firestore-backed only. No fallback to hardcoded names.
+  const departmentNames = DEPARTMENT_DOCS.map(d => d.name);
+  const deptCompliance = departmentNames.map(dept => {
     const people = ALL_USERS.filter(u => u.dept === dept);
-    const a = people.reduce((s, u) => s + (u.assigned  || 0), 0);
-    const c = people.reduce((s, u) => s + (u.completed || 0), 0);
+    let a = 0, c = 0;
+    people.forEach(u => { const s = userStats(u.id); a += s.assigned; c += s.completed; });
     const pct = a ? Math.round((c / a) * 100) : null;
     return { dept, headcount: people.length, assigned: a, complete: pct, on_track: pct === null ? true : pct >= 85 };
   });
@@ -32,7 +57,7 @@ const AdminOverviewPage = () => {
           <div className="page-head__sub">Real-time view of compliance and training across GIM.</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-ghost btn-sm"><Icon name="download" size={14}/> Export report</button>
+          <ExportButton page="admin-overview" label="Export report" />
           <button className="btn btn-primary btn-sm" onClick={() => setAssignOpen(true)}><Icon name="plus" size={14}/> Assign training</button>
         </div>
       </div>
@@ -41,7 +66,7 @@ const AdminOverviewPage = () => {
         <div className="stat">
           <div className="stat__label">Active learners</div>
           <div className="stat__value">{activeLearners}</div>
-          <div className="stat__sub">across {DEPARTMENTS.length} departments</div>
+          <div className="stat__sub">across {departmentNames.length} {departmentNames.length === 1 ? "department" : "departments"}</div>
         </div>
         <div className="stat">
           <div className="stat__label">Compliance rate</div>
@@ -52,12 +77,12 @@ const AdminOverviewPage = () => {
         </div>
         <div className="stat">
           <div className="stat__label">Overdue assignments</div>
-          <div className="stat__value" style={{ color: totalOverdue ? "#a8232b" : "#5f635f" }}>{totalOverdue}</div>
-          <div className="stat__sub">{learnersOverdue ? `across ${learnersOverdue} learner${learnersOverdue === 1 ? "" : "s"}` : "no overdue work"}</div>
+          <div className="stat__value" style={{ color: totals.overdue ? "#a8232b" : "#5f635f" }}>{totals.overdue}</div>
+          <div className="stat__sub">{totals.learnersOverdue ? `across ${totals.learnersOverdue} learner${totals.learnersOverdue === 1 ? "" : "s"}` : "no overdue work"}</div>
         </div>
         <div className="stat">
           <div className="stat__label">Courses published</div>
-          <div className="stat__value">{COURSES.length}</div>
+          <div className="stat__value">{COURSES.filter(c => c.status !== "archived").length}</div>
           <div className="stat__sub">{COURSES.length ? "in catalog" : "no courses yet"}</div>
         </div>
       </div>
@@ -69,6 +94,11 @@ const AdminOverviewPage = () => {
           </div>
           <div className="card">
             <div style={{ padding: 8 }}>
+              {deptCompliance.length === 0 && (
+                <div style={{ padding: "20px 16px", textAlign: "center", color: "#5f635f", fontSize: 13 }}>
+                  No departments configured yet. Add some in <strong>Roles &amp; departments</strong>.
+                </div>
+              )}
               {deptCompliance.map(d => (
                 <div key={d.dept} style={{ padding: "14px 16px", borderBottom: "1px solid #f3f3f3" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -161,7 +191,7 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
           <div className="page-head__sub">Add courses, manage lessons, publish to catalog.</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-ghost btn-sm"><Icon name="download" size={14}/> Export</button>
+          <ExportButton page="admin-courses" label="Export" />
           <button className="btn btn-primary" onClick={onNew}><Icon name="plus" size={14}/> New course</button>
         </div>
       </div>
@@ -296,6 +326,26 @@ const AdminUsersPage = () => {
   const [role, setRole] = React.useState("All");
   const [assignFor, setAssignFor] = React.useState(null); // userName, "all" for top-bar, or null
   const openAssign = (name) => setAssignFor(name);
+
+  // Real-time enrolment stats per user, keyed by user id
+  const enrollmentsByUser = React.useMemo(() => {
+    const map = {};
+    (window.ALL_ENROLLMENTS || []).forEach(e => {
+      if (!e.userId) return;
+      (map[e.userId] = map[e.userId] || []).push(e);
+    });
+    return map;
+  }, [ALL_ENROLLMENTS.length]);
+
+  const userStats = (uid) => {
+    const list = enrollmentsByUser[uid] || [];
+    return {
+      assigned:  list.length,
+      completed: list.filter(e => e.status === "completed").length,
+      overdue:   list.filter(e => e.status !== "completed" && e.dueDays != null && e.dueDays <= 0).length,
+    };
+  };
+
   const filtered = ALL_USERS.filter(u => {
     if (q && !u.name.toLowerCase().includes(q.toLowerCase())) return false;
     if (dept !== "All" && u.dept !== dept) return false;
@@ -312,7 +362,7 @@ const AdminUsersPage = () => {
           <div className="page-head__sub">Users sync from Google Workspace. Set roles & departments here.</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-ghost btn-sm"><Icon name="download" size={14}/> Export CSV</button>
+          <ExportButton page="admin-users" label="Export CSV" />
           <button className="btn btn-primary" onClick={() => setAssignFor("all")}><Icon name="plus" size={14}/> Assign training</button>
         </div>
       </div>
@@ -321,7 +371,7 @@ const AdminUsersPage = () => {
         <input type="search" placeholder="Search by name or email…" value={q} onChange={e => setQ(e.target.value)} />
         <select value={dept} onChange={e => setDept(e.target.value)}>
           <option>All</option>
-          {(DEPARTMENT_DOCS.length > 0 ? DEPARTMENT_DOCS.map(d => d.name) : DEPARTMENTS).map(d => <option key={d}>{d}</option>)}
+          {DEPARTMENT_DOCS.map(d => <option key={d.id}>{d.name}</option>)}
         </select>
         <select value={role} onChange={e => setRole(e.target.value)}>
           <option>All</option><option>Learner</option><option>Manager</option><option>Admin</option>
@@ -346,7 +396,8 @@ const AdminUsersPage = () => {
         </thead>
         <tbody>
           {filtered.map((u) => {
-            const deptOptions = (DEPARTMENT_DOCS.length > 0 ? DEPARTMENT_DOCS.map(d => d.name) : DEPARTMENTS);
+            const deptOptions = DEPARTMENT_DOCS.map(d => d.name);
+            const stats = userStats(u.id);
             const updateRole = async (e) => {
               const newRole = e.target.value;
               try {
@@ -402,11 +453,11 @@ const AdminUsersPage = () => {
                 {u.status === "leave" && <span className="chip chip-grey">On leave</span>}
                 {u.status === "inactive" && <span className="chip chip-grey">Inactive</span>}
               </td>
-              <td style={{ fontVariantNumeric: "tabular-nums" }}>{u.assigned || 0}</td>
-              <td style={{ fontVariantNumeric: "tabular-nums" }}>{u.completed || 0}</td>
+              <td style={{ fontVariantNumeric: "tabular-nums" }}>{stats.assigned}</td>
+              <td style={{ fontVariantNumeric: "tabular-nums" }}>{stats.completed}</td>
               <td>
-                {(u.due || 0) > 0 ? (
-                  <span style={{ color: "#a8232b", fontWeight: 600, fontSize: 12 }}>{u.due} overdue</span>
+                {stats.overdue > 0 ? (
+                  <span style={{ color: "#a8232b", fontWeight: 600, fontSize: 12 }}>{stats.overdue} overdue</span>
                 ) : (
                   <span style={{ color: "#5f635f", fontSize: 12 }}>None</span>
                 )}
@@ -473,7 +524,7 @@ const AdminUsersPage = () => {
 // Admin: Assessments
 // ============================================================
 const AdminAssessmentsPage = () => {
-  const [newOpen, setNewOpen] = React.useState(false);
+  const [editing, setEditing] = React.useState(null); // null = closed, {} = new, doc = edit
   const visible = ASSESSMENTS.filter(a => a.status !== "archived");
   const totalAssessments = visible.length;
 
@@ -486,10 +537,14 @@ const AdminAssessmentsPage = () => {
           <div className="page-head__sub">Manage questions, pass thresholds, and review attempt analytics.</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-primary" onClick={() => setNewOpen(true)}><Icon name="plus" size={14}/> New assessment</button>
+          <button className="btn btn-primary" onClick={() => setEditing({})}><Icon name="plus" size={14}/> New assessment</button>
         </div>
       </div>
-      <NewAssessmentModal open={newOpen} onClose={() => setNewOpen(false)} />
+      <NewAssessmentModal
+        open={editing !== null}
+        onClose={() => setEditing(null)}
+        initial={editing && editing.id ? editing : null}
+      />
 
       <div className="dash-grid mb-6">
         <div className="stat">
@@ -552,7 +607,9 @@ const AdminAssessmentsPage = () => {
                   </td>
                   <td>
                     <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
+                      <button className="btn-icon" title="Edit" onClick={() => setEditing(a)}><Icon name="edit" size={14}/></button>
                       <RowMenu items={[
+                        { label: "Edit questions & settings", icon: "edit", onClick: () => setEditing(a) },
                         { label: a.status === "draft" ? "Publish" : "Unpublish", icon: a.status === "draft" ? "check" : "eye-off",
                           onClick: async () => {
                             const next = a.status === "draft" ? "published" : "draft";

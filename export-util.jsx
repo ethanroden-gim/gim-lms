@@ -53,27 +53,50 @@ const stamp = () => {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
 };
 
+// Helper: per-user enrolment roll-up for export consistency
+const _userEnrollmentStats = () => {
+  const map = {};
+  (window.ALL_ENROLLMENTS || []).forEach(e => {
+    if (!e.userId) return;
+    const s = map[e.userId] = map[e.userId] || { assigned: 0, completed: 0, overdue: 0 };
+    s.assigned++;
+    if (e.status === "completed") s.completed++;
+    if (e.status !== "completed" && e.dueDays != null && e.dueDays <= 0) s.overdue++;
+  });
+  return map;
+};
+
 // ---------- Dataset definitions per page ----------
 const EXPORT_DATASETS = {
-  "admin-overview": () => ({
-    sheet: "Compliance by department",
-    rows: DEPARTMENTS.map(dept => {
-      const people = ALL_USERS.filter(u => u.dept === dept);
-      const assigned = people.reduce((s, u) => s + (u.assigned || 0), 0);
-      const completed = people.reduce((s, u) => s + (u.completed || 0), 0);
-      const overdue = people.reduce((s, u) => s + (u.due || 0), 0);
-      const pct = assigned ? Math.round((completed / assigned) * 100) : 0;
-      return { dept, headcount: people.length, assigned, completed, overdue, complianceRate: pct };
-    }),
-    columns: [
-      { key: "dept",            label: "Department" },
-      { key: "headcount",       label: "Headcount" },
-      { key: "assigned",        label: "Assigned courses" },
-      { key: "completed",       label: "Completed" },
-      { key: "overdue",         label: "Overdue" },
-      { key: "complianceRate",  label: "Compliance %" },
-    ],
-  }),
+  "admin-overview": () => {
+    const stats = _userEnrollmentStats();
+    const depts = (window.DEPARTMENT_DOCS && window.DEPARTMENT_DOCS.length > 0)
+      ? window.DEPARTMENT_DOCS.map(d => d.name)
+      : DEPARTMENTS;
+    return {
+      sheet: "Compliance by department",
+      rows: depts.map(dept => {
+        const people = ALL_USERS.filter(u => u.dept === dept);
+        let assigned = 0, completed = 0, overdue = 0;
+        people.forEach(u => {
+          const s = stats[u.id] || {};
+          assigned  += s.assigned  || 0;
+          completed += s.completed || 0;
+          overdue   += s.overdue   || 0;
+        });
+        const pct = assigned ? Math.round((completed / assigned) * 100) : 0;
+        return { dept, headcount: people.length, assigned, completed, overdue, complianceRate: pct };
+      }),
+      columns: [
+        { key: "dept",            label: "Department" },
+        { key: "headcount",       label: "Headcount" },
+        { key: "assigned",        label: "Assigned courses" },
+        { key: "completed",       label: "Completed" },
+        { key: "overdue",         label: "Overdue" },
+        { key: "complianceRate",  label: "Compliance %" },
+      ],
+    };
+  },
 
   "admin-courses": () => ({
     sheet: "Courses",
@@ -91,44 +114,51 @@ const EXPORT_DATASETS = {
     ],
   }),
 
-  "admin-users": () => ({
-    sheet: "People",
-    rows: ALL_USERS,
-    columns: [
-      { key: "name",      label: "Name" },
-      { key: "email",     label: "Email" },
-      { key: "role",      label: "Role" },
-      { key: "dept",      label: "Department" },
-      { key: "status",    label: "Status" },
-      { key: "assigned",  label: "Assigned" },
-      { key: "completed", label: "Completed" },
-      { key: "due",       label: "Overdue" },
-    ],
-  }),
+  "admin-users": () => {
+    const stats = _userEnrollmentStats();
+    return {
+      sheet: "People",
+      rows: ALL_USERS.map(u => ({
+        ...u,
+        assigned:  stats[u.id]?.assigned  || 0,
+        completed: stats[u.id]?.completed || 0,
+        overdue:   stats[u.id]?.overdue   || 0,
+      })),
+      columns: [
+        { key: "name",      label: "Name" },
+        { key: "email",     label: "Email" },
+        { key: "role",      label: "Role" },
+        { key: "dept",      label: "Department" },
+        { key: "status",    label: "Status" },
+        { key: "assigned",  label: "Assigned" },
+        { key: "completed", label: "Completed" },
+        { key: "overdue",   label: "Overdue" },
+      ],
+    };
+  },
 
-  "admin-assess": () => ({
-    sheet: "Assessments",
-    rows: COURSES.filter(c => c.sections || c.modules).map(c => ({
-      title: `${c.title} — Final`,
-      type: "Final exam",
-      questions: c.questionsCount || 0,
-      passMark: c.passingScore || 80,
-      attempts: 0,
-      avgScore: "",
-      passRate: "",
-      category: c.cat,
-    })),
-    columns: [
-      { key: "title",     label: "Assessment" },
-      { key: "type",      label: "Type" },
-      { key: "category",  label: "Category" },
-      { key: "questions", label: "Questions" },
-      { key: "passMark",  label: "Pass mark %" },
-      { key: "attempts",  label: "Attempts" },
-      { key: "avgScore",  label: "Avg score %" },
-      { key: "passRate",  label: "Pass rate %" },
-    ],
-  }),
+  "admin-assess": () => {
+    const courseTitle = (id) => COURSES.find(c => c.id === id)?.title || "—";
+    return {
+      sheet: "Assessments",
+      rows: (window.ASSESSMENTS || []).filter(a => a.status !== "archived").map(a => ({
+        title: a.title,
+        type: a.type === "quiz" ? "Quiz" : a.type === "cert" ? "Certification" : "Final exam",
+        course: courseTitle(a.courseId),
+        questions: a.questions?.length || 0,
+        passMark: a.passMark || 80,
+        status: a.status || "published",
+      })),
+      columns: [
+        { key: "title",     label: "Assessment" },
+        { key: "course",    label: "Linked course" },
+        { key: "type",      label: "Type" },
+        { key: "questions", label: "Questions" },
+        { key: "passMark",  label: "Pass mark %" },
+        { key: "status",    label: "Status" },
+      ],
+    };
+  },
 
   "team": () => ({
     sheet: "My team",
