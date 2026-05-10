@@ -968,14 +968,34 @@ const GradeAttemptModal = ({ attempt, onClose }) => {
   const [notes, setNotes] = React.useState(a.gradedNotes || "");
   const [busy, setBusy] = React.useState(false);
 
-  // Compute final score: auto-graded portion + manual scores
+  // Recompute final score per-question so we account for each question's
+  // own `points` value (essay worth 18 pts, MCQ worth 1 pt, etc.).
   const finalScore = React.useMemo(() => {
-    const autoCorrect = (a.autoScore != null && a.total) ? Math.round((a.autoScore / 100) * (a.total - Object.keys(manualScores).length)) : 0;
-    const manualPoints = Object.values(manualScores).reduce((s, v) => s + (typeof v === "number" ? v : 0), 0);
-    const totalPossible = (a.total || questions.length) || 1;
-    const totalEarned = autoCorrect + manualPoints;
-    return Math.round((totalEarned / totalPossible) * 100);
-  }, [manualScores, a, questions.length]);
+    if (questions.length === 0) return 0;
+    let totalPossible = 0;
+    let totalEarned = 0;
+    questions.forEach((q, i) => {
+      const pts = q.points || 1;
+      totalPossible += pts;
+      if (q.type === "short" || q.type === "essay") {
+        const v = manualScores[i];
+        if (typeof v === "number") totalEarned += Math.min(pts, Math.max(0, v));
+      } else {
+        const learnerAns = a.answers?.[i];
+        const correctIdxs = Array.isArray(q.correct) ? q.correct : (q.correct != null ? [q.correct] : []);
+        if (q.type === "multi") {
+          const correctSet = new Set(correctIdxs);
+          const givenSet = new Set(learnerAns || []);
+          const match = correctSet.size === givenSet.size && [...correctSet].every(x => givenSet.has(x));
+          if (match) totalEarned += pts;
+        } else {
+          // single / tf / default
+          if (learnerAns === correctIdxs[0]) totalEarned += pts;
+        }
+      }
+    });
+    return totalPossible ? Math.round((totalEarned / totalPossible) * 100) : 0;
+  }, [manualScores, a, questions]);
 
   const passed = a.passMark != null ? finalScore >= a.passMark : null;
 

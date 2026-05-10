@@ -2,7 +2,7 @@
 // GIM LMS — Sidebar + Topbar
 // =========================================================
 
-const Sidebar = ({ route, setRoute, mode }) => {
+const Sidebar = ({ route, setRoute, mode, goCategory }) => {
   const learnerLinks = [
     { id: "home", label: "Dashboard", icon: "home" },
     { id: "catalog", label: "Course catalog", icon: "compass" },
@@ -52,7 +52,7 @@ const Sidebar = ({ route, setRoute, mode }) => {
               { label: "Accounting", icon: "money" },
               { label: "Compliance", icon: "shield" },
             ].map(c => (
-              <button key={c.label} className="sidebar-link" onClick={() => setRoute("catalog")}>
+              <button key={c.label} className="sidebar-link" onClick={() => goCategory ? goCategory(c.label) : setRoute("catalog")}>
                 <Icon name={c.icon} /><span>{c.label}</span>
               </button>
             ))}
@@ -156,14 +156,69 @@ const Topbar = ({ mode, setMode, isAdmin, goCourse }) => {
           </div>
         )}
 
-        <div className="topbar-user">
-          <Avatar name={CURRENT_USER.name} size={32} />
-          <div className="topbar-user__meta">
-            <div className="topbar-user__name">{CURRENT_USER.name}</div>
-          </div>
-        </div>
+        <UserMenu />
       </div>
     </header>
+  );
+};
+
+// ---------- Topbar user menu (avatar dropdown with Sign out) ----------
+const UserMenu = () => {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const onSignOut = async () => {
+    setOpen(false);
+    if (!confirm("Sign out of GIM Learning?")) return;
+    try { if (window.signOutEverywhere) await signOutEverywhere(); }
+    catch (err) { console.error("signOut:", err); }
+    // The Firebase onAuthStateChanged listener will flip the app back to the sign-in screen
+    try { localStorage.removeItem("gim-lms-route"); } catch {}
+  };
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        className="topbar-user"
+        onClick={() => setOpen(o => !o)}
+        style={{ border: "none", background: "transparent", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 8 }}
+      >
+        <Avatar name={CURRENT_USER.name} size={32} />
+        <div className="topbar-user__meta">
+          <div className="topbar-user__name">{CURRENT_USER.name}</div>
+        </div>
+        <Icon name="chevron-down" size={12} style={{ marginLeft: 2 }}/>
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 60,
+          background: "#fff", borderRadius: 10, boxShadow: "0 12px 40px rgba(0,0,0,.18)",
+          border: "1px solid #ececec", overflow: "hidden", minWidth: 240,
+        }}>
+          <div style={{ padding: "12px 14px", background: "#fafafa", borderBottom: "1px solid #ececec" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#111" }}>{CURRENT_USER.name}</div>
+            <div style={{ fontSize: 11, color: "#5f635f", marginTop: 2 }}>{CURRENT_USER.email}</div>
+            {CURRENT_USER.dept && <div style={{ fontSize: 11, color: "#5f635f", marginTop: 2 }}>{CURRENT_USER.dept}</div>}
+          </div>
+          <button onClick={onSignOut} style={{
+            width: "100%", display: "flex", alignItems: "center", gap: 10,
+            padding: "10px 14px", border: 0, background: "transparent", cursor: "pointer",
+            textAlign: "left", fontSize: 13, fontWeight: 500, color: "#a8232b",
+          }}
+            onMouseEnter={e => e.currentTarget.style.background = "#fdecec"}
+            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+          >
+            <Icon name="arrow-left" size={14}/> Sign out
+          </button>
+        </div>
+      )}
+    </div>
   );
 };
 

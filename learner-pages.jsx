@@ -231,11 +231,17 @@ const DashboardPage = ({ goCourse, setRoute }) => {
 // ============================================================
 // Catalog
 // ============================================================
-const CatalogPage = ({ goCourse }) => {
+const CatalogPage = ({ goCourse, initialCategory }) => {
   const [q, setQ] = React.useState("");
-  const [cat, setCat] = React.useState("All");
+  const [cat, setCat] = React.useState(initialCategory || "All");
   const [reqOnly, setReqOnly] = React.useState(false);
   const cats = ["All", ...CATEGORIES];
+
+  // If a Browse category was clicked while already on /catalog, apply the new filter
+  React.useEffect(() => {
+    if (initialCategory && initialCategory !== cat) setCat(initialCategory);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCategory]);
 
   const filtered = COURSES.filter(c => {
     // Learners only see published courses

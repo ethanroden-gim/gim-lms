@@ -142,6 +142,8 @@
       const [mode, setMode] = React.useState(saved.mode === "admin" && CURRENT_USER.isAdmin ? "admin" : "learner");
       const [route, setRoute] = React.useState(saved.route || (mode === "admin" ? "admin-overview" : "home"));
       const [courseId, setCourseId] = React.useState(saved.courseId || null);
+      const [catalogCategory, setCatalogCategory] = React.useState("All");
+      const goCategory = (cat) => { setCatalogCategory(cat); setRoute("catalog"); };
 
       // Persist route across reloads
       React.useEffect(() => {
@@ -166,7 +168,7 @@
       let body = null;
       if (mode === "learner") {
         if (route === "home")        body = <DashboardPage    goCourse={goCourse} setRoute={setRoute} />;
-        if (route === "catalog")     body = <CatalogPage      goCourse={goCourse} />;
+        if (route === "catalog")     body = <CatalogPage      goCourse={goCourse} initialCategory={catalogCategory} />;
         if (route === "learning")    body = <MyLearningPage   goCourse={goCourse} />;
         if (route === "certs")       body = <CertificatesPage goCert={goCert} />;
         if (route === "team")        body = <MyTeamPage />;
@@ -193,7 +195,7 @@
         <div className="app" data-mood={GIM_TWEAK_DEFAULTS.mood} data-accent={GIM_TWEAK_DEFAULTS.accent} data-density={GIM_TWEAK_DEFAULTS.density}>
           <Topbar mode={mode} setMode={switchMode} isAdmin={CURRENT_USER.isAdmin} goCourse={(id) => { setMode("learner"); goCourse(id); }} />
           <ToastHost />
-          <Sidebar route={route} setRoute={setRoute} mode={mode} />
+          <Sidebar route={route} setRoute={setRoute} mode={mode} goCategory={goCategory} />
           <main className="app__main">{body}</main>
           {CURRENT_USER.isAdmin && <GimTweaks />}
         </div>
