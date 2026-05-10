@@ -160,50 +160,94 @@ const EXPORT_DATASETS = {
     };
   },
 
-  "team": () => ({
-    sheet: "My team",
-    rows: TEAM_MEMBERS,
-    columns: [
-      { key: "name",      label: "Name" },
-      { key: "role",      label: "Role" },
-      { key: "dept",      label: "Department" },
-      { key: "assigned",  label: "Assigned" },
-      { key: "completed", label: "Completed" },
-      { label: "Overdue",     get: r => r.overdue || 0 },
-      { key: "avgScore",  label: "Avg score %" },
-      { key: "lastActive",label: "Last active" },
-    ],
-  }),
+  "team": () => {
+    const stats = _userEnrollmentStats();
+    const myDept = (window.CURRENT_USER || {}).dept || "";
+    const team = ALL_USERS.filter(u =>
+      u.id !== (window.CURRENT_USER || {}).uid &&
+      (myDept ? u.dept === myDept : true) &&
+      u.status !== "inactive"
+    );
+    return {
+      sheet: "My team",
+      rows: team.map(u => {
+        const s = stats[u.id] || {};
+        return {
+          name: u.name,
+          email: u.email || "",
+          role: u.role || "Learner",
+          dept: u.dept || "",
+          assigned: s.assigned || 0,
+          completed: s.completed || 0,
+          overdue: s.overdue || 0,
+          status: u.status || "active",
+        };
+      }),
+      columns: [
+        { key: "name",      label: "Name" },
+        { key: "email",     label: "Email" },
+        { key: "role",      label: "Role" },
+        { key: "dept",      label: "Department" },
+        { key: "status",    label: "Status" },
+        { key: "assigned",  label: "Assigned" },
+        { key: "completed", label: "Completed" },
+        { key: "overdue",   label: "Overdue" },
+      ],
+    };
+  },
 
-  "learning": () => ({
-    sheet: "My learning",
-    rows: COURSES.slice(0, 8),
-    columns: [
-      { key: "title",      label: "Course" },
-      { key: "cat",        label: "Category" },
-      { label: "Status",       get: r => r.required ? "Required" : "Optional" },
-      { key: "duration",   label: "Duration (min)" },
-      { key: "instructor", label: "Instructor" },
-    ],
-  }),
+  "learning": () => {
+    const uid = (window.CURRENT_USER || {}).uid;
+    const myEnrollments = (window.ALL_ENROLLMENTS || []).filter(e => e.userId === uid);
+    return {
+      sheet: "My learning",
+      rows: myEnrollments.map(e => {
+        const c = COURSES.find(x => x.id === e.courseId);
+        return {
+          course: c?.title || "(missing course)",
+          category: c?.cat || "",
+          status: e.status || "assigned",
+          progress: e.progress || 0,
+          score: e.score ?? "",
+          required: e.required ? "Yes" : "No",
+        };
+      }),
+      columns: [
+        { key: "course",   label: "Course" },
+        { key: "category", label: "Category" },
+        { key: "status",   label: "Status" },
+        { key: "progress", label: "Progress %" },
+        { key: "score",    label: "Score %" },
+        { key: "required", label: "Required" },
+      ],
+    };
+  },
 
-  "certs": () => ({
-    sheet: "My certificates",
-    rows: COURSES.filter(c => c.required).slice(0, 5).map((c, i) => ({
-      course: c.title,
-      issued: `2025-${String(6 + i).padStart(2, "0")}-15`,
-      expires: `2026-${String(6 + i).padStart(2, "0")}-15`,
-      verificationId: `GIM-${c.id.slice(0, 4).toUpperCase()}-${1000 + i}`,
-      score: 85 + (i * 3) % 12,
-    })),
-    columns: [
-      { key: "course",         label: "Course" },
-      { key: "issued",         label: "Issued" },
-      { key: "expires",        label: "Expires" },
-      { key: "score",          label: "Score %" },
-      { key: "verificationId", label: "Verification ID" },
-    ],
-  }),
+  "certs": () => {
+    const uid = (window.CURRENT_USER || {}).uid;
+    const completed = (window.ALL_ENROLLMENTS || []).filter(e => e.userId === uid && e.status === "completed");
+    return {
+      sheet: "My certificates",
+      rows: completed.map(e => {
+        const c = COURSES.find(x => x.id === e.courseId);
+        const completedOn = e.completedOn?.toDate ? e.completedOn.toDate().toISOString().slice(0, 10) : "";
+        return {
+          course: c?.title || "(missing course)",
+          category: c?.cat || "",
+          issued: completedOn,
+          score: typeof e.score === "number" ? e.score : "",
+          verificationId: e.id || `${e.userId}_${e.courseId}`,
+        };
+      }),
+      columns: [
+        { key: "course",         label: "Course" },
+        { key: "category",       label: "Category" },
+        { key: "issued",         label: "Issued" },
+        { key: "score",          label: "Score %" },
+        { key: "verificationId", label: "Verification ID" },
+      ],
+    };
+  },
 };
 
 // ---------- ExportButton ----------

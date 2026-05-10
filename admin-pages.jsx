@@ -324,7 +324,8 @@ const AdminUsersPage = () => {
   const [q, setQ] = React.useState("");
   const [dept, setDept] = React.useState("All");
   const [role, setRole] = React.useState("All");
-  const [assignFor, setAssignFor] = React.useState(null); // userName, "all" for top-bar, or null
+  const [statusFilter, setStatusFilter] = React.useState("All");
+  const [assignFor, setAssignFor] = React.useState(null); // userId, "all" for top-bar, or null
   const openAssign = (name) => setAssignFor(name);
 
   // Real-time enrolment stats per user, keyed by user id
@@ -346,10 +347,12 @@ const AdminUsersPage = () => {
     };
   };
 
+  const statusMap = { "Active": "active", "Onboarding": "onboarding", "On leave": "leave", "Inactive": "inactive" };
   const filtered = ALL_USERS.filter(u => {
-    if (q && !u.name.toLowerCase().includes(q.toLowerCase())) return false;
+    if (q && !(u.name?.toLowerCase().includes(q.toLowerCase()) || u.email?.toLowerCase().includes(q.toLowerCase()))) return false;
     if (dept !== "All" && u.dept !== dept) return false;
     if (role !== "All" && u.role !== role) return false;
+    if (statusFilter !== "All" && (u.status || "active") !== statusMap[statusFilter]) return false;
     return true;
   });
 
@@ -376,7 +379,10 @@ const AdminUsersPage = () => {
         <select value={role} onChange={e => setRole(e.target.value)}>
           <option>All</option><option>Learner</option><option>Manager</option><option>Admin</option>
         </select>
-        <select><option>All statuses</option><option>Active</option><option>Onboarding</option><option>On leave</option></select>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+          <option>All</option>
+          <option>Active</option><option>Onboarding</option><option>On leave</option><option>Inactive</option>
+        </select>
         <div className="fb-spacer" />
         <span className="text-xs text-muted">{filtered.length} of {ALL_USERS.length}</span>
       </div>
@@ -506,10 +512,12 @@ const AdminUsersPage = () => {
           <Icon name="users" size={20} />
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>People sync from Google Workspace</div>
-          <div style={{ fontSize: 12, color: "#5f635f" }}>Names, emails, and Google Group memberships sync hourly. Roles and departments are managed here.</div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>People appear here when they sign in</div>
+          <div style={{ fontSize: 12, color: "#5f635f" }}>
+            Each user's record is created automatically the first time they sign in with their Google Workspace account.
+            Set roles and departments from this page; they persist across sign-ins.
+          </div>
         </div>
-        <button className="btn btn-ghost btn-sm">Sync now</button>
       </div>
       <AssignTrainingModal
         open={!!assignFor}

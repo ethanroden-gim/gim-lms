@@ -107,7 +107,36 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
     setSubmitting(true);
     try {
       const n = await assignTraining({ userIds: targetUserIds, courseIds, dueDays, required });
-      showToast?.(`Created ${n} enrolment${n === 1 ? "" : "s"}.`);
+
+      // Send email notifications if requested and Apps Script URL is configured
+      let emailNote = "";
+      if (notify && (window.GIM_CONFIG || {}).appsScriptReminderUrl) {
+        try {
+          const recipients = targetUserIds
+            .map(uid => ALL_USERS.find(u => u.id === uid))
+            .filter(u => u && u.email)
+            .map(u => ({ email: u.email, name: u.name }));
+          if (recipients.length) {
+            const titles = courseIds
+              .map(id => COURSES.find(c => c.id === id)?.title)
+              .filter(Boolean).join(", ");
+            const dueLine = dueDays != null ? `\n\nIt's due in ${dueDays} day${dueDays === 1 ? "" : "s"}.` : "";
+            const res = await sendEmailReminder({
+              recipients,
+              subject: `New training assigned: ${titles}`,
+              course: titles,
+              dueDate: dueDays != null ? `In ${dueDays} day${dueDays === 1 ? "" : "s"}` : "",
+              message: `You've been assigned new training in GIM Learning:\n${titles}${dueLine}\n\nLog in to start.`,
+            });
+            emailNote = ` · emailed ${res.sent || 0} learner${res.sent === 1 ? "" : "s"}`;
+          }
+        } catch (err) {
+          console.warn("Notify-on-assign email failed:", err);
+          emailNote = " (email failed — check Apps Script URL)";
+        }
+      }
+
+      showToast?.(`Created ${n} enrolment${n === 1 ? "" : "s"}${emailNote}.`);
       onClose();
     } catch (err) {
       alert("Assign failed: " + err.message);
@@ -175,11 +204,11 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
                 { id: "role-onboarding",icon: "flag",  label: "All onboarding",  sub: `${ALL_USERS.filter(u => u.status === "onboarding").length} new hires` },
                 { id: "all",            icon: "globe", label: "All employees",   sub: `${ALL_USERS.filter(u => u.status !== "leave").length} active learners` },
               ].map(opt => (
-                <button key={opt.id} onClick={() => setAudience(opt.id)} disabled={preset?.userName} style={{
+                <button key={opt.id} onClick={() => setAudience(opt.id)} disabled={preset?.userId} style={{
                   textAlign: "left", padding: 12, borderRadius: 8,
                   border: audience === opt.id ? "2px solid #7ac142" : "1px solid #ddd",
                   background: audience === opt.id ? "#f0f9e6" : "#fff",
-                  cursor: preset?.userName ? "not-allowed" : "pointer", opacity: preset?.userName ? 0.5 : 1,
+                  cursor: preset?.userId ? "not-allowed" : "pointer", opacity: preset?.userId ? 0.5 : 1,
                   display: "flex", gap: 10, alignItems: "flex-start",
                 }}>
                   <Icon name={opt.icon} size={16}/>

@@ -227,6 +227,9 @@ const CatalogPage = ({ goCourse }) => {
   const cats = ["All", ...CATEGORIES];
 
   const filtered = COURSES.filter(c => {
+    // Learners only see published courses
+    const status = c.status || "published";
+    if (status !== "published") return false;
     if (q && !c.title.toLowerCase().includes(q.toLowerCase())) return false;
     if (cat !== "All" && c.cat !== cat) return false;
     if (reqOnly && !c.required) return false;
@@ -239,7 +242,7 @@ const CatalogPage = ({ goCourse }) => {
         <div>
           <div className="page-head__eyebrow">Catalog</div>
           <h1 className="page-head__title">Course library</h1>
-          <div className="page-head__sub">{COURSES.length} courses across compliance, operations, and growth.</div>
+          <div className="page-head__sub">{COURSES.filter(c => (c.status || "published") === "published").length} courses across compliance, operations, and growth.</div>
         </div>
       </div>
 

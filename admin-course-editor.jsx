@@ -5,8 +5,8 @@
 const blankCourse = () => ({
   id: "new",
   title: "",
-  cat: "Property Management",
-  dept: "Property Management",
+  cat: (window.CATEGORIES && window.CATEGORIES[0]) || "",
+  dept: "",
   required: false,
   duration: 30,
   instructor: "",
@@ -29,8 +29,8 @@ const loadEditCourse = (id) => {
   return {
     id: c.id,
     title: c.title || "",
-    cat: c.cat || "Property Management",
-    dept: c.dept || c.cat || "Property Management",
+    cat: c.cat || "",
+    dept: c.dept || "",
     required: !!c.required,
     duration: c.duration || 30,
     instructor: c.instructor || "",

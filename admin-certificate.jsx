@@ -36,12 +36,12 @@ const AdminCertificateDesignerPage = () => {
     window.CERTIFICATE_TEMPLATE = { ...CERTIFICATE_DEFAULTS };
   };
 
-  // Sample data for the preview
-  const sampleCourse  = COURSES[0] || { id: "demo", title: "Sample course title" };
+  // Sample data for the preview — uses live user + today's date
+  const sampleCourse  = COURSES.find(c => c.status !== "archived") || { id: "demo", title: "Sample course title" };
   const sampleLearner = CURRENT_USER.name || "Sample Learner";
-  const sampleDate    = "Mar 14, 2025";
+  const sampleDate    = new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
   const sampleScore   = 95;
-  const sampleCertNo  = "GIM-SAMPLE-0001";
+  const sampleCertNo  = "GIM-PREVIEW-" + new Date().getFullYear();
 
   // Logo upload
   const fileRef = React.useRef(null);
