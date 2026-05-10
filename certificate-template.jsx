@@ -115,37 +115,37 @@ const SigBlock = ({ value, label, accent, ink }) => (
   </div>
 );
 
-// Branded "official" seal — concentric rings, curved company text, year
+// Branded "official" seal — concentric rings, curved labels, big monogram
 const OfficialSeal = ({ accent, ink }) => {
-  const SIZE = 170; // bigger canvas for readability
-  // Larger arc radii give text more horizontal real estate per glyph
+  const SIZE = 180;
   return (
     <div style={{ width: SIZE, height: SIZE, flexShrink: 0, position: "relative" }}>
-      <svg viewBox="0 0 170 170" width={SIZE} height={SIZE}>
+      <svg viewBox="0 0 180 180" width={SIZE} height={SIZE}>
         <defs>
-          {/* Top arc — text reads left to right along the upper curve */}
-          <path id="sealTopArc" d="M 20,85 a 65,65 0 0 1 130,0" fill="none" />
-          {/* Bottom arc — drawn left-to-right but along the lower curve so text is upright */}
-          <path id="sealBotArc" d="M 22,87 a 63,63 0 0 0 126,0" fill="none" />
+          {/* Wider arc with a longer path so glyphs aren't crammed.
+              Center (90,90), radius 70, extends from ~205° to ~335° (roughly the top 130°).
+              Path starts at lower-left of the upper hemisphere and ends at lower-right. */}
+          <path id="sealTopArc" d="M 25,108 A 70,70 0 0 1 155,108" fill="none" />
+          <path id="sealBotArc" d="M 30,72 A 60,60 0 0 0 150,72" fill="none" />
         </defs>
 
-        {/* Outer ring */}
-        <circle cx="85" cy="85" r="80" fill="none" stroke={accent} strokeWidth="2.5" />
-        {/* Notched outer rim */}
+        {/* Outer ring + notched rim */}
+        <circle cx="90" cy="90" r="85" fill="none" stroke={accent} strokeWidth="2.5" />
         {Array.from({ length: 48 }).map((_, i) => {
           const a = (i / 48) * Math.PI * 2;
-          const r1 = 80, r2 = 76;
-          const x1 = 85 + Math.cos(a) * r1, y1 = 85 + Math.sin(a) * r1;
-          const x2 = 85 + Math.cos(a) * r2, y2 = 85 + Math.sin(a) * r2;
-          return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={accent} strokeWidth="1.2" />;
+          const r1 = 85, r2 = 81;
+          return <line key={i}
+            x1={90 + Math.cos(a) * r1} y1={90 + Math.sin(a) * r1}
+            x2={90 + Math.cos(a) * r2} y2={90 + Math.sin(a) * r2}
+            stroke={accent} strokeWidth="1.2" />;
         })}
-        {/* Middle band where the curved text sits */}
-        <circle cx="85" cy="85" r="64" fill="none" stroke={accent} strokeWidth="1" />
-        <circle cx="85" cy="85" r="56" fill="none" stroke={accent} strokeWidth="0.6" strokeDasharray="3 2" />
+        {/* Inner band where curved text lives */}
+        <circle cx="90" cy="90" r="68" fill="none" stroke={accent} strokeWidth="1" />
+        <circle cx="90" cy="90" r="58" fill="none" stroke={accent} strokeWidth="0.6" strokeDasharray="3 2" />
 
-        {/* Curved top text — Switzer at medium weight reads cleanly at 12px */}
-        <text fontFamily="var(--font-sans)" fontSize="12" letterSpacing="2" fill={ink} fontWeight="600">
-          <textPath href="#sealTopArc" startOffset="50%" textAnchor="middle">GIM PROPERTY MANAGEMENT</textPath>
+        {/* Curved top text — shortened and well-spaced so it fits on one arc */}
+        <text fontFamily="var(--font-sans)" fontSize="11" letterSpacing="3" fill={ink} fontWeight="600">
+          <textPath href="#sealTopArc" startOffset="50%" textAnchor="middle">GIM • PROPERTY MGMT</textPath>
         </text>
         {/* Curved bottom text */}
         <text fontFamily="var(--font-sans)" fontSize="10" letterSpacing="3" fill={accent} fontWeight="600">
@@ -153,15 +153,14 @@ const OfficialSeal = ({ accent, ink }) => {
         </text>
 
         {/* Solid center disc */}
-        <circle cx="85" cy="85" r="34" fill={accent} />
-        {/* Inner ring on disc for definition */}
-        <circle cx="85" cy="85" r="30" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1" />
-        {/* Monogram — keep display font for the brand mark */}
-        <text x="85" y="93" textAnchor="middle" fontFamily="var(--font-display)" fontSize="26" fontWeight="400" fill="#fff" letterSpacing="1.5">GIM</text>
+        <circle cx="90" cy="90" r="38" fill={accent} />
+        <circle cx="90" cy="90" r="34" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1" />
+        {/* Monogram */}
+        <text x="90" y="100" textAnchor="middle" fontFamily="var(--font-display)" fontSize="30" fontWeight="400" fill="#fff" letterSpacing="1.5">GIM</text>
 
         {/* Side stars (decorative) */}
-        <text x="10" y="90" fontSize="13" fill={accent} fontWeight="700">★</text>
-        <text x="148" y="90" fontSize="13" fill={accent} fontWeight="700">★</text>
+        <text x="6" y="95" fontSize="14" fill={accent} fontWeight="700">★</text>
+        <text x="160" y="95" fontSize="14" fill={accent} fontWeight="700">★</text>
       </svg>
     </div>
   );

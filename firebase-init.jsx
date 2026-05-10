@@ -148,16 +148,21 @@ const subscribeToData = (onChange) => {
     if (err.code !== "permission-denied") console.error("certificate settings listener:", err);
   }));
 
+  // Client-side sort avoids needing a composite (userId, createdAt) index
   subs.push(fbDb.collection("activity")
     .where("userId", "==", uid)
-    .orderBy("createdAt", "desc")
-    .limit(8)
+    .limit(50)
     .onSnapshot(s => {
-      setArr(ACTIVITY, s.docs.map(d => d.data()));
+      const rows = s.docs.map(d => d.data());
+      rows.sort((a, b) => {
+        const ta = a.createdAt?.seconds ?? a.createdAt?.toMillis?.() / 1000 ?? 0;
+        const tb = b.createdAt?.seconds ?? b.createdAt?.toMillis?.() / 1000 ?? 0;
+        return tb - ta;
+      });
+      setArr(ACTIVITY, rows.slice(0, 8));
       onChange();
     }, err => {
-      // index may not exist yet — fall back silently
-      if (err.code !== "failed-precondition") console.error("activity listener:", err);
+      if (err.code !== "permission-denied") console.error("activity listener:", err);
     }));
 
   return () => subs.forEach(fn => fn());
@@ -425,6 +430,7 @@ const sendEmailReminder = async ({ recipients, subject, message, course, dueDate
     dueDate: dueDate || "",
     sentBy: window.CURRENT_USER?.email || "",
     sentByName: window.CURRENT_USER?.name || "",
+    secret: (window.GIM_CONFIG || {}).appsScriptSecret || "",
   };
 
   const resp = await fetch(url, {

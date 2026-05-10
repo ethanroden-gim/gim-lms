@@ -2,6 +2,38 @@
 // GIM LMS — Course player + Assessment + Certificate
 // =========================================================
 
+// Normalise YouTube / Google Drive URLs to embed format so iframes work
+// regardless of which copy/paste link the admin used.
+const toEmbedUrl = (url, source) => {
+  if (!url) return url;
+  const isYT = source === "youtube" || /youtube\.com|youtu\.be/.test(url);
+  const isDrive = source === "drive" || /drive\.google\.com/.test(url);
+
+  if (isYT) {
+    // youtu.be/ID(?si=…) → youtube.com/embed/ID
+    let m = url.match(/youtu\.be\/([\w-]+)/);
+    if (m) return `https://www.youtube.com/embed/${m[1]}`;
+    // youtube.com/watch?v=ID → youtube.com/embed/ID
+    m = url.match(/[?&]v=([\w-]+)/);
+    if (m) return `https://www.youtube.com/embed/${m[1]}`;
+    // youtube.com/shorts/ID → youtube.com/embed/ID
+    m = url.match(/youtube\.com\/shorts\/([\w-]+)/);
+    if (m) return `https://www.youtube.com/embed/${m[1]}`;
+    if (/\/embed\//.test(url)) return url;
+  }
+
+  if (isDrive) {
+    // /file/d/ID/(view|edit|preview) → /file/d/ID/preview
+    let m = url.match(/drive\.google\.com\/file\/d\/([\w-]+)/);
+    if (m) return `https://drive.google.com/file/d/${m[1]}/preview`;
+    // open?id=ID → /file/d/ID/preview
+    m = url.match(/[?&]id=([\w-]+)/);
+    if (m) return `https://drive.google.com/file/d/${m[1]}/preview`;
+  }
+
+  return url;
+};
+
 // ============================================================
 // Course player
 // ============================================================
@@ -157,12 +189,26 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
           <div className="video-frame">
             {active.type === "video" && active.url ? (
               <iframe
-                src={active.url}
+                src={toEmbedUrl(active.url, active.source)}
                 style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }}
                 allow="autoplay; encrypted-media; picture-in-picture"
                 allowFullScreen
                 title={active.title}
               />
+            ) : active.type === "pdf" && active.url ? (
+              <iframe
+                src={toEmbedUrl(active.url, "drive")}
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0, background: "#fff" }}
+                title={active.title}
+              />
+            ) : active.type === "link" && active.url ? (
+              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#fff", textAlign: "center", padding: 32 }}>
+                <Icon name="external" size={42} />
+                <div style={{ marginTop: 12, fontSize: 14, fontWeight: 600 }}>External resource</div>
+                <a href={active.url} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm" style={{ marginTop: 16, textDecoration: "none" }}>
+                  Open in new tab <Icon name="external" size={12}/>
+                </a>
+              </div>
             ) : (
               <div className={classNames("video-frame__bg", course.cover)} />
             )}
@@ -183,7 +229,7 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
                 <div style={{ marginTop: 8, fontSize: 14, fontWeight: 600 }}>Article · {active.dur}</div>
               </div>
             )}
-            {active.type === "pdf" && (
+            {active.type === "pdf" && !active.url && (
               <div style={{ position: "relative", color: "#fff", textAlign: "center" }}>
                 <Icon name="pdf" size={42} />
                 <div style={{ marginTop: 8, fontSize: 14, fontWeight: 600 }}>PDF · {active.dur}</div>
@@ -215,9 +261,16 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
           <div className="card card-pad-lg" style={{ marginTop: 18 }}>
             <div className="eyebrow-sm" style={{ marginBottom: 6 }}>{active.section}</div>
             <h2 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>{active.title}</h2>
-            <p className="text-muted mt-3" style={{ fontSize: 14, lineHeight: 1.6, margin: 0 }}>
-              {course.description}
-            </p>
+            {/* Article-type lessons show their full body; other types show course description */}
+            {active.type === "article" && active.body ? (
+              <div style={{ fontSize: 14, lineHeight: 1.65, marginTop: 16, color: "#1f1f1f", whiteSpace: "pre-wrap" }}>
+                {active.body}
+              </div>
+            ) : (
+              <p className="text-muted mt-3" style={{ fontSize: 14, lineHeight: 1.6, margin: 0 }}>
+                {course.description}
+              </p>
+            )}
 
             {/* Resources */}
             {(course.resources?.length > 0) && (

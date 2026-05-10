@@ -11,7 +11,7 @@ const blankCourse = () => ({
   duration: 30,
   instructor: "",
   description: "",
-  cover: "ph-bg-1",
+  cover: "cv-1",
   status: "draft",
   modules: [
     { title: "Module 1", lessons: [
@@ -44,7 +44,7 @@ const loadEditCourse = (id) => {
   };
 };
 
-const COVERS = ["ph-bg-1", "ph-bg-2", "ph-bg-3", "ph-bg-4", "ph-bg-5"];
+const COVERS = ["cv-1", "cv-2", "cv-3", "cv-4", "cv-5", "cv-6", "cv-7", "cv-8", "cv-9"];
 const LESSON_TYPES = [
   { id: "video",   label: "Video",       icon: "play-o" },
   { id: "article", label: "Article",     icon: "doc" },
@@ -139,6 +139,13 @@ const AdminCourseEditorPage = ({ mode, courseId, goBack }) => {
     [reordered[li], reordered[ni]] = [reordered[ni], reordered[li]];
     updateModule(mi, { lessons: reordered });
   };
+  // Drag-and-drop reorder: move lesson at fromIdx to toIdx within the same module
+  const reorderLessons = (mi, fromIdx, toIdx) => {
+    const lessons = [...c.modules[mi].lessons];
+    const [moved] = lessons.splice(fromIdx, 1);
+    lessons.splice(toIdx, 0, moved);
+    updateModule(mi, { lessons });
+  };
 
   // ---------- resources ----------
   const addResource = () => set({ resources: [...c.resources, { name: "", type: "pdf", size: "" }] });
@@ -178,7 +185,7 @@ const AdminCourseEditorPage = ({ mode, courseId, goBack }) => {
 
       {tab === "details"   && <DetailsTab c={c} set={set} />}
       {tab === "content"   && <ContentTab c={c} addModule={addModule} removeModule={removeModule} updateModule={updateModule} moveModule={moveModule}
-                                addLesson={addLesson} updateLesson={updateLesson} removeLesson={removeLesson} moveLesson={moveLesson} />}
+                                addLesson={addLesson} updateLesson={updateLesson} removeLesson={removeLesson} moveLesson={moveLesson} reorderLessons={reorderLessons} />}
       {tab === "assess"    && <AssessmentTab c={c} set={set} isNew={isNew} onOpenAssessment={setAssessmentEditorState} />}
       {tab === "resources" && <ResourcesTab c={c} addResource={addResource} updateResource={updateResource} removeResource={removeResource} />}
 
@@ -272,75 +279,135 @@ const DetailsTab = ({ c, set }) => (
   </div>
 );
 
-const ContentTab = ({ c, addModule, removeModule, updateModule, moveModule, addLesson, updateLesson, removeLesson, moveLesson }) => (
-  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-    {c.modules.map((m, mi) => (
-      <div key={mi} className="card" style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid #ececec", background: "#fafafa" }}>
-          <Icon name="grip" size={16} />
-          <input className="ce-module-title" value={m.title} onChange={e => updateModule(mi, { title: e.target.value })} placeholder="Module title" />
-          <span className="text-xs text-muted">{m.lessons.length} lesson{m.lessons.length === 1 ? "" : "s"}</span>
-          <div style={{ flex: 1 }} />
-          <button className="btn-icon" title="Move up" onClick={() => moveModule(mi, -1)}><Icon name="chevron-up" size={14}/></button>
-          <button className="btn-icon" title="Move down" onClick={() => moveModule(mi, 1)}><Icon name="chevron-down" size={14}/></button>
-          <button className="btn-icon" title="Remove module" onClick={() => removeModule(mi)} style={{ color: "#a8232b" }}><Icon name="trash" size={14}/></button>
-        </div>
+const ContentTab = ({ c, addModule, removeModule, updateModule, moveModule, addLesson, updateLesson, removeLesson, moveLesson, reorderLessons }) => {
+  // Drag state — { mi, li } of the lesson being dragged
+  const [dragSrc, setDragSrc] = React.useState(null);
 
-        <div style={{ padding: "8px 12px 12px" }}>
-          {m.lessons.length === 0 && (
-            <div className="text-xs text-muted" style={{ padding: "12px 4px" }}>No lessons yet.</div>
-          )}
-          {m.lessons.map((l, li) => (
-            <LessonRow key={l.id} l={l}
-              onChange={(p) => updateLesson(mi, li, p)}
-              onRemove={() => removeLesson(mi, li)}
-              onUp={() => moveLesson(mi, li, -1)}
-              onDown={() => moveLesson(mi, li, 1)}
-            />
-          ))}
-          <button className="btn btn-ghost btn-sm" onClick={() => addLesson(mi)} style={{ marginTop: 8 }}>
-            <Icon name="plus" size={12}/> Add lesson
-          </button>
-        </div>
-      </div>
-    ))}
-
-    <button className="btn btn-ghost" onClick={addModule} style={{ alignSelf: "flex-start" }}>
-      <Icon name="plus" size={14}/> Add module
-    </button>
-  </div>
-);
-
-const LessonRow = ({ l, onChange, onRemove, onUp, onDown }) => {
-  const needsUrl = l.type === "video" || l.type === "link";
   return (
-    <div className="ce-lesson">
-      <Icon name="grip" size={14} />
-      <select className="cd-input ce-lesson-type" value={l.type} onChange={e => onChange({ type: e.target.value })}>
-        {LESSON_TYPES.map(x => <option key={x.id} value={x.id}>{x.label}</option>)}
-      </select>
-      <input className="cd-input ce-lesson-title" value={l.title} onChange={e => onChange({ title: e.target.value })} placeholder="Lesson title" />
-      <input className="cd-input ce-lesson-dur" value={l.dur} onChange={e => onChange({ dur: e.target.value })} placeholder="5:00 / 8 min read" />
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {c.modules.map((m, mi) => (
+        <div key={mi} className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid #ececec", background: "#fafafa" }}>
+            <Icon name="grip" size={16} />
+            <input className="ce-module-title" value={m.title} onChange={e => updateModule(mi, { title: e.target.value })} placeholder="Module title" />
+            <span className="text-xs text-muted">{m.lessons.length} lesson{m.lessons.length === 1 ? "" : "s"}</span>
+            <div style={{ flex: 1 }} />
+            <button className="btn-icon" title="Move up" onClick={() => moveModule(mi, -1)}><Icon name="chevron-up" size={14}/></button>
+            <button className="btn-icon" title="Move down" onClick={() => moveModule(mi, 1)}><Icon name="chevron-down" size={14}/></button>
+            <button className="btn-icon" title="Remove module" onClick={() => removeModule(mi)} style={{ color: "#a8232b" }}><Icon name="trash" size={14}/></button>
+          </div>
 
-      {needsUrl ? (
-        <>
-          {l.type === "video" && (
-            <select className="cd-input ce-lesson-source" value={l.source || "drive"} onChange={e => onChange({ source: e.target.value })}>
-              <option value="drive">Google Drive</option>
-              <option value="youtube">YouTube</option>
-            </select>
-          )}
-          <input className="cd-input ce-lesson-url" value={l.url || ""} onChange={e => onChange({ url: e.target.value })}
-            placeholder={l.type === "video" ? "Paste Drive or YouTube embed URL" : "https://..."} />
-        </>
-      ) : (
-        <div className="ce-lesson-spacer" />
-      )}
+          <div style={{ padding: "8px 12px 12px" }}>
+            {m.lessons.length === 0 && (
+              <div className="text-xs text-muted" style={{ padding: "12px 4px" }}>No lessons yet. Drag-and-drop is supported once you have two or more.</div>
+            )}
+            {m.lessons.map((l, li) => (
+              <LessonRow key={l.id} l={l}
+                onChange={(p) => updateLesson(mi, li, p)}
+                onRemove={() => removeLesson(mi, li)}
+                onUp={() => moveLesson(mi, li, -1)}
+                onDown={() => moveLesson(mi, li, 1)}
+                dragging={dragSrc?.mi === mi && dragSrc?.li === li}
+                onDragStart={(e) => { setDragSrc({ mi, li }); e.dataTransfer.effectAllowed = "move"; }}
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragSrc && dragSrc.mi === mi && dragSrc.li !== li) {
+                    reorderLessons(mi, dragSrc.li, li);
+                  }
+                  setDragSrc(null);
+                }}
+              />
+            ))}
+            <button className="btn btn-ghost btn-sm" onClick={() => addLesson(mi)} style={{ marginTop: 8 }}>
+              <Icon name="plus" size={12}/> Add lesson
+            </button>
+          </div>
+        </div>
+      ))}
 
-      <button className="btn-icon" title="Up"   onClick={onUp}><Icon name="chevron-up" size={14}/></button>
-      <button className="btn-icon" title="Down" onClick={onDown}><Icon name="chevron-down" size={14}/></button>
-      <button className="btn-icon" title="Remove" style={{ color: "#a8232b" }} onClick={onRemove}><Icon name="trash" size={14}/></button>
+      <button className="btn btn-ghost" onClick={addModule} style={{ alignSelf: "flex-start" }}>
+        <Icon name="plus" size={14}/> Add module
+      </button>
     </div>
+  );
+};
+
+const LessonRow = ({ l, onChange, onRemove, onUp, onDown, onDragStart, onDragOver, onDrop, dragging }) => {
+  const [bodyOpen, setBodyOpen] = React.useState(false);
+
+  const placeholder = (() => {
+    switch (l.type) {
+      case "video":   return "Paste Drive or YouTube link";
+      case "link":    return "https://...";
+      case "pdf":     return "Paste Google Drive PDF link";
+      case "quiz":    return "(configured under the Assessment tab)";
+      default:        return "";
+    }
+  })();
+
+  const showUrlField = l.type === "video" || l.type === "link" || l.type === "pdf";
+  const showBodyButton = l.type === "article";
+
+  return (
+    <>
+      <div
+        className="ce-lesson"
+        draggable
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+        style={{ opacity: dragging ? 0.4 : 1, cursor: "grab" }}
+      >
+        <Icon name="grip" size={14} />
+        <select className="cd-input ce-lesson-type" value={l.type} onChange={e => onChange({ type: e.target.value })}>
+          {LESSON_TYPES.map(x => <option key={x.id} value={x.id}>{x.label}</option>)}
+        </select>
+        <input className="cd-input ce-lesson-title" value={l.title} onChange={e => onChange({ title: e.target.value })} placeholder="Lesson title" />
+        <input className="cd-input ce-lesson-dur" value={l.dur} onChange={e => onChange({ dur: e.target.value })} placeholder="5:00 / 8 min read" />
+
+        {l.type === "video" && (
+          <select className="cd-input ce-lesson-source" value={l.source || "drive"} onChange={e => onChange({ source: e.target.value })}>
+            <option value="drive">Google Drive</option>
+            <option value="youtube">YouTube</option>
+          </select>
+        )}
+
+        {showUrlField ? (
+          <input
+            className="cd-input ce-lesson-url"
+            value={l.url || ""}
+            onChange={e => onChange({ url: e.target.value })}
+            placeholder={placeholder}
+            disabled={l.type === "quiz"}
+          />
+        ) : showBodyButton ? (
+          <button className="btn btn-ghost btn-sm" onClick={() => setBodyOpen(o => !o)}
+            style={{ height: 32, padding: "0 12px", whiteSpace: "nowrap" }}>
+            <Icon name="edit" size={12}/> {l.body ? `Edit (${l.body.length} chars)` : "Add content"}
+          </button>
+        ) : (
+          <div className="ce-lesson-spacer" />
+        )}
+
+        <button className="btn-icon" title="Up"   onClick={onUp}><Icon name="chevron-up" size={14}/></button>
+        <button className="btn-icon" title="Down" onClick={onDown}><Icon name="chevron-down" size={14}/></button>
+        <button className="btn-icon" title="Remove" style={{ color: "#a8232b" }} onClick={onRemove}><Icon name="trash" size={14}/></button>
+      </div>
+
+      {showBodyButton && bodyOpen && (
+        <div style={{ padding: "8px 12px 12px 36px" }}>
+          <textarea
+            className="cd-input"
+            rows={6}
+            value={l.body || ""}
+            onChange={e => onChange({ body: e.target.value })}
+            placeholder="Article body — supports plain text and basic Markdown (# headings, **bold**, links)."
+            style={{ resize: "vertical", minHeight: 120 }}
+          />
+        </div>
+      )}
+    </>
   );
 };
 
