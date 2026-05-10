@@ -109,6 +109,29 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
   const isLast = active && activeIdx >= flatLessons.length - 1;
   const courseFullyDone = flatLessons.length > 0 && completed.size >= flatLessons.length;
 
+  // Auto-enroll on entering the player so progress is always tracked
+  React.useEffect(() => {
+    if (!window.fbReady || !window.enrollSelf || !course?.id || enrollment) return;
+    enrollSelf(course.id).catch(err => console.warn("auto-enroll:", err.message));
+  }, [course?.id, !!enrollment]);
+
+  // Lesson-level time tracking: tick every 15s while a lesson is active
+  React.useEffect(() => {
+    if (!active?.id || !window.addLessonTime) return;
+    const TICK = 15;
+    let lastTickAt = Date.now();
+    const interval = setInterval(() => {
+      // Only count time when the tab is visible
+      if (document.visibilityState !== "visible") { lastTickAt = Date.now(); return; }
+      const elapsed = Math.round((Date.now() - lastTickAt) / 1000);
+      lastTickAt = Date.now();
+      if (elapsed > 0 && elapsed <= TICK * 2) {
+        addLessonTime(course.id, active.id, elapsed).catch(() => {});
+      }
+    }, TICK * 1000);
+    return () => clearInterval(interval);
+  }, [course?.id, active?.id]);
+
   const persistLessonComplete = async () => {
     if (!active || !window.fbReady || !window.markLessonComplete) return;
     try {
@@ -414,26 +437,58 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
 
   const total = quiz.questions.length;
   const q = quiz.questions[qIdx];
-  const allAnswered = Object.keys(answers).length === total;
+  const allAnswered = quiz.questions.every((qq, i) => {
+    const a = answers[i];
+    if (qq.type === "short" || qq.type === "essay") return typeof a === "string" && a.trim().length > 0;
+    if (qq.type === "multi") return Array.isArray(a) && a.length > 0;
+    return a !== undefined; // single
+  });
 
-  const score = React.useMemo(() => {
-    let correct = 0;
-    quiz.questions.forEach((qq, i) => { if (answers[i] === qq.correct) correct++; });
-    return Math.round((correct / total) * 100);
+  // Auto-graded portion only counts MCQ-style questions (single/multi)
+  const autoGraded = React.useMemo(() => {
+    let correct = 0, autoTotal = 0;
+    quiz.questions.forEach((qq, i) => {
+      if (qq.type === "short" || qq.type === "essay") return;
+      autoTotal++;
+      if (qq.type === "multi") {
+        const correctSet = new Set(qq.correct || []);
+        const givenSet = new Set(answers[i] || []);
+        if (correctSet.size === givenSet.size && [...correctSet].every(x => givenSet.has(x))) correct++;
+      } else { // single
+        if (answers[i] === qq.correct) correct++;
+      }
+    });
+    const score = autoTotal ? Math.round((correct / autoTotal) * 100) : 0;
+    return { score, correct, autoTotal };
   }, [answers, total]);
+  const score = autoGraded.score;
+  const manualPending = quiz.questions.some(qq => qq.type === "short" || qq.type === "essay");
 
   const handleSubmit = async () => {
     if (submitting) return;
     setSubmitting(true);
     try {
-      if (window.fbReady && score >= passMark) {
-        await recordCompletion(course, score);
-        await recordActivity(`Passed assessment for "${course.title}" with ${score}%`, course.id);
-      } else if (window.fbReady) {
-        await recordActivity(`Attempted assessment for "${course.title}" — ${score}%`, course.id);
+      if (window.fbReady) {
+        await recordAttempt({
+          courseId: course.id,
+          assessmentId: linkedAssessment?.id,
+          answers,
+          autoScore: score,
+          total,
+          passMark,
+          manualPending,
+        });
+        if (manualPending) {
+          await recordActivity(`Submitted assessment for "${course.title}" — pending review`, course.id);
+        } else if (score >= passMark) {
+          await recordCompletion(course, score);
+          await recordActivity(`Passed assessment for "${course.title}" with ${score}%`, course.id);
+        } else {
+          await recordActivity(`Attempted assessment for "${course.title}" — ${score}%`, course.id);
+        }
       }
     } catch (err) {
-      console.error("recordCompletion:", err);
+      console.error("recordAttempt:", err);
     } finally {
       setSubmitted(true);
       setSubmitting(false);
@@ -441,7 +496,33 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
   };
 
   if (submitted) {
-    const passed = score >= passMark;
+    const passed = !manualPending && score >= passMark;
+    if (manualPending) {
+      return (
+        <div className="page" style={{ maxWidth: 720 }}>
+          <div className="card card-pad-lg" style={{ textAlign: "center" }}>
+            <div style={{
+              width: 72, height: 72, borderRadius: 999, background: "#fff5e0",
+              color: "#8a5a00", display: "flex", alignItems: "center", justifyContent: "center",
+              margin: "0 auto 16px",
+            }}>
+              <Icon name="clock" size={32} />
+            </div>
+            <div className="eyebrow-sm" style={{ color: "#8a5a00" }}>Submitted — pending review</div>
+            <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em", margin: "4px 0 8px" }}>
+              Thanks for your responses
+            </h1>
+            <div className="text-muted" style={{ fontSize: 14, marginBottom: 24, lineHeight: 1.5 }}>
+              This assessment includes questions that require human review. An admin will grade your submission and you'll be notified by email when your final score is ready.
+              {autoGraded.autoTotal > 0 && <><br/>Auto-graded so far: <strong>{autoGraded.correct} of {autoGraded.autoTotal}</strong></>}
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+              <button className="btn btn-primary" onClick={goBack}>Back to course</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="page" style={{ maxWidth: 720 }}>
         <div className="card card-pad-lg" style={{ textAlign: "center" }}>
@@ -459,7 +540,7 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
             {score}%
           </h1>
           <div className="text-muted" style={{ fontSize: 14, marginBottom: 24 }}>
-            {course.title} · {Object.values(answers).filter((a, i) => a === quiz.questions[i].correct).length} of {total} correct · {passMark}% required to pass
+            {course.title} · {autoGraded.correct} of {autoGraded.autoTotal} correct · {passMark}% required to pass
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
             <button className="btn btn-ghost" onClick={goBack}>Back to course</button>
@@ -506,9 +587,14 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
       </div>
 
       <div className="quiz-question">
-        <div className="quiz-q-num">Question {qIdx + 1} of {total}</div>
-        <div className="quiz-q-text">{q.q}</div>
-        {q.options.map((opt, i) => (
+        <div className="quiz-q-num">
+          Question {qIdx + 1} of {total}
+          {(q.type === "short" || q.type === "essay") && <span className="chip chip-amber" style={{ marginLeft: 8 }}>Manually graded</span>}
+        </div>
+        <div className="quiz-q-text">{q.text || q.q}</div>
+
+        {/* Single-choice (radio) */}
+        {(!q.type || q.type === "single") && (q.options || []).map((opt, i) => (
           <div
             key={i}
             className={classNames("quiz-option", answers[qIdx] === i && "selected")}
@@ -519,6 +605,49 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
           </div>
         ))}
 
+        {/* Multi-choice (checkbox) */}
+        {q.type === "multi" && (q.options || []).map((opt, i) => {
+          const sel = answers[qIdx] || [];
+          const checked = sel.includes(i);
+          return (
+            <div
+              key={i}
+              className={classNames("quiz-option", checked && "selected")}
+              onClick={() => {
+                const next = checked ? sel.filter(x => x !== i) : [...sel, i];
+                setAnswers({ ...answers, [qIdx]: next });
+              }}
+            >
+              <div className="quiz-option__radio" style={{ borderRadius: 4 }} />
+              <div>{opt}</div>
+            </div>
+          );
+        })}
+
+        {/* Short answer */}
+        {q.type === "short" && (
+          <input
+            type="text"
+            className="cd-input"
+            value={answers[qIdx] || ""}
+            onChange={e => setAnswers({ ...answers, [qIdx]: e.target.value })}
+            placeholder="Your answer…"
+            style={{ marginTop: 12 }}
+          />
+        )}
+
+        {/* Essay */}
+        {q.type === "essay" && (
+          <textarea
+            className="cd-input"
+            rows={6}
+            value={answers[qIdx] || ""}
+            onChange={e => setAnswers({ ...answers, [qIdx]: e.target.value })}
+            placeholder="Your response…"
+            style={{ marginTop: 12, resize: "vertical" }}
+          />
+        )}
+
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 18 }}>
           <button
             className="btn btn-ghost btn-sm"
@@ -528,16 +657,22 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
           >
             <Icon name="arrow-left" size={14}/> Previous
           </button>
-          {qIdx < total - 1 ? (
+          {qIdx < total - 1 ? (() => {
+            const a = answers[qIdx];
+            const ok = q.type === "multi" ? Array.isArray(a) && a.length > 0
+                     : (q.type === "short" || q.type === "essay") ? typeof a === "string" && a.trim().length > 0
+                     : a !== undefined;
+            return (
             <button
               className="btn btn-primary btn-sm"
-              disabled={answers[qIdx] === undefined}
+              disabled={!ok}
               onClick={() => setQIdx(qIdx + 1)}
-              style={answers[qIdx] === undefined ? { opacity: 0.5, cursor: "not-allowed" } : {}}
+              style={!ok ? { opacity: 0.5, cursor: "not-allowed" } : {}}
             >
               Next question <Icon name="arrow-right" size={14}/>
             </button>
-          ) : (
+            );
+          })() : (
             <button
               className="btn btn-primary"
               disabled={!allAnswered || submitting}

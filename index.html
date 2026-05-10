@@ -14,10 +14,11 @@
   <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
-  <!-- Firebase compat SDK (Auth + Firestore) -->
+  <!-- Firebase compat SDK (Auth + Firestore + Storage) -->
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-storage-compat.js"></script>
 </head>
 <body style="background-color: rgb(206, 222, 206)">
   <div id="root"></div>
@@ -182,6 +183,7 @@
         if (route === "admin-course-edit") body = <AdminCourseEditorPage mode="edit" courseId={courseId} goBack={() => setRoute("admin-courses")} />;
         if (route === "admin-users")       body = <AdminUsersPage />;
         if (route === "admin-assess")      body = <AdminAssessmentsPage />;
+        if (route === "admin-attempts")    body = <AdminAttemptsPage />;
         if (route === "admin-settings")    body = <AdminSettingsPage />;
         if (route === "admin-cert")        body = <AdminCertificateDesignerPage />;
       }

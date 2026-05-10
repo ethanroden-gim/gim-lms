@@ -15,6 +15,7 @@ const Sidebar = ({ route, setRoute, mode }) => {
     { id: "admin-courses", label: "Courses", icon: "book" },
     { id: "admin-users", label: "People & enrollments", icon: "users" },
     { id: "admin-assess", label: "Assessments", icon: "quiz" },
+    { id: "admin-attempts", label: "Attempts", icon: "list", badge: (window.ATTEMPTS || []).filter(a => a.status === "pending_review").length || null },
     { id: "admin-cert", label: "Certificate designer", icon: "award" },
     { id: "admin-settings", label: "Roles & departments", icon: "settings" },
   ];

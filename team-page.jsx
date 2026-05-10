@@ -33,7 +33,7 @@ const MyTeamPage = () => {
     return { completed, inProgress, assigned: assigned + inProgress, overdue, avgScore, all: list };
   };
 
-  const sendReminderTeamWide = async (overdueOnly) => {
+  const sendReminderTeamWide = async ({ overdueOnly, subject, message }) => {
     const targets = overdueOnly
       ? team.filter(m => memberStats(m.id).overdue > 0)
       : team;
@@ -44,9 +44,10 @@ const MyTeamPage = () => {
     try {
       const res = await sendEmailReminder({
         recipients,
-        message: overdueOnly
+        subject: subject || "Training reminder",
+        message: message || (overdueOnly
           ? "This is a reminder that you have overdue training in GIM Learning. Please complete it as soon as possible."
-          : "This is a reminder to complete your outstanding training in GIM Learning.",
+          : "This is a reminder to complete your outstanding training in GIM Learning."),
       });
       showToast?.(`Reminder sent to ${res.sent} ${res.sent === 1 ? "report" : "reports"}.`);
     } catch (err) {
@@ -240,30 +241,95 @@ const MyTeamPage = () => {
         preset={assignFor && assignFor !== "all" ? { userId: assignFor } : null}
       />
 
-      {reminderOpen && (
-        <div onClick={() => setReminderOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,16,17,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, width: "100%", maxWidth: 460, padding: 24, boxShadow: "0 24px 60px rgba(0,0,0,.3)" }}>
-            <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>Send reminder</div>
-            <div style={{ fontSize: 13, color: "#5f635f", marginBottom: 18 }}>
-              Email a reminder of incomplete training to your team.
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
-              <button onClick={() => sendReminderTeamWide(true)} style={{ textAlign: "left", padding: "12px 14px", border: "1px solid #ececec", borderRadius: 10, background: "#fff", cursor: "pointer" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>Overdue only</div>
-                <div style={{ fontSize: 12, color: "#5f635f" }}>{team.filter(m => memberStats(m.id).overdue > 0).length} reports have overdue training.</div>
-              </button>
-              <button onClick={() => sendReminderTeamWide(false)} style={{ textAlign: "left", padding: "12px 14px", border: "1px solid #ececec", borderRadius: 10, background: "#fff", cursor: "pointer" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>Everyone with incomplete training</div>
-                <div style={{ fontSize: 12, color: "#5f635f" }}>{team.filter(m => memberStats(m.id).assigned > 0).length} reports.</div>
-              </button>
-            </div>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-              <button className="btn btn-ghost btn-sm" onClick={() => setReminderOpen(false)}>Cancel</button>
+      {reminderOpen && <ReminderComposer
+        team={team}
+        memberStats={memberStats}
+        onClose={() => setReminderOpen(false)}
+        onSend={sendReminderTeamWide}
+      />}
+
+    </div>
+  );
+};
+
+// ============================================================
+// Reminder composer — custom subject + body, scope toggle
+// ============================================================
+const ReminderComposer = ({ team, memberStats, onClose, onSend }) => {
+  const [scope, setScope] = React.useState("overdue");
+  const [subject, setSubject] = React.useState("Training reminder");
+  const [body, setBody] = React.useState("This is a reminder to complete your outstanding training in GIM Learning.");
+  const [busy, setBusy] = React.useState(false);
+
+  const overdueCount = team.filter(m => memberStats(m.id).overdue > 0).length;
+  const incompleteCount = team.filter(m => memberStats(m.id).assigned > 0).length;
+  const recipientCount = scope === "overdue" ? overdueCount : incompleteCount;
+
+  const handleSend = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await onSend({ overdueOnly: scope === "overdue", subject: subject.trim(), message: body.trim() });
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,16,17,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, width: "100%", maxWidth: 540, boxShadow: "0 24px 60px rgba(0,0,0,.3)", display: "flex", flexDirection: "column", maxHeight: "90vh" }}>
+        <div style={{ padding: "20px 24px 12px", borderBottom: "1px solid #ececec" }}>
+          <div style={{ fontSize: 18, fontWeight: 800 }}>Send reminder</div>
+          <div style={{ fontSize: 12, color: "#5f635f", marginTop: 4 }}>Email a reminder of incomplete training to your team.</div>
+        </div>
+
+        <div style={{ padding: 20, overflowY: "auto" }}>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#5f635f", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>Recipients</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", border: scope === "overdue" ? "2px solid #7ac142" : "1px solid #ececec", borderRadius: 8, cursor: "pointer", background: scope === "overdue" ? "#f0f9e6" : "#fff" }}>
+                <input type="radio" name="scope" checked={scope === "overdue"} onChange={() => setScope("overdue")} />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>Overdue only</div>
+                  <div style={{ fontSize: 12, color: "#5f635f" }}>{overdueCount} {overdueCount === 1 ? "report has" : "reports have"} overdue training.</div>
+                </div>
+              </label>
+              <label style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", border: scope === "all" ? "2px solid #7ac142" : "1px solid #ececec", borderRadius: 8, cursor: "pointer", background: scope === "all" ? "#f0f9e6" : "#fff" }}>
+                <input type="radio" name="scope" checked={scope === "all"} onChange={() => setScope("all")} />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>Everyone with incomplete training</div>
+                  <div style={{ fontSize: 12, color: "#5f635f" }}>{incompleteCount} {incompleteCount === 1 ? "report" : "reports"}.</div>
+                </div>
+              </label>
             </div>
           </div>
-        </div>
-      )}
 
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#5f635f", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>Subject</div>
+            <input type="text" value={subject} onChange={e => setSubject(e.target.value)}
+              style={{ width: "100%", padding: "9px 12px", border: "1px solid #d8d9d8", borderRadius: 8, fontSize: 13, fontFamily: "inherit" }}
+              placeholder="Email subject…" />
+          </div>
+
+          <div style={{ marginBottom: 4 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#5f635f", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>Message</div>
+            <textarea value={body} onChange={e => setBody(e.target.value)}
+              rows={6}
+              style={{ width: "100%", padding: "9px 12px", border: "1px solid #d8d9d8", borderRadius: 8, fontSize: 13, fontFamily: "inherit", resize: "vertical" }}
+              placeholder="Body of the email — recipients will see it as the message body…" />
+          </div>
+        </div>
+
+        <div style={{ padding: "14px 20px", borderTop: "1px solid #ececec", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fafafa" }}>
+          <span style={{ fontSize: 12, color: "#5f635f" }}>
+            Will email <strong>{recipientCount}</strong> {recipientCount === 1 ? "person" : "people"}.
+          </span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-ghost btn-sm" onClick={onClose} disabled={busy}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={handleSend} disabled={busy || recipientCount === 0 || !subject.trim() || !body.trim()}>
+              <Icon name="send" size={13}/> {busy ? "Sending…" : "Send reminder"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

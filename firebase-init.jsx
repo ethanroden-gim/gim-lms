@@ -90,10 +90,13 @@ const subscribeToData = (onChange) => {
     const map = {};
     const assigned = [];
     s.docs.forEach(d => {
-      const e = d.data();
+      const e = { id: d.id, ...d.data() };
+      // Live-compute days remaining at read time
+      const computed = daysUntilDue(e);
+      e.dueDays = computed; // overwrite/derive for downstream consumers
       map[e.courseId] = e;
       if (e.status === "assigned") {
-        assigned.push({ id: e.courseId, dueDays: e.dueDays || 0, required: !!e.required });
+        assigned.push({ id: e.courseId, dueDays: computed, required: !!e.required });
       }
     });
     setObj(ENROLLMENTS, map);
@@ -107,6 +110,8 @@ const subscribeToData = (onChange) => {
     const all = [];
     s.docs.forEach(d => {
       const e = { id: d.id, ...d.data() };
+      // Live-compute dueDays from dueAt so countdowns stay accurate
+      e.dueDays = daysUntilDue(e);
       all.push(e);
       if (e.courseId) counts[e.courseId] = (counts[e.courseId] || 0) + 1;
     });
@@ -118,7 +123,9 @@ const subscribeToData = (onChange) => {
   }));
 
   subs.push(fbDb.collection("departments").onSnapshot(s => {
-    setArr(DEPARTMENT_DOCS, s.docs.map(d => ({ id: d.id, ...d.data() })));
+    const arr = s.docs.map(d => ({ id: d.id, ...d.data() }));
+    arr.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    setArr(DEPARTMENT_DOCS, arr);
     onChange();
   }, err => {
     if (err.code !== "permission-denied") console.error("departments listener:", err);
@@ -136,6 +143,14 @@ const subscribeToData = (onChange) => {
     onChange();
   }, err => {
     if (err.code !== "permission-denied") console.error("assessments listener:", err);
+  }));
+
+  // Attempts listener — admins see everything, learners only see their own
+  subs.push(fbDb.collection("attempts").onSnapshot(s => {
+    setArr(ATTEMPTS, s.docs.map(d => ({ id: d.id, ...d.data() })));
+    onChange();
+  }, err => {
+    if (err.code !== "permission-denied") console.error("attempts listener:", err);
   }));
 
   // Certificate template — single doc at /settings/certificate
@@ -354,6 +369,10 @@ const assignTraining = async ({ userIds, courseIds, dueDays, required }) => {
   if (!userIds?.length || !courseIds?.length) return 0;
   const batch = fbDb.batch();
   const now = firebase.firestore.FieldValue.serverTimestamp();
+  // Compute an absolute due timestamp at assignment time so the countdown ticks
+  const dueAt = (dueDays != null)
+    ? firebase.firestore.Timestamp.fromMillis(Date.now() + dueDays * 86400000)
+    : null;
   let n = 0;
   for (const uid of userIds) {
     for (const cid of courseIds) {
@@ -363,7 +382,7 @@ const assignTraining = async ({ userIds, courseIds, dueDays, required }) => {
         courseId: cid,
         status: "assigned",
         progress: 0,
-        dueDays: dueDays ?? null,
+        dueAt: dueAt,
         required: !!required,
         assignedBy: window.CURRENT_USER?.uid || null,
         assignedAt: now,
@@ -373,6 +392,16 @@ const assignTraining = async ({ userIds, courseIds, dueDays, required }) => {
   }
   await batch.commit();
   return n;
+};
+
+// Compute "days remaining until due" from an enrollment doc.
+// Prefers absolute dueAt timestamp; falls back to legacy dueDays field.
+const daysUntilDue = (e) => {
+  if (e?.dueAt?.toDate) {
+    return Math.ceil((e.dueAt.toDate().getTime() - Date.now()) / 86400000);
+  }
+  if (typeof e?.dueDays === "number") return e.dueDays;
+  return null;
 };
 
 // ---- Course CRUD ----------------------------------------------------------
@@ -414,6 +443,72 @@ const deleteCourse = (id) =>
   fbReady ? fbDb.collection("courses").doc(id).delete()
           : Promise.reject(new Error("Firebase not configured"));
 
+// ---- Lesson time tracking -------------------------------------------------
+// Adds `seconds` to enrollment.timeSpent[lessonId] using a Firestore atomic
+// increment so concurrent ticks don't clobber each other.
+const addLessonTime = async (courseId, lessonId, seconds) => {
+  if (!fbReady || !fbAuth.currentUser || !lessonId || !seconds || seconds < 1) return;
+  const ref = fbDb.collection("enrollments").doc(`${fbAuth.currentUser.uid}_${courseId}`);
+  await ref.set({
+    userId: fbAuth.currentUser.uid,
+    courseId,
+    timeSpent: { [lessonId]: firebase.firestore.FieldValue.increment(seconds) },
+    totalSeconds: firebase.firestore.FieldValue.increment(seconds),
+    lastActivityAt: firebase.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+};
+
+// ---- Quiz attempts ---------------------------------------------------------
+// Every assessment submission writes an /attempts doc with answers + scores.
+// payload = { courseId, assessmentId?, answers, autoScore, total, passMark, manualPending? }
+const recordAttempt = async ({ courseId, assessmentId, answers, autoScore, total, passMark, manualPending }) => {
+  if (!fbReady || !fbAuth.currentUser) throw new Error("Not signed in");
+  const doc = {
+    userId: fbAuth.currentUser.uid,
+    userName: window.CURRENT_USER?.name || "",
+    userEmail: window.CURRENT_USER?.email || "",
+    courseId,
+    assessmentId: assessmentId || null,
+    answers: answers || {},
+    autoScore: autoScore ?? null,
+    total: total ?? null,
+    passMark: passMark ?? null,
+    finalScore: manualPending ? null : autoScore,
+    passed: manualPending ? null : (autoScore != null && passMark != null && autoScore >= passMark),
+    status: manualPending ? "pending_review" : "graded",
+    submittedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+  const ref = await fbDb.collection("attempts").add(doc);
+  return { id: ref.id, ...doc };
+};
+
+// Admin grades a pending attempt and finalises it
+const gradeAttempt = async (attemptId, { manualScores, finalScore, passed, gradedNotes }) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  await fbDb.collection("attempts").doc(attemptId).set({
+    manualScores: manualScores || {},
+    finalScore,
+    passed,
+    gradedNotes: gradedNotes || "",
+    status: "graded",
+    gradedBy: window.CURRENT_USER?.uid || null,
+    gradedByName: window.CURRENT_USER?.name || "",
+    gradedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+};
+
+// ---- Image upload (Firebase Storage) --------------------------------------
+const uploadImage = async (file, pathPrefix = "covers") => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  if (typeof firebase.storage !== "function") throw new Error("Storage SDK not loaded");
+  const storage = firebase.storage();
+  const ext = (file.name || "").split(".").pop() || "bin";
+  const id = `${pathPrefix}/${fbAuth.currentUser?.uid || "anon"}_${Date.now()}.${ext}`;
+  const ref = storage.ref(id);
+  await ref.put(file);
+  return await ref.getDownloadURL();
+};
+
 // ---- Email reminders (Google Apps Script web app) ------------------------
 // Posts to the deployed Apps Script /exec URL. Uses a "simple" request
 // (text/plain body) so the browser doesn't trigger a CORS preflight.
@@ -433,13 +528,29 @@ const sendEmailReminder = async ({ recipients, subject, message, course, dueDate
     secret: (window.GIM_CONFIG || {}).appsScriptSecret || "",
   };
 
-  const resp = await fetch(url, {
-    method: "POST",
-    body: JSON.stringify(payload),
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-  });
-  if (!resp.ok) throw new Error(`Reminder service returned HTTP ${resp.status}`);
-  const data = await resp.json().catch(() => ({}));
+  let resp;
+  try {
+    resp = await fetch(url, {
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      redirect: "follow",
+    });
+  } catch (netErr) {
+    throw new Error(`Network error: ${netErr.message}. Check the Apps Script URL and that the deployment is set to "Anyone" access (not "Anyone in organisation").`);
+  }
+  const text = await resp.text();
+  let data;
+  try { data = JSON.parse(text); }
+  catch {
+    // Apps Script returned HTML — usually a "Sign in" page when the deployment
+    // requires authenticated access. Tell the admin exactly what to fix.
+    if (/<html|<!doctype/i.test(text)) {
+      throw new Error('Apps Script returned an HTML page instead of JSON. Re-deploy the Web App with "Who has access: Anyone" (the secret check protects it). Manage deployments in Apps Script → Deploy → Manage deployments.');
+    }
+    throw new Error(`Bad response from Apps Script: ${text.slice(0, 200)}`);
+  }
+  if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
   if (data.error) throw new Error(data.error);
   return data; // { sent: number, errors: [...] }
 };
@@ -460,8 +571,10 @@ Object.assign(window, {
   saveRole, deleteRole,
   saveAssessment, archiveAssessment, deleteAssessment,
   saveCertificateTemplate,
-  assignTraining, updateUser, resetUserProgress,
+  assignTraining, daysUntilDue, updateUser, resetUserProgress,
   enrollSelf, markLessonComplete, recordCompletion, recordActivity,
+  addLessonTime, recordAttempt, gradeAttempt,
+  uploadImage,
   sendEmailReminder,
   signOutEverywhere,
 });

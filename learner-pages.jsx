@@ -8,9 +8,12 @@
 const CourseCard = ({ course, onOpen, enrollment }) => {
   const isReq = course.required;
   const e = enrollment;
+  const coverStyle = course.coverUrl
+    ? { backgroundImage: `url(${course.coverUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+    : null;
   return (
     <div className="course-card" onClick={onOpen}>
-      <div className={classNames("course-card__cover", course.cover)}>
+      <div className={classNames("course-card__cover", !course.coverUrl && course.cover)} style={coverStyle || undefined}>
         <div className="course-card__cover-tint" />
         <div className="course-card__chips">
           {isReq && <span className="chip chip-required">Required</span>}

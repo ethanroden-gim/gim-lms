@@ -65,6 +65,7 @@ const Icon = ({ name, className = "", size = 18 }) => {
     case "mail":     return <svg {...props}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>;
     case "globe":    return <svg {...props}><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>;
     case "monitor":  return <svg {...props}><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>;
+    case "tools":    return <svg {...props}><path d="M3 21h4l13-13a1.5 1.5 0 0 0-4-4l-13 13v4"/><path d="M14.5 5.5l4 4"/><path d="M12 8l-5-5-4 4 5 5"/><path d="M7 8l-1.5 1.5"/><path d="M16 12l5 5-4 4-5-5"/><path d="M16 17l-1.5 1.5"/></svg>;
     default: return null;
   }
 };
@@ -101,6 +102,7 @@ const DEPARTMENT_DOCS = []; // Firestore-backed department records (id, name, ..
 const ROLE_DOCS = [];       // Firestore-backed custom role records
 const ASSESSMENTS = [];     // Firestore-backed assessments
 const ALL_ENROLLMENTS = []; // every enrollment doc (admin-wide)
+const ATTEMPTS = [];        // every assessment attempt (admin-wide; learners filter to own)
 
 const SAMPLE_QUIZ = { courseId: null, title: "", questions: [] };
 
@@ -143,6 +145,6 @@ Object.assign(window, {
   Icon, Avatar,
   CURRENT_USER, DEPARTMENTS, CATEGORIES, COURSES, ENROLLMENTS, ASSIGNED, ACTIVITY,
   ALL_USERS, SAMPLE_QUIZ, TEAM_MEMBERS, ENROLLMENT_COUNTS, DEPARTMENT_DOCS, ROLE_DOCS,
-  ASSESSMENTS, ALL_ENROLLMENTS,
+  ASSESSMENTS, ALL_ENROLLMENTS, ATTEMPTS,
   classNames, lessonIcon,
 });

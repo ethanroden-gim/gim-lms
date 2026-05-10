@@ -326,7 +326,20 @@ const AdminUsersPage = () => {
   const [role, setRole] = React.useState("All");
   const [statusFilter, setStatusFilter] = React.useState("All");
   const [assignFor, setAssignFor] = React.useState(null); // userId, "all" for top-bar, or null
+  const [selectedIds, setSelectedIds] = React.useState([]);
   const openAssign = (name) => setAssignFor(name);
+
+  const toggleSelect = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const clearSelection = () => setSelectedIds([]);
+  const bulkMove = async (newDept) => {
+    if (!selectedIds.length) return;
+    if (!confirm(`Move ${selectedIds.length} ${selectedIds.length === 1 ? "person" : "people"} to "${newDept}"?`)) return;
+    try {
+      await Promise.all(selectedIds.map(id => updateUser(id, { dept: newDept })));
+      showToast?.(`Moved ${selectedIds.length} ${selectedIds.length === 1 ? "person" : "people"} to ${newDept}`);
+      clearSelection();
+    } catch (err) { alert("Bulk move failed: " + err.message); }
+  };
 
   // Real-time enrolment stats per user, keyed by user id
   const enrollmentsByUser = React.useMemo(() => {
@@ -387,9 +400,30 @@ const AdminUsersPage = () => {
         <span className="text-xs text-muted">{filtered.length} of {ALL_USERS.length}</span>
       </div>
 
+      {selectedIds.length > 0 && (
+        <div style={{ marginBottom: 12, padding: "10px 14px", background: "#f0f9e6", border: "1px solid #cfeab0", borderRadius: 10, display: "flex", alignItems: "center", gap: 12 }}>
+          <strong style={{ fontSize: 13 }}>{selectedIds.length} selected</strong>
+          <span style={{ fontSize: 12, color: "#5f635f" }}>·</span>
+          <span style={{ fontSize: 12, color: "#3a3a3a" }}>Bulk move to:</span>
+          <select onChange={e => { if (e.target.value) { bulkMove(e.target.value); e.target.value = ""; } }}
+            style={{ fontSize: 12, padding: "4px 10px", borderRadius: 6, border: "1px solid #cfeab0", background: "#fff" }}>
+            <option value="">Pick department…</option>
+            {DEPARTMENT_DOCS.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+          </select>
+          <div style={{ flex: 1 }} />
+          <button className="btn btn-ghost btn-sm" onClick={clearSelection}>Clear selection</button>
+        </div>
+      )}
+
       <table className="tbl">
         <thead>
           <tr>
+            <th style={{ width: 32 }}>
+              <input type="checkbox"
+                checked={selectedIds.length > 0 && selectedIds.length === filtered.length}
+                onChange={e => setSelectedIds(e.target.checked ? filtered.map(u => u.id) : [])}
+                title="Select all visible" />
+            </th>
             <th style={{ width: "28%" }}>Person</th>
             <th>Role</th>
             <th>Department</th>
@@ -419,6 +453,11 @@ const AdminUsersPage = () => {
             };
             return (
             <tr key={u.id}>
+              <td>
+                <input type="checkbox"
+                  checked={selectedIds.includes(u.id)}
+                  onChange={() => toggleSelect(u.id)} />
+              </td>
               <td>
                 <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                   <Avatar name={u.name} size={32} />
@@ -801,4 +840,255 @@ const AdminSettingsPage = () => {
   );
 };
 
-Object.assign(window, { AdminOverviewPage, AdminCoursesPage, AdminUsersPage, AdminAssessmentsPage, AdminSettingsPage });
+// ============================================================
+// Admin: Attempts (manual grading queue + history)
+// ============================================================
+const AdminAttemptsPage = () => {
+  const [tab, setTab] = React.useState("pending");
+  const [grading, setGrading] = React.useState(null); // attempt being graded
+
+  const sorted = React.useMemo(() => {
+    const arr = [...ATTEMPTS];
+    arr.sort((a, b) => {
+      const ta = a.submittedAt?.seconds ?? 0;
+      const tb = b.submittedAt?.seconds ?? 0;
+      return tb - ta;
+    });
+    return arr;
+  }, [ATTEMPTS.length, ATTEMPTS]);
+
+  const pending = sorted.filter(a => a.status === "pending_review");
+  const graded = sorted.filter(a => a.status === "graded");
+
+  const list = tab === "pending" ? pending : graded;
+
+  return (
+    <div className="page page--wide">
+      <div className="page-head">
+        <div>
+          <div className="page-head__eyebrow">Admin · Attempts</div>
+          <h1 className="page-head__title">Assessment attempts</h1>
+          <div className="page-head__sub">Audit log of every submission. Pending-review items need your grading.</div>
+        </div>
+      </div>
+
+      <div className="tabs">
+        <button className={classNames("tab", tab === "pending" && "active")} onClick={() => setTab("pending")}>
+          Pending review · {pending.length}
+        </button>
+        <button className={classNames("tab", tab === "graded" && "active")} onClick={() => setTab("graded")}>
+          Graded · {graded.length}
+        </button>
+      </div>
+
+      {list.length === 0 ? (
+        <div className="empty">{tab === "pending" ? "Nothing waiting for review." : "No graded attempts yet."}</div>
+      ) : (
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Learner</th>
+              <th>Course</th>
+              <th>Submitted</th>
+              <th>Auto score</th>
+              <th>Final</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.map(a => {
+              const c = COURSES.find(x => x.id === a.courseId);
+              const submittedTs = a.submittedAt?.toDate ? a.submittedAt.toDate() : null;
+              return (
+                <tr key={a.id}>
+                  <td>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{a.userName || a.userId}</div>
+                    <div style={{ fontSize: 11, color: "#5f635f" }}>{a.userEmail || ""}</div>
+                  </td>
+                  <td>{c?.title || "(missing)"}</td>
+                  <td style={{ fontSize: 12, color: "#5f635f" }}>{submittedTs ? submittedTs.toLocaleString() : "—"}</td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>{a.autoScore != null ? `${a.autoScore}%` : "—"}</td>
+                  <td>
+                    {a.status === "pending_review" ? <span className="chip chip-amber">Pending</span> :
+                     a.passed ? <span className="chip chip-green">{a.finalScore}% · Pass</span> :
+                                <span className="chip chip-grey">{a.finalScore != null ? `${a.finalScore}% · Fail` : "—"}</span>}
+                  </td>
+                  <td>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setGrading(a)}>
+                      {a.status === "pending_review" ? "Grade" : "View"}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+
+      {grading && <GradeAttemptModal attempt={grading} onClose={() => setGrading(null)} />}
+    </div>
+  );
+};
+
+// ---------- Grade Attempt modal ----------
+const GradeAttemptModal = ({ attempt, onClose }) => {
+  const a = attempt;
+  const linkedAssessment = ASSESSMENTS.find(x => x.id === a.assessmentId);
+  const questions = linkedAssessment?.questions || [];
+  const isReadonly = a.status !== "pending_review";
+
+  const [manualScores, setManualScores] = React.useState(() => a.manualScores || {});
+  const [notes, setNotes] = React.useState(a.gradedNotes || "");
+  const [busy, setBusy] = React.useState(false);
+
+  // Compute final score: auto-graded portion + manual scores
+  const finalScore = React.useMemo(() => {
+    const autoCorrect = (a.autoScore != null && a.total) ? Math.round((a.autoScore / 100) * (a.total - Object.keys(manualScores).length)) : 0;
+    const manualPoints = Object.values(manualScores).reduce((s, v) => s + (typeof v === "number" ? v : 0), 0);
+    const totalPossible = (a.total || questions.length) || 1;
+    const totalEarned = autoCorrect + manualPoints;
+    return Math.round((totalEarned / totalPossible) * 100);
+  }, [manualScores, a, questions.length]);
+
+  const passed = a.passMark != null ? finalScore >= a.passMark : null;
+
+  const submit = async () => {
+    if (busy || isReadonly) return;
+    setBusy(true);
+    try {
+      await gradeAttempt(a.id, {
+        manualScores,
+        finalScore,
+        passed,
+        gradedNotes: notes,
+      });
+      // If passed, also record completion on the enrollment
+      const course = COURSES.find(c => c.id === a.courseId);
+      if (passed && course) {
+        try { await recordCompletion(course, finalScore); } catch {}
+      }
+      // Email the learner
+      if (a.userEmail && (window.GIM_CONFIG || {}).appsScriptReminderUrl) {
+        try {
+          await sendEmailReminder({
+            recipients: [{ email: a.userEmail, name: a.userName }],
+            subject: passed ? `You passed: ${course?.title || "your assessment"}` : `Assessment graded: ${course?.title || ""}`,
+            message: passed
+              ? `Great news — you scored ${finalScore}% and passed. Your certificate is now available in GIM Learning.`
+              : `Your assessment was graded. Final score: ${finalScore}%. ${a.passMark != null ? `Passing requires ${a.passMark}%. ` : ""}Please retake when you're ready.`,
+          });
+        } catch {}
+      }
+      showToast?.("Attempt graded");
+      onClose();
+    } catch (err) {
+      alert("Grading failed: " + err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal open={true} onClose={onClose} width={760}>
+      <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #ececec", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <div className="eyebrow-sm">{isReadonly ? "Graded attempt" : "Grade attempt"}</div>
+          <div style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>{a.userName || a.userId}</div>
+          <div style={{ fontSize: 12, color: "#5f635f", marginTop: 2 }}>
+            {COURSES.find(c => c.id === a.courseId)?.title || ""} · auto-score {a.autoScore != null ? `${a.autoScore}%` : "—"}
+          </div>
+        </div>
+        <button className="btn-icon" onClick={onClose}><Icon name="close" size={18}/></button>
+      </div>
+
+      <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
+        {questions.length === 0 ? (
+          <div className="text-muted text-sm">The linked assessment doc was deleted; raw answers shown below.</div>
+        ) : null}
+
+        {questions.map((q, i) => {
+          const ans = a.answers?.[i];
+          const isManual = q.type === "short" || q.type === "essay";
+          if (!isManual) {
+            // Show auto-graded summary
+            let display = "";
+            if (Array.isArray(ans)) display = ans.map(idx => q.options?.[idx]).filter(Boolean).join(", ");
+            else if (typeof ans === "number") display = q.options?.[ans] || "";
+            return (
+              <div key={i} style={{ padding: 14, marginBottom: 10, border: "1px solid #ececec", borderRadius: 10, background: "#fafafa" }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#5f635f" }}>Q{i + 1}</span>
+                  <span className="chip chip-grey" style={{ fontSize: 10 }}>{qTypeLabel ? qTypeLabel(q.type) : q.type}</span>
+                  <span style={{ fontSize: 11, color: "#5f635f" }}>auto-graded</span>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{q.text || q.q}</div>
+                <div style={{ fontSize: 12, color: "#5f635f", marginTop: 6 }}>Their answer: <strong>{display || "(none)"}</strong></div>
+              </div>
+            );
+          }
+          return (
+            <div key={i} style={{ padding: 14, marginBottom: 10, border: "1px solid #f3d999", borderRadius: 10, background: "#fff5e0" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#5f635f" }}>Q{i + 1}</span>
+                <span className="chip chip-amber" style={{ fontSize: 10 }}>{q.type === "essay" ? "Essay" : "Short answer"}</span>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{q.text || q.q}</div>
+              <div style={{ marginTop: 10, padding: 10, background: "#fff", border: "1px solid #ececec", borderRadius: 6, whiteSpace: "pre-wrap", fontSize: 13 }}>
+                {ans || <em style={{ color: "#a8232b" }}>(blank)</em>}
+              </div>
+              <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                <label style={{ fontSize: 12, color: "#5f635f" }}>Your score (0–{q.points || 1}):</label>
+                <input
+                  type="number"
+                  min="0"
+                  max={q.points || 1}
+                  step="0.5"
+                  value={manualScores[i] ?? ""}
+                  onChange={e => {
+                    const v = e.target.value === "" ? undefined : Math.max(0, Math.min(q.points || 1, parseFloat(e.target.value) || 0));
+                    setManualScores(prev => ({ ...prev, [i]: v }));
+                  }}
+                  disabled={isReadonly}
+                  style={{ width: 80, padding: "6px 10px", border: "1px solid #d8d9d8", borderRadius: 6, fontSize: 13 }}
+                />
+              </div>
+            </div>
+          );
+        })}
+
+        <div style={{ marginTop: 16 }}>
+          <FieldLabel hint="Optional. Shown to the learner in their notification email.">Feedback notes</FieldLabel>
+          <TextArea
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            disabled={isReadonly}
+            placeholder="Anything you'd like to share with the learner about their submission…"
+          />
+        </div>
+
+        <div style={{ marginTop: 16, padding: 14, background: "#f8f7f2", borderRadius: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 13 }}>
+            <div className="text-xs text-muted">Final score</div>
+            <div style={{ fontSize: 22, fontWeight: 800, marginTop: 2 }}>{finalScore}%</div>
+          </div>
+          {a.passMark != null && (
+            <div style={{ fontSize: 13, fontWeight: 700, color: passed ? "#2e5a12" : "#a8232b" }}>
+              {passed ? `✓ Pass (≥${a.passMark}%)` : `✗ Fail (need ${a.passMark}%)`}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ padding: "14px 24px", borderTop: "1px solid #ececec", display: "flex", justifyContent: "flex-end", gap: 8, background: "#fafafa" }}>
+        <button className="btn btn-ghost btn-sm" onClick={onClose}>{isReadonly ? "Close" : "Cancel"}</button>
+        {!isReadonly && (
+          <button className="btn btn-primary btn-sm" onClick={submit} disabled={busy}>
+            <Icon name="check" size={14}/> {busy ? "Finalising…" : "Finalise grade & email learner"}
+          </button>
+        )}
+      </div>
+    </Modal>
+  );
+};
+
+Object.assign(window, { AdminOverviewPage, AdminCoursesPage, AdminUsersPage, AdminAssessmentsPage, AdminAttemptsPage, AdminSettingsPage });

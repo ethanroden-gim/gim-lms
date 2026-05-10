@@ -405,7 +405,7 @@ const QuestionsStep = ({ questions, removeQuestion, editingQ, setEditingQ, upser
                     <span style={{ fontSize: 11, color: "#5f635f" }}>{q.points || 1} pt</span>
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, wordWrap: "break-word" }}>{q.text}</div>
-                  {q.type !== "short" && q.options && (
+                  {q.type !== "short" && q.type !== "essay" && q.options && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                       {q.options.map((opt, oi) => (
                         <div key={oi} style={{ fontSize: 11, color: q.correct.includes(oi) ? "#2e5a12" : "#5f635f", display: "flex", gap: 6 }}>
@@ -434,6 +434,7 @@ const qTypeLabel = (t) =>
   : t === "multi" ? "Multi-select"
   : t === "tf" ? "True / False"
   : t === "short" ? "Short answer"
+  : t === "essay" ? "Essay"
   : t;
 
 // ============================================================
@@ -452,7 +453,7 @@ const QuestionEditor = ({ initial, onSave, onCancel }) => {
     if (type === "tf") {
       setOptions(["True", "False"]);
       setCorrect([]);
-    } else if (type === "short") {
+    } else if (type === "short" || type === "essay") {
       setOptions([]);
       setCorrect([]);
     } else if (options.length === 0 || options[0] === "True") {
@@ -474,7 +475,7 @@ const QuestionEditor = ({ initial, onSave, onCancel }) => {
   };
 
   const valid = text.trim().length > 0
-    && (type === "short" || (options.filter(o => o.trim()).length >= 2 && correct.length >= 1));
+    && (type === "short" || type === "essay" || (options.filter(o => o.trim()).length >= 2 && correct.length >= 1));
 
   const save = () => {
     onSave({ type, text: text.trim(), options, correct, points, explanation: explanation.trim() });
@@ -495,6 +496,7 @@ const QuestionEditor = ({ initial, onSave, onCancel }) => {
             <option value="multi">Multi-select (multiple correct)</option>
             <option value="tf">True / False</option>
             <option value="short">Short answer (manually graded)</option>
+            <option value="essay">Essay (manually graded)</option>
           </SelectInput>
         </div>
         <div>
@@ -515,7 +517,18 @@ const QuestionEditor = ({ initial, onSave, onCancel }) => {
         />
       </div>
 
-      {type !== "short" && (
+      {(type === "short" || type === "essay") && (
+        <div style={{ marginBottom: 14, padding: 12, background: "#fff5e0", border: "1px solid #f3d999", borderRadius: 8 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <Icon name="flag" size={14} color="#8a5a00" />
+            <div style={{ fontSize: 12, color: "#8a5a00", lineHeight: 1.5 }}>
+              <strong>{type === "essay" ? "Essay" : "Short answer"} questions are graded manually.</strong> When a learner submits, the attempt goes to <strong>Admin → Attempts</strong> for review. The learner sees a "pending review" status until you grade and finalise.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {type !== "short" && type !== "essay" && (
         <div style={{ marginBottom: 14 }}>
           <FieldLabel hint={type === "multi" ? "Tap the circles to mark correct answers (multiple)." : "Tap the circle to mark the correct answer."}>
             Answer options
@@ -614,7 +627,7 @@ const ReviewStep = ({ title, description, type, courseTitle, questions, passMark
 // ============================================================
 const DEPT_PRESETS = [
   { icon: "house",   bg: "#f0f9e6", color: "#2e5a12", label: "Property"    },
-  { icon: "wrench",  bg: "#f0f9e6", color: "#2e5a12", label: "Maintenance" },
+  { icon: "tools",   bg: "#f0f9e6", color: "#2e5a12", label: "Maintenance" },
   { icon: "tag",     bg: "#f3e8ff", color: "#5b21b6", label: "Sales / Marketing" },
   { icon: "money",   bg: "#fff7d6", color: "#8a5a00", label: "Finance"     },
   { icon: "users",   bg: "#e6f0ff", color: "#1e3a8a", label: "People"      },

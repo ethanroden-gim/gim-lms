@@ -254,15 +254,7 @@ const DetailsTab = ({ c, set }) => (
     </div>
 
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div className="card card-pad">
-        <div className="cd-section-title">Cover</div>
-        <div className={classNames("ce-cover", c.cover)} style={{ marginTop: 10 }} />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, marginTop: 10 }}>
-          {COVERS.map(cov => (
-            <button key={cov} onClick={() => set({ cover: cov })} className={classNames("ce-cover-thumb", cov, c.cover === cov && "active")} title={cov} />
-          ))}
-        </div>
-      </div>
+      <CoverPicker c={c} set={set} />
 
       <div className="card card-pad">
         <div className="cd-section-title">Status</div>
@@ -278,6 +270,67 @@ const DetailsTab = ({ c, set }) => (
     </div>
   </div>
 );
+
+const CoverPicker = ({ c, set }) => {
+  const [uploading, setUploading] = React.useState(false);
+  const fileRef = React.useRef(null);
+
+  const onFile = async (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    if (!window.uploadImage) { alert("Image upload requires Firebase Storage to be enabled."); return; }
+    if (f.size > 5 * 1024 * 1024) { alert("Image must be under 5 MB."); return; }
+    setUploading(true);
+    try {
+      const url = await uploadImage(f, "courses");
+      set({ coverUrl: url });
+    } catch (err) {
+      alert("Upload failed: " + err.message);
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const previewStyle = c.coverUrl
+    ? { backgroundImage: `url(${c.coverUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+    : {};
+
+  return (
+    <div className="card card-pad">
+      <div className="cd-section-title">Cover</div>
+      <div
+        className={classNames("ce-cover", !c.coverUrl && c.cover)}
+        style={{ marginTop: 10, ...previewStyle }}
+      />
+      <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          style={{ flex: 1 }}
+        >
+          <Icon name="upload" size={12}/> {uploading ? "Uploading…" : (c.coverUrl ? "Replace image" : "Upload image")}
+        </button>
+        {c.coverUrl && (
+          <button className="btn btn-ghost btn-sm" onClick={() => set({ coverUrl: "" })}>
+            Use preset
+          </button>
+        )}
+        <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
+      </div>
+      {!c.coverUrl && (
+        <>
+          <div className="text-xs text-muted" style={{ marginTop: 12, marginBottom: 6 }}>Or pick a preset:</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+            {COVERS.map(cov => (
+              <button key={cov} onClick={() => set({ cover: cov })} className={classNames("ce-cover-thumb", cov, c.cover === cov && "active")} title={cov} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 
 const ContentTab = ({ c, addModule, removeModule, updateModule, moveModule, addLesson, updateLesson, removeLesson, moveLesson, reorderLessons }) => {
   // Drag state — { mi, li } of the lesson being dragged
