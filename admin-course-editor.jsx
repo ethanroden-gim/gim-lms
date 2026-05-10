@@ -271,24 +271,47 @@ const DetailsTab = ({ c, set }) => (
   </div>
 );
 
+// Convert common Drive / hosted image URLs into a direct-loadable image URL
+const normaliseImageUrl = (url) => {
+  if (!url) return url;
+  // Drive: /file/d/ID/view → image-loadable direct URL (works for "Anyone with the link")
+  let m = url.match(/drive\.google\.com\/file\/d\/([\w-]+)/);
+  if (m) return `https://lh3.googleusercontent.com/d/${m[1]}`;
+  m = url.match(/drive\.google\.com\/open\?id=([\w-]+)/) || url.match(/[?&]id=([\w-]+)/);
+  if (m) return `https://lh3.googleusercontent.com/d/${m[1]}`;
+  return url;
+};
+
 const CoverPicker = ({ c, set }) => {
   const [uploading, setUploading] = React.useState(false);
+  const [urlInput, setUrlInput] = React.useState("");
   const fileRef = React.useRef(null);
 
   const onFile = async (e) => {
     const f = e.target.files?.[0]; if (!f) return;
-    if (!window.uploadImage) { alert("Image upload requires Firebase Storage to be enabled."); return; }
+    if (!window.uploadImage) { alert("Image upload requires Firebase Storage on the Blaze plan."); return; }
     if (f.size > 5 * 1024 * 1024) { alert("Image must be under 5 MB."); return; }
     setUploading(true);
     try {
       const url = await uploadImage(f, "courses");
       set({ coverUrl: url });
     } catch (err) {
-      alert("Upload failed: " + err.message);
+      // Fall through to a less alarming hint when the project isn't on Blaze
+      const blazeHint = /storage\/unauthorized|blaze|billing|requires the Blaze plan|object-not-found/i.test(String(err.message))
+        ? "\n\nIf your Firebase project is on the free Spark plan, Storage isn't available — paste an image URL instead."
+        : "";
+      alert("Upload failed: " + err.message + blazeHint);
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
     }
+  };
+
+  const useUrl = () => {
+    const trimmed = urlInput.trim();
+    if (!trimmed) return;
+    set({ coverUrl: normaliseImageUrl(trimmed) });
+    setUrlInput("");
   };
 
   const previewStyle = c.coverUrl
@@ -302,22 +325,43 @@ const CoverPicker = ({ c, set }) => {
         className={classNames("ce-cover", !c.coverUrl && c.cover)}
         style={{ marginTop: 10, ...previewStyle }}
       />
-      <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+
+      {/* URL paste — works on the free Spark plan */}
+      <div style={{ marginTop: 10 }}>
+        <div className="text-xs text-muted" style={{ marginBottom: 4 }}>Paste an image URL (Drive / hosted image)</div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <input
+            type="url"
+            className="cd-input"
+            value={urlInput}
+            onChange={e => setUrlInput(e.target.value)}
+            placeholder="https://… or Drive sharing link"
+            style={{ flex: 1, fontSize: 12 }}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); useUrl(); } }}
+          />
+          <button className="btn btn-ghost btn-sm" onClick={useUrl} disabled={!urlInput.trim()}>Use</button>
+        </div>
+      </div>
+
+      {/* File upload — requires Firebase Storage / Blaze plan */}
+      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
         <button
           className="btn btn-ghost btn-sm"
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
           style={{ flex: 1 }}
+          title="Requires Firebase Storage (Blaze plan)"
         >
-          <Icon name="upload" size={12}/> {uploading ? "Uploading…" : (c.coverUrl ? "Replace image" : "Upload image")}
+          <Icon name="upload" size={12}/> {uploading ? "Uploading…" : "Upload from computer"}
         </button>
         {c.coverUrl && (
           <button className="btn btn-ghost btn-sm" onClick={() => set({ coverUrl: "" })}>
-            Use preset
+            Clear
           </button>
         )}
         <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
       </div>
+
       {!c.coverUrl && (
         <>
           <div className="text-xs text-muted" style={{ marginTop: 12, marginBottom: 6 }}>Or pick a preset:</div>
