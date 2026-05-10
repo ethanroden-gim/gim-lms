@@ -115,52 +115,67 @@ const SigBlock = ({ value, label, accent, ink }) => (
   </div>
 );
 
-// Branded "official" seal — concentric rings, curved labels, big monogram
+// Branded "official" seal — no curved text, just decorative concentric rings,
+// rays, and ornamental marks around a central GIM monogram.
 const OfficialSeal = ({ accent, ink }) => {
-  const SIZE = 180;
+  const SIZE = 170;
+  const cx = 85, cy = 85;
+
+  // Helper to compute a point on a circle around (cx, cy)
+  const ptOn = (radius, t) => {
+    const a = t * Math.PI * 2 - Math.PI / 2; // t=0 at top, increases clockwise
+    return { x: cx + Math.cos(a) * radius, y: cy + Math.sin(a) * radius };
+  };
+
   return (
     <div style={{ width: SIZE, height: SIZE, flexShrink: 0, position: "relative" }}>
-      <svg viewBox="0 0 180 180" width={SIZE} height={SIZE}>
-        <defs>
-          {/* Wider arc with a longer path so glyphs aren't crammed.
-              Center (90,90), radius 70, extends from ~205° to ~335° (roughly the top 130°).
-              Path starts at lower-left of the upper hemisphere and ends at lower-right. */}
-          <path id="sealTopArc" d="M 25,108 A 70,70 0 0 1 155,108" fill="none" />
-          <path id="sealBotArc" d="M 30,72 A 60,60 0 0 0 150,72" fill="none" />
-        </defs>
+      <svg viewBox="0 0 170 170" width={SIZE} height={SIZE}>
+        {/* Outermost: hairline circle */}
+        <circle cx={cx} cy={cy} r="80" fill="none" stroke={accent} strokeWidth="1" opacity="0.5" />
 
-        {/* Outer ring + notched rim */}
-        <circle cx="90" cy="90" r="85" fill="none" stroke={accent} strokeWidth="2.5" />
-        {Array.from({ length: 48 }).map((_, i) => {
-          const a = (i / 48) * Math.PI * 2;
-          const r1 = 85, r2 = 81;
+        {/* Notched outer rim — heavier ring */}
+        <circle cx={cx} cy={cy} r="74" fill="none" stroke={accent} strokeWidth="2.5" />
+        {Array.from({ length: 60 }).map((_, i) => {
+          const a = (i / 60) * Math.PI * 2;
           return <line key={i}
-            x1={90 + Math.cos(a) * r1} y1={90 + Math.sin(a) * r1}
-            x2={90 + Math.cos(a) * r2} y2={90 + Math.sin(a) * r2}
-            stroke={accent} strokeWidth="1.2" />;
+            x1={cx + Math.cos(a) * 74} y1={cy + Math.sin(a) * 74}
+            x2={cx + Math.cos(a) * 70} y2={cy + Math.sin(a) * 70}
+            stroke={accent} strokeWidth="1" />;
         })}
-        {/* Inner band where curved text lives */}
-        <circle cx="90" cy="90" r="68" fill="none" stroke={accent} strokeWidth="1" />
-        <circle cx="90" cy="90" r="58" fill="none" stroke={accent} strokeWidth="0.6" strokeDasharray="3 2" />
 
-        {/* Curved top text — shortened and well-spaced so it fits on one arc */}
-        <text fontFamily="var(--font-sans)" fontSize="11" letterSpacing="3" fill={ink} fontWeight="600">
-          <textPath href="#sealTopArc" startOffset="50%" textAnchor="middle">GIM • PROPERTY MGMT</textPath>
-        </text>
-        {/* Curved bottom text */}
-        <text fontFamily="var(--font-sans)" fontSize="10" letterSpacing="3" fill={accent} fontWeight="600">
-          <textPath href="#sealBotArc" startOffset="50%" textAnchor="middle">★  OFFICIALLY AWARDED  ★</textPath>
-        </text>
+        {/* Inner ring */}
+        <circle cx={cx} cy={cy} r="56" fill="none" stroke={accent} strokeWidth="1.5" />
 
-        {/* Solid center disc */}
-        <circle cx="90" cy="90" r="38" fill={accent} />
-        <circle cx="90" cy="90" r="34" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1" />
-        {/* Monogram */}
-        <text x="90" y="100" textAnchor="middle" fontFamily="var(--font-display)" fontSize="30" fontWeight="400" fill="#fff" letterSpacing="1.5">GIM</text>
+        {/* Ornamental dots between the two rings, every 30° */}
+        {Array.from({ length: 12 }).map((_, i) => {
+          const p = ptOn(63, i / 12);
+          return <circle key={`dot-${i}`} cx={p.x} cy={p.y} r="1.5" fill={accent} />;
+        })}
 
-        {/* Side stars (decorative) */}
-        <text x="6" y="95" fontSize="14" fill={accent} fontWeight="700">★</text>
-        <text x="160" y="95" fontSize="14" fill={accent} fontWeight="700">★</text>
+        {/* Decorative stars at the four cardinal corners (offset 22.5°) */}
+        {[0.125, 0.375, 0.625, 0.875].map(t => {
+          const p = ptOn(64, t);
+          return (
+            <text key={`star-${t}`} x={p.x} y={p.y + 4} textAnchor="middle"
+              fontSize="11" fill={accent} fontWeight="700">★</text>
+          );
+        })}
+
+        {/* Subtle sunburst rays radiating from the center disc */}
+        {Array.from({ length: 32 }).map((_, i) => {
+          const a = (i / 32) * Math.PI * 2;
+          return <line key={`ray-${i}`}
+            x1={cx + Math.cos(a) * 42} y1={cy + Math.sin(a) * 42}
+            x2={cx + Math.cos(a) * 48} y2={cy + Math.sin(a) * 48}
+            stroke={accent} strokeWidth="0.8" opacity="0.45" />;
+        })}
+
+        {/* Solid center disc with monogram */}
+        <circle cx={cx} cy={cy} r="36" fill={accent} />
+        <circle cx={cx} cy={cy} r="32" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="1" />
+        <text x={cx} y={cy + 7} textAnchor="middle"
+          fontFamily="var(--font-display)" fontSize="22" fontWeight="400"
+          fill="#fff" letterSpacing="1.5">GIM</text>
       </svg>
     </div>
   );
