@@ -60,18 +60,19 @@ const CertificateRender = ({ template, course, learnerName, completedOn, score, 
       </div>
 
       {/* Body */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", textAlign: "center", padding: "0 60px" }}>
-        {/* Headline (bold, large): "Certificate of Completion" */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", textAlign: "center", padding: "0 32px" }}>
+        {/* Headline (bold, large): "Certificate of Completion" — single line */}
         <div style={{
-          fontFamily: "var(--font-display)", fontSize: 64, lineHeight: 1.05,
+          fontFamily: "var(--font-display)", fontSize: 52, lineHeight: 1.05,
           color: t.ink, letterSpacing: "-0.01em", fontWeight: 700,
+          whiteSpace: "nowrap",
         }}>{t.headline}</div>
 
-        {/* Eyebrow (smaller, lighter): "Awarded with Excellence" */}
+        {/* Eyebrow (bold uppercase): "Awarded with Excellence" */}
         <div style={{
           marginTop: 14,
           fontFamily: "var(--font-sans)", fontSize: 16, letterSpacing: "0.32em",
-          color: t.accent, fontWeight: 500, textTransform: "uppercase",
+          color: t.accent, fontWeight: 800, textTransform: "uppercase",
         }}>{t.eyebrow}</div>
 
         <div style={{ marginTop: 38, fontSize: 14, color: "#5f635f", letterSpacing: "0.08em", textTransform: "uppercase" }}>This certifies that</div>
@@ -142,12 +143,12 @@ const OfficialSeal = ({ accent, ink }) => {
         <circle cx="85" cy="85" r="64" fill="none" stroke={accent} strokeWidth="1" />
         <circle cx="85" cy="85" r="56" fill="none" stroke={accent} strokeWidth="0.6" strokeDasharray="3 2" />
 
-        {/* Curved top text — large, tight letter spacing for readability */}
-        <text fontFamily="var(--font-display)" fontSize="13" letterSpacing="0.5" fill={ink} fontWeight="700">
+        {/* Curved top text — Switzer at medium weight reads cleanly at 12px */}
+        <text fontFamily="var(--font-sans)" fontSize="12" letterSpacing="2" fill={ink} fontWeight="600">
           <textPath href="#sealTopArc" startOffset="50%" textAnchor="middle">GIM PROPERTY MANAGEMENT</textPath>
         </text>
         {/* Curved bottom text */}
-        <text fontFamily="var(--font-display)" fontSize="11" letterSpacing="1" fill={accent} fontWeight="700">
+        <text fontFamily="var(--font-sans)" fontSize="10" letterSpacing="3" fill={accent} fontWeight="600">
           <textPath href="#sealBotArc" startOffset="50%" textAnchor="middle">★  OFFICIALLY AWARDED  ★</textPath>
         </text>
 
@@ -155,8 +156,8 @@ const OfficialSeal = ({ accent, ink }) => {
         <circle cx="85" cy="85" r="34" fill={accent} />
         {/* Inner ring on disc for definition */}
         <circle cx="85" cy="85" r="30" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1" />
-        {/* Monogram */}
-        <text x="85" y="93" textAnchor="middle" fontFamily="var(--font-display)" fontSize="26" fontWeight="700" fill="#fff" letterSpacing="1.5">GIM</text>
+        {/* Monogram — keep display font for the brand mark */}
+        <text x="85" y="93" textAnchor="middle" fontFamily="var(--font-display)" fontSize="26" fontWeight="400" fill="#fff" letterSpacing="1.5">GIM</text>
 
         {/* Side stars (decorative) */}
         <text x="10" y="90" fontSize="13" fill={accent} fontWeight="700">★</text>

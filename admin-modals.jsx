@@ -73,7 +73,8 @@ const Stepper = ({ step, steps }) => (
 // New Assessment modal — 4 steps
 // ============================================================
 const NewAssessmentModal = ({ open, onClose, initial }) => {
-  const isEdit = !!initial;
+  // initial may be: null/{} (brand new) | { courseId, title, ... } (prefilled new) | { id, ... } (edit)
+  const isEdit = !!(initial && initial.id);
   const [step, setStep] = React.useState(1);
 
   // Step 1: Details

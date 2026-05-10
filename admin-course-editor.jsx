@@ -58,6 +58,7 @@ const AdminCourseEditorPage = ({ mode, courseId, goBack }) => {
   const [c, setC] = React.useState(() => isNew ? blankCourse() : (loadEditCourse(courseId) || blankCourse()));
   const [tab, setTab] = React.useState("details");
   const [saving, setSaving] = React.useState(false);
+  const [assessmentEditorState, setAssessmentEditorState] = React.useState(null); // null = closed; doc | { courseId } = open
   const set = (patch) => setC(prev => ({ ...prev, ...patch }));
 
   // If COURSES loads after the editor mounts (e.g. deep-link refresh), hydrate once
@@ -178,8 +179,15 @@ const AdminCourseEditorPage = ({ mode, courseId, goBack }) => {
       {tab === "details"   && <DetailsTab c={c} set={set} />}
       {tab === "content"   && <ContentTab c={c} addModule={addModule} removeModule={removeModule} updateModule={updateModule} moveModule={moveModule}
                                 addLesson={addLesson} updateLesson={updateLesson} removeLesson={removeLesson} moveLesson={moveLesson} />}
-      {tab === "assess"    && <AssessmentTab c={c} set={set} />}
+      {tab === "assess"    && <AssessmentTab c={c} set={set} isNew={isNew} onOpenAssessment={setAssessmentEditorState} />}
       {tab === "resources" && <ResourcesTab c={c} addResource={addResource} updateResource={updateResource} removeResource={removeResource} />}
+
+      {/* Linked-assessment editor opens via "Open question editor" on the Assessment tab */}
+      <NewAssessmentModal
+        open={assessmentEditorState !== null}
+        onClose={() => setAssessmentEditorState(null)}
+        initial={assessmentEditorState}
+      />
     </div>
   );
 };
@@ -213,9 +221,10 @@ const DetailsTab = ({ c, set }) => (
         </div>
         <div className="cd-field">
           <label>Department</label>
-          <select className="cd-input" value={c.dept} onChange={e => set({ dept: e.target.value })}>
-            {DEPARTMENTS.map(x => <option key={x}>{x}</option>)}
-            <option>All departments</option>
+          <select className="cd-input" value={c.dept || ""} onChange={e => set({ dept: e.target.value })}>
+            <option value="">— Pick a department —</option>
+            {DEPARTMENT_DOCS.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+            <option value="all">All departments</option>
           </select>
         </div>
         <div className="cd-field">
@@ -335,34 +344,66 @@ const LessonRow = ({ l, onChange, onRemove, onUp, onDown }) => {
   );
 };
 
-const AssessmentTab = ({ c, set }) => (
-  <div className="card card-pad" style={{ maxWidth: 720 }}>
-    <div className="cd-section-title">Final assessment</div>
-    <div className="text-xs text-muted" style={{ marginTop: 4 }}>
-      Learners must pass to receive a certificate.
-    </div>
+const AssessmentTab = ({ c, set, isNew, onOpenAssessment }) => {
+  const linked = !isNew && c.id ? (window.ASSESSMENTS || []).find(a => a.courseId === c.id && a.status !== "archived") : null;
+  const cantEditYet = isNew || c.id === "new" || !c.id;
 
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
-      <div className="cd-field">
-        <label>Number of questions</label>
-        <input className="cd-input" type="number" min="0" value={c.questionsCount} onChange={e => set({ questionsCount: +e.target.value })} />
+  return (
+    <div className="card card-pad" style={{ maxWidth: 720 }}>
+      <div className="cd-section-title">Final assessment</div>
+      <div className="text-xs text-muted" style={{ marginTop: 4 }}>
+        Learners must pass to receive a certificate. Assessments are stored separately and can be reused across courses.
       </div>
-      <div className="cd-field">
-        <label>Passing score (%)</label>
-        <input className="cd-input" type="number" min="0" max="100" value={c.passingScore} onChange={e => set({ passingScore: +e.target.value })} />
-      </div>
-    </div>
 
-    <div className="cd-field" style={{ marginTop: 12 }}>
-      <button className="btn btn-ghost btn-sm">
-        <Icon name="plus" size={12}/> Open question editor
-      </button>
-      <div className="text-xs text-muted" style={{ marginTop: 6 }}>
-        {c.questionsCount} questions configured · randomized per learner.
+      {cantEditYet ? (
+        <div className="card card-pad" style={{ marginTop: 14, background: "#f8f7f2", border: "1px dashed #d8d9d8", textAlign: "center" }}>
+          <div style={{ fontSize: 13, color: "#5f635f", marginBottom: 8 }}>
+            Save the course first, then come back here to add an assessment.
+          </div>
+        </div>
+      ) : linked ? (
+        <>
+          <div style={{ marginTop: 14, padding: 14, background: "#f0f9e6", border: "1px solid #cfeab0", borderRadius: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>{linked.title}</div>
+                <div className="text-xs text-muted" style={{ marginTop: 4 }}>
+                  {linked.questions?.length || 0} question{linked.questions?.length === 1 ? "" : "s"} · pass mark {linked.passMark || 80}% · {linked.status === "draft" ? "Draft" : "Published"}
+                </div>
+              </div>
+              <button className="btn btn-primary btn-sm" onClick={() => onOpenAssessment(linked)}>
+                <Icon name="edit" size={12}/> Open question editor
+              </button>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div style={{ marginTop: 14, padding: 18, background: "#fafafa", border: "1px dashed #d8d9d8", borderRadius: 10, textAlign: "center" }}>
+          <div style={{ fontSize: 13, color: "#3a3a3a", marginBottom: 12, lineHeight: 1.5 }}>
+            No assessment yet for this course.<br/>
+            Create one to add questions and define the pass mark.
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={() => onOpenAssessment({ courseId: c.id, title: `${c.title || "Course"} — Final`, type: "final", passMark: c.passingScore || 80 })}>
+            <Icon name="plus" size={12}/> Create assessment
+          </button>
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 18 }}>
+        <div className="cd-field">
+          <label>Default questions to show</label>
+          <input className="cd-input" type="number" min="0" value={c.questionsCount} onChange={e => set({ questionsCount: +e.target.value })} />
+          <div className="text-xs text-muted" style={{ marginTop: 4 }}>0 = show all available questions.</div>
+        </div>
+        <div className="cd-field">
+          <label>Default passing score (%)</label>
+          <input className="cd-input" type="number" min="0" max="100" value={c.passingScore} onChange={e => set({ passingScore: +e.target.value })} />
+          <div className="text-xs text-muted" style={{ marginTop: 4 }}>Used for new assessments unless overridden.</div>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const ResourcesTab = ({ c, addResource, updateResource, removeResource }) => (
   <div className="card card-pad" style={{ maxWidth: 820 }}>
