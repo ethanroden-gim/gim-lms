@@ -195,7 +195,7 @@
           <ToastHost />
           <Sidebar route={route} setRoute={setRoute} mode={mode} />
           <main className="app__main">{body}</main>
-          <GimTweaks />
+          {CURRENT_USER.isAdmin && <GimTweaks />}
         </div>
       );
     };

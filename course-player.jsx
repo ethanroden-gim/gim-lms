@@ -224,6 +224,14 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
                 style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0, background: "#fff" }}
                 title={active.title}
               />
+            ) : active.type === "gform" && active.url ? (
+              <iframe
+                src={(active.url.includes("embedded=true") ? active.url
+                      : active.url.includes("?") ? `${active.url}&embedded=true` : `${active.url}?embedded=true`)
+                      .replace(/\/edit/, "/viewform")}
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0, background: "#fff" }}
+                title={active.title}
+              />
             ) : active.type === "link" && active.url ? (
               <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#fff", textAlign: "center", padding: 32 }}>
                 <Icon name="external" size={42} />
@@ -494,6 +502,10 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
       }
     } catch (err) {
       console.error("recordAttempt:", err);
+      // Surface the failure so the admin knows the attempt didn't reach the audit log.
+      // Common cause: Firestore rules don't allow create on /attempts.
+      alert("Your answers were graded but couldn't be saved to the audit log:\n\n" + err.message +
+        "\n\nIf you're an admin, check Firestore Console → Rules and confirm /attempts allows create.");
     } finally {
       setSubmitted(true);
       setSubmitting(false);
@@ -698,7 +710,17 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
 // ============================================================
 const CertificatePage = ({ courseId, goBack }) => {
   const course = COURSES.find(c => c.id === courseId);
-  const e = ENROLLMENTS[courseId] || { completedOn: "Today", score: 95 };
+  const eRaw = ENROLLMENTS[courseId] || {};
+  // Normalise completedOn to a friendly date string
+  const completedOnStr = (() => {
+    const v = eRaw.completedOn;
+    if (!v) return new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+    if (typeof v === "string") return v;
+    if (v.toDate) return v.toDate().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+    if (v instanceof Date) return v.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+    return String(v);
+  })();
+  const e = { ...eRaw, completedOn: completedOnStr, score: eRaw.score ?? null };
   if (!course) {
     return (
       <div className="page">
@@ -721,9 +743,20 @@ const CertificatePage = ({ courseId, goBack }) => {
           <Icon name="arrow-left" size={14}/> Back
         </button>
         <div style={{ display: "flex", gap: 10 }}>
-          <button className="btn btn-ghost btn-sm"><Icon name="send" size={14}/> Email a copy</button>
+          <button className="btn btn-ghost btn-sm" onClick={async () => {
+            if (!CURRENT_USER.email) { alert("No email on file."); return; }
+            if (!(window.GIM_CONFIG || {}).appsScriptReminderUrl) { alert("Email isn't configured (Apps Script URL missing)."); return; }
+            try {
+              await sendEmailReminder({
+                recipients: [{ email: CURRENT_USER.email, name: CURRENT_USER.name }],
+                subject: `Your GIM Learning certificate — ${course.title}`,
+                message: `Congratulations on completing ${course.title}. Your certificate (number ${certNo}) is available in GIM Learning whenever you need it.`,
+              });
+              showToast?.("Email sent.");
+            } catch (err) { alert("Email failed: " + err.message); }
+          }}><Icon name="send" size={14}/> Email me a copy</button>
           <button className="btn btn-primary btn-sm"
-            onClick={() => printCertificate(template, course, CURRENT_USER.name, e.completedOn || "Today", e.score || 95, certNo)}>
+            onClick={() => printCertificate(template, course, CURRENT_USER.name, e.completedOn, e.score, certNo)}>
             <Icon name="download" size={14}/> Download PDF
           </button>
         </div>
@@ -735,8 +768,8 @@ const CertificatePage = ({ courseId, goBack }) => {
             template={template}
             course={course}
             learnerName={CURRENT_USER.name}
-            completedOn={e.completedOn || "Today"}
-            score={e.score || 95}
+            completedOn={e.completedOn}
+            score={e.score}
             certNo={certNo}
           />
         </div>

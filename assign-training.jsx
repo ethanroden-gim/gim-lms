@@ -179,7 +179,10 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
               {filteredCourses.map(c => (
                 <label key={c.id} className="ce-resource" style={{ cursor: "pointer", background: courseIds.includes(c.id) ? "#f0f9e6" : "#fafafa", borderColor: courseIds.includes(c.id) ? "#7ac142" : "#ececec" }}>
                   <input type="checkbox" checked={courseIds.includes(c.id)} onChange={() => toggleCourse(c.id)} disabled={preset?.courseId === c.id} />
-                  <div className={classNames(c.cover)} style={{ width: 36, height: 24, borderRadius: 4, flexShrink: 0 }} />
+                  <div className={classNames(!c.coverUrl && c.cover)} style={{
+                    width: 36, height: 24, borderRadius: 4, flexShrink: 0,
+                    ...(c.coverUrl ? { backgroundImage: `url(${c.coverUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {}),
+                  }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600 }}>{c.title}</div>
                     <div style={{ fontSize: 11, color: "#5f635f" }}>{c.cat} · {c.duration} min · {c.lessons} lessons</div>

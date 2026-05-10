@@ -97,7 +97,7 @@ const CertificateRender = ({ template, course, learnerName, completedOn, score, 
             <SigBlock value={t.signer2Name} label={t.signer2Title} accent={t.accent} ink={t.ink} />
           )}
           <SigBlock value={completedOn} label="Date of completion" accent={t.accent} ink={t.ink} />
-          {t.showScore && (
+          {t.showScore && score != null && (
             <SigBlock value={`${score}%`} label="Final assessment score" accent={t.accent} ink={t.ink} />
           )}
         </div>

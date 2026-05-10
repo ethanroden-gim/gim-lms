@@ -2,6 +2,15 @@
 // GIM LMS — Learner pages
 // =========================================================
 
+// Format a Firestore Timestamp / Date / string into a friendly date label
+const formatDate = (val) => {
+  if (!val) return "";
+  if (typeof val === "string") return val;
+  if (val.toDate) return val.toDate().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  if (val instanceof Date) return val.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  return "";
+};
+
 // ============================================================
 // Reusable: Course card (grid)
 // ============================================================
@@ -26,10 +35,9 @@ const CourseCard = ({ course, onOpen, enrollment }) => {
         <div className="course-card__title">{course.title}</div>
         <div className="course-card__meta">
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-            <Icon name="play-o" size={12} />{course.lessons} lessons
+            <Icon name="play-o" size={12} />{course.lessons || 0} {course.lessons === 1 ? "lesson" : "lessons"}
           </span>
-          <span>·</span>
-          <span>{course.level}</span>
+          {course.instructor && <><span>·</span><span>{course.instructor}</span></>}
         </div>
         {e?.status === "in_progress" && (
           <div className="bar bar-thin" style={{ marginTop: 4 }}>
@@ -378,7 +386,7 @@ const CertificatesPage = ({ goCert }) => {
                 <div style={{ fontFamily: "var(--font-accent)", fontSize: 9, letterSpacing: "0.18em", color: "#2e5a12", fontWeight: 700, textTransform: "uppercase" }}>Certificate</div>
                 <div style={{ fontFamily: "var(--font-display)", fontSize: 18, lineHeight: 1.1, marginTop: 8 }}>{c.title}</div>
                 <div style={{ marginTop: "auto", fontSize: 11, color: "#5f635f" }}>
-                  Awarded {e.completedOn} · Score {e.score}%
+                  Awarded {formatDate(e.completedOn) || "—"}{e.score != null ? ` · Score ${e.score}%` : ""}
                 </div>
               </div>
               <div style={{ padding: "12px 16px 16px", display: "flex", gap: 8 }}>

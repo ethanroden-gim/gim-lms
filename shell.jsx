@@ -132,7 +132,10 @@ const Topbar = ({ mode, setMode, isAdmin, goCourse }) => {
                       onMouseEnter={e => e.currentTarget.style.background = "#fafafa"}
                       onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                     >
-                      <div className={classNames(c.cover)} style={{ width: 40, height: 28, borderRadius: 6, flexShrink: 0 }} />
+                      <div className={classNames(!c.coverUrl && c.cover)} style={{
+                        width: 40, height: 28, borderRadius: 6, flexShrink: 0,
+                        ...(c.coverUrl ? { backgroundImage: `url(${c.coverUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {}),
+                      }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.title}</div>
                         <div style={{ fontSize: 11, color: "#5f635f" }}>{c.cat} · {c.duration} min</div>

@@ -52,7 +52,48 @@ const LESSON_TYPES = [
   { id: "pdf",     label: "PDF",         icon: "doc" },
   { id: "quiz",    label: "Knowledge check", icon: "quiz" },
   { id: "link",    label: "External link",   icon: "link" },
+  { id: "gform",   label: "Google Form", icon: "doc" },
 ];
+
+// Parse a lesson's `dur` value into minutes for the course-duration rollup.
+// Video format: "M:SS" or "H:MM:SS" (e.g. "5:23", "1:23:45").
+// Article / PDF / external link / Google Form: a whole number of minutes.
+// Quiz (knowledge check) doesn't carry a duration.
+const lessonMinutes = (l) => {
+  if (!l || !l.dur) return 0;
+  const s = String(l.dur).trim();
+  if (!s) return 0;
+  if (l.type === "video") {
+    const parts = s.split(":").map(p => parseInt(p, 10));
+    if (parts.some(n => Number.isNaN(n))) return 0;
+    let mins = 0;
+    if (parts.length === 3)      mins = parts[0] * 60 + parts[1] + parts[2] / 60;
+    else if (parts.length === 2) mins = parts[0] + parts[1] / 60;
+    else                         mins = parts[0];
+    return mins;
+  }
+  if (l.type === "quiz") return 0;
+  const n = parseInt(s, 10);
+  return Number.isNaN(n) ? 0 : n;
+};
+
+const courseRollupMinutes = (modules) =>
+  (modules || []).reduce((s, m) =>
+    s + (m.lessons || []).reduce((ss, l) => ss + lessonMinutes(l), 0), 0);
+
+// Convert a YouTube/Drive/Google Form URL to its iframe-embed form
+const toGFormEmbed = (url) => {
+  if (!url) return url;
+  // Already an embedded viewform link
+  if (/\/forms\/.*viewform/.test(url) && /embedded=true/.test(url)) return url;
+  // /forms/d/e/ID/viewform → add embedded=true
+  let m = url.match(/\/forms\/d\/e\/([\w-]+)/);
+  if (m) return `https://docs.google.com/forms/d/e/${m[1]}/viewform?embedded=true`;
+  // /forms/d/ID/edit → public viewform with embedded
+  m = url.match(/\/forms\/d\/([\w-]+)/);
+  if (m) return `https://docs.google.com/forms/d/${m[1]}/viewform?embedded=true`;
+  return url;
+};
 
 const AdminCourseEditorPage = ({ mode, courseId, goBack }) => {
   const isNew = mode === "new";
@@ -241,7 +282,14 @@ const DetailsTab = ({ c, set }) => (
         </div>
         <div className="cd-field">
           <label>Duration (minutes)</label>
-          <input className="cd-input" type="number" min="0" value={c.duration} onChange={e => set({ duration: +e.target.value })} />
+          <input className="cd-input" type="number" min="0"
+            value={Math.round(courseRollupMinutes(c.modules) || c.duration || 0)}
+            readOnly
+            title="Computed automatically from each lesson's duration"
+            style={{ background: "#fafafa", color: "#5f635f", cursor: "not-allowed" }} />
+          <div className="text-xs text-muted" style={{ marginTop: 4 }}>
+            Auto-totalled from the Lessons tab.
+          </div>
         </div>
       </div>
 
@@ -439,13 +487,31 @@ const LessonRow = ({ l, onChange, onRemove, onUp, onDown, onDragStart, onDragOve
       case "video":   return "Paste Drive or YouTube link";
       case "link":    return "https://...";
       case "pdf":     return "Paste Google Drive PDF link";
+      case "gform":   return "Paste Google Forms link";
       case "quiz":    return "(configured under the Assessment tab)";
       default:        return "";
     }
   })();
 
-  const showUrlField = l.type === "video" || l.type === "link" || l.type === "pdf";
+  const showUrlField = l.type === "video" || l.type === "link" || l.type === "pdf" || l.type === "gform";
   const showBodyButton = l.type === "article";
+
+  // Lesson-duration input: video accepts "M:SS"/"H:MM:SS"; article/pdf/link/gform accept whole minutes;
+  // quiz hides the field entirely.
+  const isVideo = l.type === "video";
+  const isQuiz = l.type === "quiz";
+  const durPlaceholder = isVideo ? "5:23 or 1:23:45" : "5 (minutes)";
+  const onDurChange = (raw) => {
+    if (isVideo) {
+      // Allow only digits and colons
+      const cleaned = raw.replace(/[^\d:]/g, "");
+      onChange({ dur: cleaned });
+    } else {
+      // Whole minutes only
+      const cleaned = raw.replace(/\D/g, "");
+      onChange({ dur: cleaned });
+    }
+  };
 
   return (
     <>
@@ -462,7 +528,18 @@ const LessonRow = ({ l, onChange, onRemove, onUp, onDown, onDragStart, onDragOve
           {LESSON_TYPES.map(x => <option key={x.id} value={x.id}>{x.label}</option>)}
         </select>
         <input className="cd-input ce-lesson-title" value={l.title} onChange={e => onChange({ title: e.target.value })} placeholder="Lesson title" />
-        <input className="cd-input ce-lesson-dur" value={l.dur} onChange={e => onChange({ dur: e.target.value })} placeholder="5:00 / 8 min read" />
+        {isQuiz ? (
+          <div className="ce-lesson-dur" style={{ fontSize: 11, color: "#5f635f", padding: "8px 4px" }}>—</div>
+        ) : (
+          <input
+            className="cd-input ce-lesson-dur"
+            value={l.dur || ""}
+            onChange={e => onDurChange(e.target.value)}
+            placeholder={durPlaceholder}
+            inputMode={isVideo ? "numeric" : "numeric"}
+            title={isVideo ? "Video runtime as M:SS or H:MM:SS" : "Whole minutes"}
+          />
+        )}
 
         {l.type === "video" && (
           <select className="cd-input ce-lesson-source" value={l.source || "drive"} onChange={e => onChange({ source: e.target.value })}>

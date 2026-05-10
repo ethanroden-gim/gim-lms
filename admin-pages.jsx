@@ -246,7 +246,13 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
             <tr key={c.id}>
               <td>
                 <div style={{ display: "flex", gap: 12, alignItems: "center", cursor: "pointer" }} onClick={() => onEdit(c.id)}>
-                  <div className={classNames(c.cover)} style={{ width: 48, height: 32, borderRadius: 6, flexShrink: 0 }} />
+                  <div
+                    className={classNames(!c.coverUrl && c.cover)}
+                    style={{
+                      width: 48, height: 32, borderRadius: 6, flexShrink: 0,
+                      ...(c.coverUrl ? { backgroundImage: `url(${c.coverUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : {}),
+                    }}
+                  />
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{c.title}</div>
                     <div style={{ fontSize: 11, color: "#5f635f", display: "flex", gap: 8, alignItems: "center" }}>

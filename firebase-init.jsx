@@ -145,12 +145,18 @@ const subscribeToData = (onChange) => {
     if (err.code !== "permission-denied") console.error("assessments listener:", err);
   }));
 
-  // Attempts listener — admins see everything, learners only see their own
+  // Attempts listener — admins see everything, learners only see their own.
+  // Surface permission errors so the admin can fix Firestore rules instead of
+  // silently showing an empty queue.
   subs.push(fbDb.collection("attempts").onSnapshot(s => {
     setArr(ATTEMPTS, s.docs.map(d => ({ id: d.id, ...d.data() })));
     onChange();
   }, err => {
-    if (err.code !== "permission-denied") console.error("attempts listener:", err);
+    console.error("attempts listener:", err.code, err.message);
+    if (err.code === "permission-denied" && window.CURRENT_USER?.isAdmin) {
+      console.warn("[GIM] Admin can't read /attempts. Update Firestore rules to allow admins to list attempts:\n" +
+        "match /attempts/{id} {\n  allow read: if request.auth != null;\n  allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;\n  allow update: if request.auth != null;\n}");
+    }
   }));
 
   // Certificate template — single doc at /settings/certificate
