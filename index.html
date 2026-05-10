@@ -174,7 +174,7 @@
         if (route === "assessment")  body = <AssessmentPage   courseId={courseId} goCert={goCert} goBack={() => setRoute("course")} />;
         if (route === "certificate") body = <CertificatePage  courseId={courseId} goBack={() => setRoute("certs")} />;
       } else {
-        if (route === "admin-overview")    body = <AdminOverviewPage />;
+        if (route === "admin-overview")    body = <AdminOverviewPage goRoute={setRoute} />;
         if (route === "admin-courses")     body = <AdminCoursesPage
           onNew={() => { setCourseId(null); setRoute("admin-course-new"); }}
           onEdit={(id) => { setCourseId(id); setRoute("admin-course-edit"); }}

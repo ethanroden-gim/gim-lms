@@ -437,25 +437,30 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
 
   const total = quiz.questions.length;
   const q = quiz.questions[qIdx];
+
+  // Normalise correct-answer field — QuestionEditor saves arrays, legacy SAMPLE_QUIZ uses numbers
+  const correctIndices = (qq) => Array.isArray(qq.correct) ? qq.correct : (qq.correct != null ? [qq.correct] : []);
+
   const allAnswered = quiz.questions.every((qq, i) => {
     const a = answers[i];
     if (qq.type === "short" || qq.type === "essay") return typeof a === "string" && a.trim().length > 0;
     if (qq.type === "multi") return Array.isArray(a) && a.length > 0;
-    return a !== undefined; // single
+    return a !== undefined; // single, tf, default
   });
 
-  // Auto-graded portion only counts MCQ-style questions (single/multi)
+  // Auto-graded portion only counts MCQ-style questions (single/tf/multi)
   const autoGraded = React.useMemo(() => {
     let correct = 0, autoTotal = 0;
     quiz.questions.forEach((qq, i) => {
       if (qq.type === "short" || qq.type === "essay") return;
       autoTotal++;
+      const cIdxs = correctIndices(qq);
       if (qq.type === "multi") {
-        const correctSet = new Set(qq.correct || []);
+        const correctSet = new Set(cIdxs);
         const givenSet = new Set(answers[i] || []);
         if (correctSet.size === givenSet.size && [...correctSet].every(x => givenSet.has(x))) correct++;
-      } else { // single
-        if (answers[i] === qq.correct) correct++;
+      } else { // single, tf, or default
+        if (answers[i] === cIdxs[0]) correct++;
       }
     });
     const score = autoTotal ? Math.round((correct / autoTotal) * 100) : 0;
@@ -593,8 +598,8 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
         </div>
         <div className="quiz-q-text">{q.text || q.q}</div>
 
-        {/* Single-choice (radio) */}
-        {(!q.type || q.type === "single") && (q.options || []).map((opt, i) => (
+        {/* Single-choice (radio) — also handles True/False */}
+        {(!q.type || q.type === "single" || q.type === "tf") && (q.options || []).map((opt, i) => (
           <div
             key={i}
             className={classNames("quiz-option", answers[qIdx] === i && "selected")}
@@ -661,7 +666,7 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
             const a = answers[qIdx];
             const ok = q.type === "multi" ? Array.isArray(a) && a.length > 0
                      : (q.type === "short" || q.type === "essay") ? typeof a === "string" && a.trim().length > 0
-                     : a !== undefined;
+                     : a !== undefined; // single, tf, default
             return (
             <button
               className="btn btn-primary btn-sm"

@@ -505,8 +505,21 @@ const uploadImage = async (file, pathPrefix = "covers") => {
   const ext = (file.name || "").split(".").pop() || "bin";
   const id = `${pathPrefix}/${fbAuth.currentUser?.uid || "anon"}_${Date.now()}.${ext}`;
   const ref = storage.ref(id);
-  await ref.put(file);
-  return await ref.getDownloadURL();
+
+  // Race upload against a 30s timeout so a stuck upload surfaces a clear error
+  // rather than spinning forever (typically caused by missing Storage rules
+  // or Firebase Storage not being enabled in the project).
+  const uploadPromise = ref.put(file).then(snap => snap.ref.getDownloadURL());
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(
+      "Upload timed out after 30s. Likely causes:\n" +
+      "1. Firebase Storage isn't enabled — go to Firebase Console → Storage → Get started.\n" +
+      "2. Storage security rules block writes — see the rules block in the README.\n" +
+      "3. The Storage bucket name in firebaseConfig doesn't match the active bucket."
+    )), 30000);
+  });
+
+  return Promise.race([uploadPromise, timeoutPromise]);
 };
 
 // ---- Email reminders (Google Apps Script web app) ------------------------

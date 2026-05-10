@@ -5,7 +5,7 @@
 // ============================================================
 // Admin overview
 // ============================================================
-const AdminOverviewPage = () => {
+const AdminOverviewPage = ({ goRoute }) => {
   const [assignOpen, setAssignOpen] = React.useState(false);
 
   // Aggregate per-user enrolment stats from the live ALL_ENROLLMENTS collection
@@ -128,29 +128,50 @@ const AdminOverviewPage = () => {
 
         <div>
           <div className="section-head">
-            <h3>Top courses by enrolment</h3>
+            <h3>Pending grading</h3>
+            {goRoute && <a onClick={() => goRoute("admin-attempts")}>Open queue →</a>}
           </div>
           <div className="card card-pad">
             {(() => {
-              const ranked = COURSES
-                .filter(c => c.status !== "archived")
-                .map(c => ({ c, n: ENROLLMENT_COUNTS[c.id] || 0 }))
-                .filter(r => r.n > 0)
-                .sort((a, b) => b.n - a.n)
-                .slice(0, 4);
-              if (ranked.length === 0) {
+              const pending = (window.ATTEMPTS || [])
+                .filter(a => a.status === "pending_review")
+                .sort((a, b) => (b.submittedAt?.seconds || 0) - (a.submittedAt?.seconds || 0))
+                .slice(0, 5);
+              if (pending.length === 0) {
                 return <div style={{ padding: "12px 4px", textAlign: "center", color: "#5f635f", fontSize: 13 }}>
-                  {COURSES.length ? "No enrolments yet." : "Add courses to see enrolment activity."}
+                  Nothing waiting for review. Manually-graded assessments appear here when learners submit them.
                 </div>;
               }
-              return ranked.map((r, i) => (
-                <div key={r.c.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < ranked.length - 1 ? "1px solid #f3f3f3" : "none" }}>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{r.c.title}</div>
-                  <div style={{ fontSize: 13, color: "#5f635f", fontVariantNumeric: "tabular-nums" }}>
-                    {r.n} {r.n === 1 ? "enrolment" : "enrolments"}
+              return pending.map((a, i) => {
+                const course = COURSES.find(c => c.id === a.courseId);
+                const submittedTs = a.submittedAt?.toDate ? a.submittedAt.toDate() : null;
+                return (
+                  <div
+                    key={a.id}
+                    onClick={() => goRoute && goRoute("admin-attempts")}
+                    style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      padding: "10px 4px", cursor: "pointer",
+                      borderBottom: i < pending.length - 1 ? "1px solid #f3f3f3" : "none",
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#fafafa"}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                  >
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {a.userName || a.userId}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#5f635f", marginTop: 2 }}>
+                        {course?.title || "(course missing)"}
+                        {submittedTs ? ` · ${submittedTs.toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}
+                      </div>
+                    </div>
+                    <span className="chip chip-amber" style={{ marginLeft: 12, flexShrink: 0 }}>
+                      <Icon name="clock" size={11} /> Grade
+                    </span>
                   </div>
-                </div>
-              ));
+                );
+              });
             })()}
           </div>
         </div>
