@@ -429,4 +429,4 @@ const EnrollmentsModal = ({ open, onClose, course }) => {
   );
 };
 
-Object.assign(window, { ExportButton, ToastHost, showToast, EnrollmentsModal, downloadBlob, toCSV, toExcelXML });
+Object.assign(window, { ExportButton, ToastHost, showToast, EnrollmentsModal, downloadBlob, toCSV, toExcelXML, stamp });

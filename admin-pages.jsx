@@ -715,6 +715,211 @@ const AdminAssessmentsPage = () => {
 };
 
 // ============================================================
+// Admin: Activity feed + admin audit log
+// ============================================================
+const _activityTime = (row) => row?.createdAt?.toDate ? row.createdAt.toDate()
+  : row?.createdAt?.seconds ? new Date(row.createdAt.seconds * 1000)
+  : null;
+
+const _activityIso = (row) => {
+  const d = _activityTime(row);
+  return d ? d.toISOString() : "";
+};
+
+const _activityLocal = (row) => {
+  const d = _activityTime(row);
+  return d ? d.toLocaleString() : "—";
+};
+
+const AdminActivityPage = () => {
+  const [view, setView] = React.useState("learner");
+  const [q, setQ] = React.useState("");
+  const [courseId, setCourseId] = React.useState("All");
+  const [personId, setPersonId] = React.useState("All");
+  const [sort, setSort] = React.useState("newest");
+
+  const usersById = Object.fromEntries((window.ALL_USERS || []).map(u => [u.id, u]));
+  const coursesById = Object.fromEntries((window.COURSES || []).map(c => [c.id, c]));
+  const sourceRows = view === "admin" ? (window.ADMIN_ACTIVITY || []) : (window.ALL_ACTIVITY || []);
+
+  const people = Array.from(new Set(sourceRows.map(r => view === "admin" ? r.actorId : r.userId).filter(Boolean)))
+    .map(id => {
+      const u = usersById[id];
+      const sample = sourceRows.find(r => (view === "admin" ? r.actorId : r.userId) === id) || {};
+      return { id, name: u?.name || sample.actorName || sample.userName || id, email: u?.email || sample.actorEmail || sample.userEmail || "" };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const needle = q.trim().toLowerCase();
+  const visible = sourceRows.filter(r => {
+    const id = view === "admin" ? r.actorId : r.userId;
+    const u = usersById[id] || {};
+    const c = coursesById[r.courseId] || {};
+    const hay = [
+      view === "admin" ? r.action : r.text,
+      r.actorName, r.actorEmail, r.userName, r.userEmail,
+      u.name, u.email, c.title, r.courseId, r.targetUserId, r.fields, r.status, r.type,
+    ].filter(Boolean).join(" ").toLowerCase();
+    if (needle && !hay.includes(needle)) return false;
+    if (courseId !== "All" && r.courseId !== courseId) return false;
+    if (personId !== "All" && id !== personId) return false;
+    return true;
+  }).sort((a, b) => {
+    const ta = _activityTime(a)?.getTime() || 0;
+    const tb = _activityTime(b)?.getTime() || 0;
+    if (sort === "oldest") return ta - tb;
+    if (sort === "person") {
+      const ap = view === "admin" ? (a.actorName || usersById[a.actorId]?.name || a.actorId || "") : (usersById[a.userId]?.name || a.userName || a.userId || "");
+      const bp = view === "admin" ? (b.actorName || usersById[b.actorId]?.name || b.actorId || "") : (usersById[b.userId]?.name || b.userName || b.userId || "");
+      return ap.localeCompare(bp) || tb - ta;
+    }
+    if (sort === "course") {
+      const ac = coursesById[a.courseId]?.title || a.courseId || "";
+      const bc = coursesById[b.courseId]?.title || b.courseId || "";
+      return ac.localeCompare(bc) || tb - ta;
+    }
+    return tb - ta;
+  });
+
+  const exportVisible = () => {
+    const rows = visible.map(r => {
+      const id = view === "admin" ? r.actorId : r.userId;
+      const u = usersById[id] || {};
+      const c = coursesById[r.courseId] || {};
+      if (view === "admin") {
+        return {
+          time: _activityIso(r),
+          actor: r.actorName || u.name || id || "",
+          actorEmail: r.actorEmail || u.email || "",
+          action: r.action || "",
+          course: c.title || r.courseId || "",
+          targetUserId: r.targetUserId || "",
+          details: [r.fields, r.status, r.type, r.count, r.userCount, r.courseCount].filter(v => v !== undefined && v !== "").join(" | "),
+        };
+      }
+      return {
+        time: _activityIso(r),
+        learner: u.name || r.userName || id || "",
+        learnerEmail: u.email || r.userEmail || "",
+        course: c.title || r.courseId || "",
+        activity: r.text || "",
+      };
+    });
+    const columns = view === "admin"
+      ? [
+          { key: "time", label: "Time" },
+          { key: "actor", label: "Admin" },
+          { key: "actorEmail", label: "Admin email" },
+          { key: "action", label: "Action" },
+          { key: "course", label: "Course" },
+          { key: "targetUserId", label: "Target user ID" },
+          { key: "details", label: "Details" },
+        ]
+      : [
+          { key: "time", label: "Time" },
+          { key: "learner", label: "Learner" },
+          { key: "learnerEmail", label: "Learner email" },
+          { key: "course", label: "Course" },
+          { key: "activity", label: "Activity" },
+        ];
+    downloadBlob(`gim-${view}-activity-${stamp()}.csv`, toCSV(rows, columns), "text/csv;charset=utf-8");
+  };
+
+  return (
+    <div className="page page--wide">
+      <div className="page-head">
+        <div>
+          <div className="page-head__eyebrow">Admin · Activity</div>
+          <h1 className="page-head__title">Activity feed</h1>
+          <div className="page-head__sub">Review learner activity and admin-side audit events.</div>
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={exportVisible}>
+          <Icon name="download" size={14}/> Export CSV
+        </button>
+      </div>
+
+      <div className="tabs">
+        <button className={classNames("tab", view === "learner" && "active")} onClick={() => { setView("learner"); setPersonId("All"); }}>
+          Learner activity · {(window.ALL_ACTIVITY || []).length}
+        </button>
+        <button className={classNames("tab", view === "admin" && "active")} onClick={() => { setView("admin"); setCourseId("All"); setPersonId("All"); }}>
+          Admin audit · {(window.ADMIN_ACTIVITY || []).length}
+        </button>
+      </div>
+
+      <div className="card card-pad" style={{ marginBottom: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1.4fr) 1fr 1fr 180px", gap: 10 }}>
+          <input className="cd-input" type="search" placeholder="Search activity..." value={q} onChange={e => setQ(e.target.value)} />
+          <select className="cd-input" value={personId} onChange={e => setPersonId(e.target.value)}>
+            <option value="All">{view === "admin" ? "All admins" : "All learners"}</option>
+            {people.map(p => <option key={p.id} value={p.id}>{p.name}{p.email ? ` - ${p.email}` : ""}</option>)}
+          </select>
+          <select className="cd-input" value={courseId} onChange={e => setCourseId(e.target.value)} disabled={view === "admin"}>
+            <option value="All">All courses</option>
+            {COURSES.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+          </select>
+          <select className="cd-input" value={sort} onChange={e => setSort(e.target.value)}>
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="person">{view === "admin" ? "Admin A-Z" : "Learner A-Z"}</option>
+            <option value="course">Course A-Z</option>
+          </select>
+        </div>
+        <div className="text-xs text-muted" style={{ marginTop: 8 }}>
+          Showing {visible.length} of {sourceRows.length} {view === "admin" ? "audit events" : "activity events"}.
+        </div>
+      </div>
+
+      {visible.length === 0 ? (
+        <div className="empty">{sourceRows.length ? "No activity matches these filters." : "No activity logged yet."}</div>
+      ) : (
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th style={{ width: 170 }}>Time</th>
+              <th>{view === "admin" ? "Admin" : "Learner"}</th>
+              <th>Activity</th>
+              <th>Course / target</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map(r => {
+              const id = view === "admin" ? r.actorId : r.userId;
+              const u = usersById[id] || {};
+              const c = coursesById[r.courseId];
+              const name = view === "admin" ? (r.actorName || u.name || id || "Admin") : (u.name || r.userName || id || "Learner");
+              const email = view === "admin" ? (r.actorEmail || u.email || "") : (u.email || r.userEmail || "");
+              return (
+                <tr key={r.id || `${id}-${_activityIso(r)}-${r.text || r.action}`}>
+                  <td style={{ fontSize: 12, color: "#5f635f" }}>{_activityLocal(r)}</td>
+                  <td>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{name}</div>
+                    <div style={{ fontSize: 11, color: "#5f635f" }}>{email}</div>
+                  </td>
+                  <td>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{view === "admin" ? r.action : r.text}</div>
+                    {view === "admin" && (
+                      <div style={{ fontSize: 11, color: "#5f635f", marginTop: 2 }}>
+                        {[r.fields && `Fields: ${r.fields}`, r.status && `Status: ${r.status}`, r.count != null && `Count: ${r.count}`, r.userCount != null && `${r.userCount} users`, r.courseCount != null && `${r.courseCount} courses`].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    {c ? <span className="chip chip-grey">{c.title}</span> :
+                     r.targetUserId ? <span className="chip chip-grey">{usersById[r.targetUserId]?.name || r.targetUserId}</span> :
+                     <span className="text-xs text-muted">—</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+};
+
+// ============================================================
 // Admin: Roles & departments
 // ============================================================
 const DEFAULT_ROLES = [
@@ -1138,4 +1343,4 @@ const GradeAttemptModal = ({ attempt, onClose }) => {
   );
 };
 
-Object.assign(window, { AdminOverviewPage, AdminCoursesPage, AdminUsersPage, AdminAssessmentsPage, AdminAttemptsPage, AdminSettingsPage });
+Object.assign(window, { AdminOverviewPage, AdminCoursesPage, AdminUsersPage, AdminAssessmentsPage, AdminActivityPage, AdminAttemptsPage, AdminSettingsPage });

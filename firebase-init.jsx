@@ -186,6 +186,36 @@ const subscribeToData = (onChange) => {
       if (err.code !== "permission-denied") console.error("activity listener:", err);
     }));
 
+  subs.push(fbDb.collection("activity")
+    .limit(500)
+    .onSnapshot(s => {
+      const rows = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      rows.sort((a, b) => {
+        const ta = a.createdAt?.seconds ?? a.createdAt?.toMillis?.() / 1000 ?? 0;
+        const tb = b.createdAt?.seconds ?? b.createdAt?.toMillis?.() / 1000 ?? 0;
+        return tb - ta;
+      });
+      setArr(ALL_ACTIVITY, rows);
+      onChange();
+    }, err => {
+      if (err.code !== "permission-denied") console.error("all activity listener:", err);
+    }));
+
+  subs.push(fbDb.collection("adminActivity")
+    .limit(500)
+    .onSnapshot(s => {
+      const rows = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      rows.sort((a, b) => {
+        const ta = a.createdAt?.seconds ?? a.createdAt?.toMillis?.() / 1000 ?? 0;
+        const tb = b.createdAt?.seconds ?? b.createdAt?.toMillis?.() / 1000 ?? 0;
+        return tb - ta;
+      });
+      setArr(ADMIN_ACTIVITY, rows);
+      onChange();
+    }, err => {
+      if (err.code !== "permission-denied") console.error("admin activity listener:", err);
+    }));
+
   return () => subs.forEach(fn => fn());
 };
 
@@ -212,9 +242,13 @@ const hydrateUserFromFirebase = async (fbUser) => {
 };
 
 // ---- Generic field updates ------------------------------------------------
-const updateUser = (uid, fields) =>
-  fbReady ? fbDb.collection("users").doc(uid).set(fields, { merge: true })
-          : Promise.reject(new Error("Firebase not configured"));
+const updateUser = async (uid, fields) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  await fbDb.collection("users").doc(uid).set(fields, { merge: true });
+  if (window.CURRENT_USER?.isAdmin) {
+    recordAdminActivity("Updated user", { targetUserId: uid, fields: Object.keys(fields || {}).join(", ") }).catch(() => {});
+  }
+};
 
 // ---- Activity log ---------------------------------------------------------
 const recordActivity = (text, courseId, extra = {}) => {
@@ -223,6 +257,18 @@ const recordActivity = (text, courseId, extra = {}) => {
     userId: fbAuth.currentUser.uid,
     text,
     courseId: courseId || null,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    ...extra,
+  });
+};
+
+const recordAdminActivity = (action, extra = {}) => {
+  if (!fbReady || !fbAuth.currentUser) return Promise.resolve();
+  return fbDb.collection("adminActivity").add({
+    actorId: fbAuth.currentUser.uid,
+    actorName: window.CURRENT_USER?.name || "",
+    actorEmail: window.CURRENT_USER?.email || "",
+    action,
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     ...extra,
   });
@@ -301,6 +347,7 @@ const resetUserProgress = async (userId) => {
   const batch = fbDb.batch();
   snap.forEach(d => batch.delete(d.ref));
   await batch.commit();
+  recordAdminActivity("Reset user progress", { targetUserId: userId, count: snap.size }).catch(() => {});
   return snap.size;
 };
 
@@ -311,16 +358,20 @@ const saveDepartment = async (dept) => {
   data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
   if (id) {
     await fbDb.collection("departments").doc(id).set(data, { merge: true });
+    recordAdminActivity("Updated department", { departmentId: id, name: data.name || "" }).catch(() => {});
     return id;
   }
   data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
   const ref = await fbDb.collection("departments").add(data);
+  recordAdminActivity("Created department", { departmentId: ref.id, name: data.name || "" }).catch(() => {});
   return ref.id;
 };
 
-const deleteDepartment = (id) =>
-  fbReady ? fbDb.collection("departments").doc(id).delete()
-          : Promise.reject(new Error("Firebase not configured"));
+const deleteDepartment = async (id) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  await fbDb.collection("departments").doc(id).delete();
+  recordAdminActivity("Deleted department", { departmentId: id }).catch(() => {});
+};
 
 // ---- Roles ----------------------------------------------------------------
 const saveRole = async (role) => {
@@ -329,16 +380,20 @@ const saveRole = async (role) => {
   data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
   if (id) {
     await fbDb.collection("roles").doc(id).set(data, { merge: true });
+    recordAdminActivity("Updated role", { roleId: id, name: data.name || "" }).catch(() => {});
     return id;
   }
   data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
   const ref = await fbDb.collection("roles").add(data);
+  recordAdminActivity("Created role", { roleId: ref.id, name: data.name || "" }).catch(() => {});
   return ref.id;
 };
 
-const deleteRole = (id) =>
-  fbReady ? fbDb.collection("roles").doc(id).delete()
-          : Promise.reject(new Error("Firebase not configured"));
+const deleteRole = async (id) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  await fbDb.collection("roles").doc(id).delete();
+  recordAdminActivity("Deleted role", { roleId: id }).catch(() => {});
+};
 
 // ---- Assessments ----------------------------------------------------------
 const saveAssessment = async (a) => {
@@ -347,26 +402,34 @@ const saveAssessment = async (a) => {
   data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
   if (id) {
     await fbDb.collection("assessments").doc(id).set(data, { merge: true });
+    recordAdminActivity("Updated assessment", { assessmentId: id, title: data.title || "", status: data.status || "" }).catch(() => {});
     return id;
   }
   data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
   if (window.CURRENT_USER?.uid) data.createdBy = window.CURRENT_USER.uid;
   const ref = await fbDb.collection("assessments").add(data);
+  recordAdminActivity("Created assessment", { assessmentId: ref.id, title: data.title || "", type: data.type || "" }).catch(() => {});
   return ref.id;
 };
 
-const deleteAssessment = (id) =>
-  fbReady ? fbDb.collection("assessments").doc(id).delete()
-          : Promise.reject(new Error("Firebase not configured"));
+const deleteAssessment = async (id) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  await fbDb.collection("assessments").doc(id).delete();
+  recordAdminActivity("Deleted assessment", { assessmentId: id }).catch(() => {});
+};
 
-const archiveAssessment = (id) =>
-  fbReady ? fbDb.collection("assessments").doc(id).set({ status: "archived" }, { merge: true })
-          : Promise.reject(new Error("Firebase not configured"));
+const archiveAssessment = async (id) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  await fbDb.collection("assessments").doc(id).set({ status: "archived" }, { merge: true });
+  recordAdminActivity("Archived assessment", { assessmentId: id }).catch(() => {});
+};
 
 // ---- Certificate template -------------------------------------------------
-const saveCertificateTemplate = (template) =>
-  fbReady ? fbDb.collection("settings").doc("certificate").set(template, { merge: true })
-          : Promise.reject(new Error("Firebase not configured"));
+const saveCertificateTemplate = async (template) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  await fbDb.collection("settings").doc("certificate").set(template, { merge: true });
+  recordAdminActivity("Updated certificate template").catch(() => {});
+};
 
 // ---- Bulk training assignment --------------------------------------------
 // payload = { userIds:[], courseIds:[], dueDays?, required? }
@@ -397,6 +460,7 @@ const assignTraining = async ({ userIds, courseIds, dueDays, required }) => {
     }
   }
   await batch.commit();
+  recordAdminActivity("Assigned training", { userCount: userIds.length, courseCount: courseIds.length, required: !!required }).catch(() => {});
   return n;
 };
 
@@ -421,15 +485,19 @@ const saveCourse = async (course) => {
     data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
     if (window.CURRENT_USER?.uid) data.createdBy = window.CURRENT_USER.uid;
     const ref = await fbDb.collection("courses").add(data);
+    recordAdminActivity("Created course", { courseId: ref.id, title: data.title || "", status: data.status || "" }).catch(() => {});
     return ref.id;
   }
   await fbDb.collection("courses").doc(id).set(data, { merge: true });
+  recordAdminActivity("Updated course", { courseId: id, title: data.title || "", status: data.status || "" }).catch(() => {});
   return id;
 };
 
-const archiveCourse = (id) =>
-  fbReady ? fbDb.collection("courses").doc(id).set({ status: "archived" }, { merge: true })
-          : Promise.reject(new Error("Firebase not configured"));
+const archiveCourse = async (id) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  await fbDb.collection("courses").doc(id).set({ status: "archived" }, { merge: true });
+  recordAdminActivity("Archived course", { courseId: id }).catch(() => {});
+};
 
 const duplicateCourse = async (sourceId) => {
   if (!fbReady) throw new Error("Firebase not configured");
@@ -442,12 +510,15 @@ const duplicateCourse = async (sourceId) => {
   data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
   if (window.CURRENT_USER?.uid) data.createdBy = window.CURRENT_USER.uid;
   const ref = await fbDb.collection("courses").add(data);
+  recordAdminActivity("Duplicated course", { sourceCourseId: sourceId, courseId: ref.id, title: data.title || "" }).catch(() => {});
   return ref.id;
 };
 
-const deleteCourse = (id) =>
-  fbReady ? fbDb.collection("courses").doc(id).delete()
-          : Promise.reject(new Error("Firebase not configured"));
+const deleteCourse = async (id) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  await fbDb.collection("courses").doc(id).delete();
+  recordAdminActivity("Deleted course", { courseId: id }).catch(() => {});
+};
 
 // ---- Lesson time tracking -------------------------------------------------
 // Adds `seconds` to enrollment.timeSpent[lessonId] using a Firestore atomic
@@ -502,6 +573,7 @@ const gradeAttempt = async (attemptId, { manualScores, finalScore, passed, grade
     gradedByName: window.CURRENT_USER?.name || "",
     gradedAt: firebase.firestore.FieldValue.serverTimestamp(),
   }, { merge: true });
+  recordAdminActivity("Graded attempt", { attemptId, finalScore, passed: passed === true ? "yes" : passed === false ? "no" : "" }).catch(() => {});
 };
 
 // ---- Image upload (Firebase Storage) --------------------------------------
@@ -592,7 +664,7 @@ Object.assign(window, {
   saveAssessment, archiveAssessment, deleteAssessment,
   saveCertificateTemplate,
   assignTraining, daysUntilDue, updateUser, resetUserProgress,
-  enrollSelf, markLessonComplete, recordCompletion, recordActivity,
+  enrollSelf, markLessonComplete, recordCompletion, recordActivity, recordAdminActivity,
   addLessonTime, recordAttempt, gradeAttempt,
   uploadImage,
   sendEmailReminder,
