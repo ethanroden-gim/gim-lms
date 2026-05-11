@@ -351,15 +351,45 @@ const ToastHost = () => {
 };
 
 // ---------- Course Enrollments modal ----------
+const _enrollmentSortText = (v) => String(v ?? "").toLowerCase();
+const _enrollmentSortRows = (rows, sort) => [...rows].sort((a, b) => {
+  const av = a?.[sort.key];
+  const bv = b?.[sort.key];
+  const result = typeof av === "number" || typeof bv === "number"
+    ? Number(av || 0) - Number(bv || 0)
+    : _enrollmentSortText(av).localeCompare(_enrollmentSortText(bv));
+  return sort.dir === "desc" ? -result : result;
+});
+const EnrollmentSortHeader = ({ label, sortKey, sort, onSort }) => (
+  <th>
+    <button
+      type="button"
+      className="btn btn-ghost btn-sm"
+      onClick={() => onSort({ key: sortKey, dir: sort.key === sortKey && sort.dir === "asc" ? "desc" : "asc" })}
+      style={{ height: "auto", padding: 0, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em" }}
+    >
+      {label} {sort.key === sortKey ? (sort.dir === "asc" ? "Asc" : "Desc") : "Sort"}
+    </button>
+  </th>
+);
+
 const EnrollmentsModal = ({ open, onClose, course }) => {
+  const [sort, setSort] = React.useState({ key: "name", dir: "asc" });
   if (!open || !course) return null;
 
   const courseEnrollments = (window.ALL_ENROLLMENTS || []).filter(e => e.courseId === course.id);
   const usersById = Object.fromEntries((window.ALL_USERS || []).map(u => [u.id, u]));
-  const rows = courseEnrollments.map(e => ({
-    e,
-    u: usersById[e.userId] || { id: e.userId, name: e.userId, email: "", dept: "" },
-  }));
+  const rows = _enrollmentSortRows(courseEnrollments.map(e => {
+    const u = usersById[e.userId] || { id: e.userId, name: e.userId, email: "", dept: "" };
+    return {
+      e,
+      u,
+      name: u.name || "",
+      dept: u.dept || "",
+      progress: e.progress || 0,
+      status: e.status || "assigned",
+    };
+  }), sort);
 
   const exportCsv = () => {
     const csvRows = rows.map(({ u, e }) => ({
@@ -405,10 +435,10 @@ const EnrollmentsModal = ({ open, onClose, course }) => {
           <table className="tbl" style={{ margin: 0 }}>
             <thead>
               <tr>
-                <th>Learner</th>
-                <th>Department</th>
-                <th>Progress</th>
-                <th>Status</th>
+                <EnrollmentSortHeader label="Learner" sortKey="name" sort={sort} onSort={setSort} />
+                <EnrollmentSortHeader label="Department" sortKey="dept" sort={sort} onSort={setSort} />
+                <EnrollmentSortHeader label="Progress" sortKey="progress" sort={sort} onSort={setSort} />
+                <EnrollmentSortHeader label="Status" sortKey="status" sort={sort} onSort={setSort} />
               </tr>
             </thead>
             <tbody>

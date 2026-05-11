@@ -58,9 +58,14 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
   const toggleDept   = (d)  => setDepts(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d]);
   const togglePerson = (id) => setPeople(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
-  const filteredCourses = COURSES.filter(c => (c.status !== "archived") && (!courseQuery || c.title.toLowerCase().includes(courseQuery.toLowerCase())));
-  const filteredPeople  = ALL_USERS.filter(u => !peopleQuery || u.name.toLowerCase().includes(peopleQuery.toLowerCase()));
-  const deptOptions = DEPARTMENT_DOCS.length > 0 ? DEPARTMENT_DOCS.map(d => d.name) : DEPARTMENTS;
+  const filteredCourses = COURSES
+    .filter(c => (c.status !== "archived") && (!courseQuery || c.title.toLowerCase().includes(courseQuery.toLowerCase())))
+    .sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+  const filteredPeople  = ALL_USERS
+    .filter(u => !peopleQuery || u.name.toLowerCase().includes(peopleQuery.toLowerCase()))
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const deptOptions = (DEPARTMENT_DOCS.length > 0 ? DEPARTMENT_DOCS.map(d => d.name) : DEPARTMENTS)
+    .sort((a, b) => (a || "").localeCompare(b || ""));
 
   // Resolve audience to actual user IDs
   const targetUserIds = React.useMemo(() => {

@@ -139,8 +139,8 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
   const persistLessonComplete = async () => {
     if (!active || !window.fbReady || !window.markLessonComplete) return;
     try {
-      await markLessonComplete(course, active.id);
-      if (isLast && completed.size + 1 >= flatLessons.length) {
+      await markLessonComplete(course, active.id, { requiresFinalAssessment: !!linkedAssessment });
+      if (isLast && completed.size + 1 >= flatLessons.length && !linkedAssessment) {
         await recordActivity(`Completed course "${course.title}"`, course.id);
       } else {
         await recordActivity(`Completed lesson "${active.title}" in ${course.title}`, course.id);
@@ -364,6 +364,11 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
                       if (activeIdx < flatLessons.length - 1) {
                         return <button className="btn btn-primary" onClick={() => setActiveIdx(activeIdx + 1)}>
                           Next lesson <Icon name="arrow-right" size={14}/>
+                        </button>;
+                      }
+                      if (linkedAssessment) {
+                        return <button className="btn btn-primary" onClick={() => goAssessment(course.id)}>
+                          Take final assessment <Icon name="arrow-right" size={14}/>
                         </button>;
                       }
                       return <button className="btn btn-primary" onClick={goBack}>

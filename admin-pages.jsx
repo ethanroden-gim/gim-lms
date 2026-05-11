@@ -2,6 +2,42 @@
 // GIM LMS — Admin pages (lightweight)
 // =========================================================
 
+const _adminSortText = (v) => String(v ?? "").toLowerCase();
+const _adminSortValue = (row, key) => {
+  const v = typeof key === "function" ? key(row) : row?.[key];
+  if (v?.seconds != null) return v.seconds;
+  if (v instanceof Date) return v.getTime();
+  return v;
+};
+const _adminCompare = (a, b, key, dir = "asc") => {
+  const av = _adminSortValue(a, key);
+  const bv = _adminSortValue(b, key);
+  const result = typeof av === "number" || typeof bv === "number"
+    ? (Number(av || 0) - Number(bv || 0))
+    : _adminSortText(av).localeCompare(_adminSortText(bv));
+  return dir === "desc" ? -result : result;
+};
+const _adminSortRows = (rows, sort) => {
+  if (!sort?.key) return rows;
+  return [...rows].sort((a, b) => _adminCompare(a, b, sort.key, sort.dir));
+};
+const _adminNextSort = (sort, key) => ({
+  key,
+  dir: sort.key === key && sort.dir === "asc" ? "desc" : "asc",
+});
+const AdminSortHeader = ({ label, sortKey, sort, onSort, style }) => (
+  <th style={style}>
+    <button
+      type="button"
+      className="btn btn-ghost btn-sm"
+      onClick={() => onSort(_adminNextSort(sort, sortKey))}
+      style={{ height: "auto", padding: 0, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em" }}
+    >
+      {label} {sort.key === sortKey ? (sort.dir === "asc" ? "Asc" : "Desc") : "Sort"}
+    </button>
+  </th>
+);
+
 // ============================================================
 // Admin overview
 // ============================================================
@@ -39,7 +75,7 @@ const AdminOverviewPage = ({ goRoute }) => {
   const complianceRate = totals.assigned ? Math.round((totals.completed / totals.assigned) * 100) : null;
 
   // Department list — Firestore-backed only. No fallback to hardcoded names.
-  const departmentNames = DEPARTMENT_DOCS.map(d => d.name);
+  const departmentNames = DEPARTMENT_DOCS.map(d => d.name).sort((a, b) => a.localeCompare(b));
   const deptCompliance = departmentNames.map(dept => {
     const people = ALL_USERS.filter(u => u.dept === dept);
     let a = 0, c = 0;
@@ -215,6 +251,7 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
   const [q, setQ] = React.useState("");
   const [cat, setCat] = React.useState("All");
   const [statusFilter, setStatusFilter] = React.useState("All");
+  const [sort, setSort] = React.useState({ key: "title", dir: "asc" });
   const [assignFor, setAssignFor] = React.useState(null); // courseId or null
   const [enrollmentsFor, setEnrollmentsFor] = React.useState(null); // course or null
   const openAssign = (id) => setAssignFor(id);
@@ -227,6 +264,12 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
     if (statusFilter !== "All" && status !== statusFilter.toLowerCase()) return false;
     return true;
   });
+  const sortedCourses = _adminSortRows(filtered.map(c => ({
+    ...c,
+    _adminMinutes: adminCourseMinutes(c),
+    _adminEnrolled: ENROLLMENT_COUNTS[c.id] || 0,
+    _adminStatus: c.status || "published",
+  })), sort);
 
   return (
     <div className="page page--wide">
@@ -251,23 +294,23 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
           <option>All</option><option>Published</option><option>Draft</option><option>Archived</option>
         </select>
         <div className="fb-spacer" />
-        <span className="text-xs text-muted">{filtered.length} courses</span>
+        <span className="text-xs text-muted">{sortedCourses.length} courses</span>
       </div>
 
       <table className="tbl">
         <thead>
           <tr>
-            <th style={{ width: "30%" }}>Course</th>
-            <th>Category</th>
-            <th>Time</th>
-            <th>Lessons</th>
-            <th>Enrolled</th>
-            <th>Status</th>
+            <AdminSortHeader label="Course" sortKey="title" sort={sort} onSort={setSort} style={{ width: "30%" }} />
+            <AdminSortHeader label="Category" sortKey="cat" sort={sort} onSort={setSort} />
+            <AdminSortHeader label="Time" sortKey="_adminMinutes" sort={sort} onSort={setSort} />
+            <AdminSortHeader label="Lessons" sortKey="lessons" sort={sort} onSort={setSort} />
+            <AdminSortHeader label="Enrolled" sortKey="_adminEnrolled" sort={sort} onSort={setSort} />
+            <AdminSortHeader label="Status" sortKey="_adminStatus" sort={sort} onSort={setSort} />
             <th></th>
           </tr>
         </thead>
         <tbody>
-          {filtered.map(c => (
+          {sortedCourses.map(c => (
             <tr key={c.id}>
               <td>
                 <div style={{ display: "flex", gap: 12, alignItems: "center", cursor: "pointer" }} onClick={() => onEdit(c.id)}>
@@ -377,6 +420,7 @@ const AdminUsersPage = () => {
   const [dept, setDept] = React.useState("All");
   const [role, setRole] = React.useState("All");
   const [statusFilter, setStatusFilter] = React.useState("All");
+  const [sort, setSort] = React.useState({ key: "name", dir: "asc" });
   const [assignFor, setAssignFor] = React.useState(null); // userId, "all" for top-bar, or null
   const [enrollmentsFor, setEnrollmentsFor] = React.useState(null); // user doc or null
   const [selectedIds, setSelectedIds] = React.useState([]);
@@ -414,6 +458,7 @@ const AdminUsersPage = () => {
   };
 
   const statusMap = { "Active": "active", "Onboarding": "onboarding", "On leave": "leave", "Inactive": "inactive" };
+  const departmentOptions = [...DEPARTMENT_DOCS].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   const filtered = ALL_USERS.filter(u => {
     if (q && !(u.name?.toLowerCase().includes(q.toLowerCase()) || u.email?.toLowerCase().includes(q.toLowerCase()))) return false;
     if (dept !== "All" && u.dept !== dept) return false;
@@ -421,6 +466,16 @@ const AdminUsersPage = () => {
     if (statusFilter !== "All" && (u.status || "active") !== statusMap[statusFilter]) return false;
     return true;
   });
+  const sortedUsers = _adminSortRows(filtered.map(u => {
+    const stats = userStats(u.id);
+    return {
+      ...u,
+      _assigned: stats.assigned,
+      _completed: stats.completed,
+      _overdue: stats.overdue,
+      _status: u.status || "active",
+    };
+  }), sort);
 
   return (
     <div className="page page--wide">
@@ -440,7 +495,7 @@ const AdminUsersPage = () => {
         <input type="search" placeholder="Search by name or email…" value={q} onChange={e => setQ(e.target.value)} />
         <select value={dept} onChange={e => setDept(e.target.value)}>
           <option>All</option>
-          {DEPARTMENT_DOCS.map(d => <option key={d.id}>{d.name}</option>)}
+          {departmentOptions.map(d => <option key={d.id}>{d.name}</option>)}
         </select>
         <select value={role} onChange={e => setRole(e.target.value)}>
           <option>All</option><option>Learner</option><option>Manager</option><option>Admin</option>
@@ -450,7 +505,7 @@ const AdminUsersPage = () => {
           <option>Active</option><option>Onboarding</option><option>On leave</option><option>Inactive</option>
         </select>
         <div className="fb-spacer" />
-        <span className="text-xs text-muted">{filtered.length} of {ALL_USERS.length}</span>
+        <span className="text-xs text-muted">{sortedUsers.length} of {ALL_USERS.length}</span>
       </div>
 
       {selectedIds.length > 0 && (
@@ -474,22 +529,22 @@ const AdminUsersPage = () => {
             <th style={{ width: 32 }}>
               <input type="checkbox"
                 checked={selectedIds.length > 0 && selectedIds.length === filtered.length}
-                onChange={e => setSelectedIds(e.target.checked ? filtered.map(u => u.id) : [])}
+                onChange={e => setSelectedIds(e.target.checked ? sortedUsers.map(u => u.id) : [])}
                 title="Select all visible" />
             </th>
-            <th style={{ width: "28%" }}>Person</th>
-            <th>Role</th>
-            <th>Department</th>
-            <th>Status</th>
-            <th>Assigned</th>
-            <th>Completed</th>
-            <th>Due / Overdue</th>
+            <AdminSortHeader label="Person" sortKey="name" sort={sort} onSort={setSort} style={{ width: "28%" }} />
+            <AdminSortHeader label="Role" sortKey="role" sort={sort} onSort={setSort} />
+            <AdminSortHeader label="Department" sortKey="dept" sort={sort} onSort={setSort} />
+            <AdminSortHeader label="Status" sortKey="_status" sort={sort} onSort={setSort} />
+            <AdminSortHeader label="Assigned" sortKey="_assigned" sort={sort} onSort={setSort} />
+            <AdminSortHeader label="Completed" sortKey="_completed" sort={sort} onSort={setSort} />
+            <AdminSortHeader label="Due / Overdue" sortKey="_overdue" sort={sort} onSort={setSort} />
             <th></th>
           </tr>
         </thead>
         <tbody>
-          {filtered.map((u) => {
-            const deptOptions = DEPARTMENT_DOCS.map(d => d.name);
+          {sortedUsers.map((u) => {
+            const deptOptions = departmentOptions.map(d => d.name);
             const stats = userStats(u.id);
             const updateRole = async (e) => {
               const newRole = e.target.value;
@@ -644,20 +699,25 @@ const _adminDate = (v) => {
 };
 
 const UserEnrollmentsModal = ({ open, onClose, user }) => {
+  const [sort, setSort] = React.useState({ key: "course", dir: "asc" });
   if (!open || !user) return null;
 
-  const rows = (window.ALL_ENROLLMENTS || [])
+  const rows = _adminSortRows((window.ALL_ENROLLMENTS || [])
     .filter(e => e.userId === user.id)
     .map(e => ({
       e,
       c: COURSES.find(c => c.id === e.courseId) || { id: e.courseId, title: "(missing course)", cat: "" },
     }))
-    .sort((a, b) => {
-      const rank = { overdue: 0, in_progress: 1, assigned: 2, completed: 3 };
-      const as = a.e.status !== "completed" && a.e.dueDays != null && a.e.dueDays <= 0 ? "overdue" : (a.e.status || "assigned");
-      const bs = b.e.status !== "completed" && b.e.dueDays != null && b.e.dueDays <= 0 ? "overdue" : (b.e.status || "assigned");
-      return (rank[as] ?? 9) - (rank[bs] ?? 9) || (a.c.title || "").localeCompare(b.c.title || "");
-    });
+    .map(row => ({
+      ...row,
+      course: row.c.title || "",
+      category: row.c.cat || "",
+      status: row.e.status !== "completed" && row.e.dueDays != null && row.e.dueDays <= 0 ? "overdue" : (row.e.status || "assigned"),
+      progress: row.e.progress || 0,
+      lessons: (row.e.completedLessons || []).length,
+      score: row.e.score ?? -1,
+      completedOn: row.e.completedOn,
+    })), sort);
 
   const exportCsv = () => {
     const csvRows = rows.map(({ e, c }) => ({
@@ -724,12 +784,12 @@ const UserEnrollmentsModal = ({ open, onClose, user }) => {
           <table className="tbl" style={{ margin: 0 }}>
             <thead>
               <tr>
-                <th style={{ width: "34%" }}>Course</th>
-                <th>Status</th>
-                <th>Progress</th>
-                <th>Lessons</th>
-                <th>Score</th>
-                <th>Dates</th>
+                <AdminSortHeader label="Course" sortKey="course" sort={sort} onSort={setSort} style={{ width: "34%" }} />
+                <AdminSortHeader label="Status" sortKey="status" sort={sort} onSort={setSort} />
+                <AdminSortHeader label="Progress" sortKey="progress" sort={sort} onSort={setSort} />
+                <AdminSortHeader label="Lessons" sortKey="lessons" sort={sort} onSort={setSort} />
+                <AdminSortHeader label="Score" sortKey="score" sort={sort} onSort={setSort} />
+                <AdminSortHeader label="Dates" sortKey="completedOn" sort={sort} onSort={setSort} />
                 <th></th>
               </tr>
             </thead>
@@ -808,7 +868,20 @@ const UserEnrollmentsModal = ({ open, onClose, user }) => {
 // ============================================================
 const AdminAssessmentsPage = () => {
   const [editing, setEditing] = React.useState(null); // null = closed, {} = new, doc = edit
-  const visible = ASSESSMENTS.filter(a => a.status !== "archived");
+  const [sort, setSort] = React.useState({ key: "title", dir: "asc" });
+  const visible = _adminSortRows(ASSESSMENTS
+    .filter(a => a.status !== "archived")
+    .map(a => {
+      const linked = COURSES.find(c => c.id === a.courseId);
+      return {
+        ...a,
+        _courseTitle: linked?.title || "",
+        _typeLabel: a.type === "quiz" ? "Quiz" : a.type === "cert" ? "Certification" : "Final exam",
+        _questionCount: a.questions?.length || 0,
+        _passMark: a.passMark || 80,
+        _status: a.status || "published",
+      };
+    }), sort);
   const totalAssessments = visible.length;
 
   return (
@@ -858,12 +931,12 @@ const AdminAssessmentsPage = () => {
         <table className="tbl">
           <thead>
             <tr>
-              <th style={{ width: "32%" }}>Assessment</th>
-              <th>Linked course</th>
-              <th>Type</th>
-              <th>Questions</th>
-              <th>Pass mark</th>
-              <th>Status</th>
+              <AdminSortHeader label="Assessment" sortKey="title" sort={sort} onSort={setSort} style={{ width: "32%" }} />
+              <AdminSortHeader label="Linked course" sortKey="_courseTitle" sort={sort} onSort={setSort} />
+              <AdminSortHeader label="Type" sortKey="_typeLabel" sort={sort} onSort={setSort} />
+              <AdminSortHeader label="Questions" sortKey="_questionCount" sort={sort} onSort={setSort} />
+              <AdminSortHeader label="Pass mark" sortKey="_passMark" sort={sort} onSort={setSort} />
+              <AdminSortHeader label="Status" sortKey="_status" sort={sort} onSort={setSort} />
               <th></th>
             </tr>
           </thead>
@@ -940,6 +1013,32 @@ const _activityLocal = (row) => {
   return d ? d.toLocaleString() : "—";
 };
 
+const _activityNextSort = (current, key) => {
+  if (key === "time") return current === "newest" ? "oldest" : "newest";
+  if (key === "person") return current === "person" ? "person_desc" : "person";
+  if (key === "activity") return current === "activity" ? "activity_desc" : "activity";
+  if (key === "course") return current === "course" ? "course_desc" : "course";
+  return key;
+};
+const ActivitySortHeader = ({ label, sortKey, sort, onSort, style }) => {
+  const active = sortKey === "time"
+    ? (sort === "newest" || sort === "oldest")
+    : (sort === sortKey || sort === `${sortKey}_desc`);
+  const desc = sortKey === "time" ? sort === "newest" : sort === `${sortKey}_desc`;
+  return (
+    <th style={style}>
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        onClick={() => onSort(_activityNextSort(sort, sortKey))}
+        style={{ height: "auto", padding: 0, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em" }}
+      >
+        {label} {active ? (desc ? "Desc" : "Asc") : "Sort"}
+      </button>
+    </th>
+  );
+};
+
 const AdminActivityPage = () => {
   const [view, setView] = React.useState("learner");
   const [q, setQ] = React.useState("");
@@ -977,15 +1076,23 @@ const AdminActivityPage = () => {
     const ta = _activityTime(a)?.getTime() || 0;
     const tb = _activityTime(b)?.getTime() || 0;
     if (sort === "oldest") return ta - tb;
-    if (sort === "person") {
+    if (sort === "person" || sort === "person_desc") {
       const ap = view === "admin" ? (a.actorName || usersById[a.actorId]?.name || a.actorId || "") : (usersById[a.userId]?.name || a.userName || a.userId || "");
       const bp = view === "admin" ? (b.actorName || usersById[b.actorId]?.name || b.actorId || "") : (usersById[b.userId]?.name || b.userName || b.userId || "");
-      return ap.localeCompare(bp) || tb - ta;
+      const result = ap.localeCompare(bp) || tb - ta;
+      return sort === "person_desc" ? -result : result;
     }
-    if (sort === "course") {
+    if (sort === "activity" || sort === "activity_desc") {
+      const aa = view === "admin" ? (a.action || "") : (a.text || "");
+      const ba = view === "admin" ? (b.action || "") : (b.text || "");
+      const result = aa.localeCompare(ba) || tb - ta;
+      return sort === "activity_desc" ? -result : result;
+    }
+    if (sort === "course" || sort === "course_desc") {
       const ac = coursesById[a.courseId]?.title || a.courseId || "";
       const bc = coursesById[b.courseId]?.title || b.courseId || "";
-      return ac.localeCompare(bc) || tb - ta;
+      const result = ac.localeCompare(bc) || tb - ta;
+      return sort === "course_desc" ? -result : result;
     }
     return tb - ta;
   });
@@ -1065,13 +1172,17 @@ const AdminActivityPage = () => {
           </select>
           <select className="cd-input" value={courseId} onChange={e => setCourseId(e.target.value)} disabled={view === "admin"}>
             <option value="All">All courses</option>
-            {COURSES.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+            {[...COURSES].sort((a, b) => (a.title || "").localeCompare(b.title || "")).map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
           </select>
           <select className="cd-input" value={sort} onChange={e => setSort(e.target.value)}>
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
             <option value="person">{view === "admin" ? "Admin A-Z" : "Learner A-Z"}</option>
+            <option value="person_desc">{view === "admin" ? "Admin Z-A" : "Learner Z-A"}</option>
+            <option value="activity">Activity A-Z</option>
+            <option value="activity_desc">Activity Z-A</option>
             <option value="course">Course A-Z</option>
+            <option value="course_desc">Course Z-A</option>
           </select>
         </div>
         <div className="text-xs text-muted" style={{ marginTop: 8 }}>
@@ -1085,10 +1196,10 @@ const AdminActivityPage = () => {
         <table className="tbl">
           <thead>
             <tr>
-              <th style={{ width: 170 }}>Time</th>
-              <th>{view === "admin" ? "Admin" : "Learner"}</th>
-              <th>Activity</th>
-              <th>Course / target</th>
+              <ActivitySortHeader label="Time" sortKey="time" sort={sort} onSort={setSort} style={{ width: 170 }} />
+              <ActivitySortHeader label={view === "admin" ? "Admin" : "Learner"} sortKey="person" sort={sort} onSort={setSort} />
+              <ActivitySortHeader label="Activity" sortKey="activity" sort={sort} onSort={setSort} />
+              <ActivitySortHeader label="Course / target" sortKey="course" sort={sort} onSort={setSort} />
             </tr>
           </thead>
           <tbody>
@@ -1140,6 +1251,8 @@ const DEFAULT_ROLES = [
 const AdminSettingsPage = () => {
   const [deptModal, setDeptModal] = React.useState({ open: false, initial: null });
   const [roleModal, setRoleModal] = React.useState({ open: false, initial: null });
+  const sortedDepartments = [...DEPARTMENT_DOCS].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const sortedRoles = [...ROLE_DOCS].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
   return (
     <div className="page" style={{ maxWidth: 980 }}>
@@ -1165,7 +1278,7 @@ const AdminSettingsPage = () => {
                   No departments yet. Click "Add department" to create your first one.
                 </div>
               )}
-              {DEPARTMENT_DOCS.map(d => {
+              {sortedDepartments.map(d => {
                 const preset = (window.DEPT_PRESETS || [])[d.iconIdx ?? 0] || { icon: "house", bg: "#f0f9e6", color: "#2e5a12" };
                 return (
                   <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", border: "1px solid #ececec", borderRadius: 10 }}>
@@ -1217,7 +1330,7 @@ const AdminSettingsPage = () => {
                 </div>
               );
             })}
-            {ROLE_DOCS.map(r => {
+            {sortedRoles.map(r => {
               const count = ALL_USERS.filter(u => u.role === r.name).length;
               return (
                 <div key={r.id} style={{ padding: "14px 0", borderBottom: "1px solid #ececec" }}>
@@ -1287,12 +1400,19 @@ const AdminSettingsPage = () => {
 const AdminAttemptsPage = () => {
   const [tab, setTab] = React.useState("pending");
   const [grading, setGrading] = React.useState(null); // attempt being graded
+  const [sort, setSort] = React.useState({ key: "_learner", dir: "asc" });
 
-  const sorted = [...ATTEMPTS].sort((a, b) => {
-    const ta = a.submittedAt?.seconds ?? 0;
-    const tb = b.submittedAt?.seconds ?? 0;
-    return tb - ta;
-  });
+  const sorted = _adminSortRows([...ATTEMPTS].map(a => {
+    const c = COURSES.find(x => x.id === a.courseId);
+    return {
+      ...a,
+      _learner: a.userName || a.userEmail || a.userId || "",
+      _courseTitle: c?.title || "",
+      _submitted: a.submittedAt?.seconds || 0,
+      _autoScore: a.autoScore ?? -1,
+      _finalScore: a.finalScore ?? -1,
+    };
+  }), sort);
 
   const pending = sorted.filter(a => a.status === "pending_review");
   const graded = sorted.filter(a => a.status === "graded");
@@ -1324,11 +1444,11 @@ const AdminAttemptsPage = () => {
         <table className="tbl">
           <thead>
             <tr>
-              <th>Learner</th>
-              <th>Course</th>
-              <th>Submitted</th>
-              <th>Auto score</th>
-              <th>Final</th>
+              <AdminSortHeader label="Learner" sortKey="_learner" sort={sort} onSort={setSort} />
+              <AdminSortHeader label="Course" sortKey="_courseTitle" sort={sort} onSort={setSort} />
+              <AdminSortHeader label="Submitted" sortKey="_submitted" sort={sort} onSort={setSort} />
+              <AdminSortHeader label="Auto score" sortKey="_autoScore" sort={sort} onSort={setSort} />
+              <AdminSortHeader label="Final" sortKey="_finalScore" sort={sort} onSort={setSort} />
               <th></th>
             </tr>
           </thead>

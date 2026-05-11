@@ -299,8 +299,10 @@ const enrollSelf = async (courseId) => {
 };
 
 // Mark a single lesson complete; recomputes progress against the course
-const markLessonComplete = async (course, lessonId, userId = fbAuth.currentUser?.uid) => {
+const markLessonComplete = async (course, lessonId, userIdOrOptions = fbAuth.currentUser?.uid, maybeOptions = {}) => {
   if (!fbReady) throw new Error("Firebase not configured");
+  const options = typeof userIdOrOptions === "object" && userIdOrOptions !== null ? userIdOrOptions : maybeOptions;
+  const userId = typeof userIdOrOptions === "object" && userIdOrOptions !== null ? fbAuth.currentUser?.uid : userIdOrOptions;
   const ref = enrollmentDocRef(course.id, userId);
   const snap = await ref.get();
   const totalLessons = (course.sections || course.modules || [])
@@ -309,6 +311,10 @@ const markLessonComplete = async (course, lessonId, userId = fbAuth.currentUser?
   const existing = snap.exists ? snap.data() : {};
   const completedLessons = Array.from(new Set([...(existing.completedLessons || []), lessonId]));
   const progress = Math.min(100, Math.round((completedLessons.length / totalLessons) * 100));
+  const requiresFinalAssessment = options.requiresFinalAssessment ?? (window.ASSESSMENTS || [])
+    .some(a => a.courseId === course.id && a.status !== "archived" && a.type !== "quiz");
+  const lessonsComplete = progress >= 100;
+  const courseComplete = lessonsComplete && !requiresFinalAssessment;
 
   await ref.set({
     userId,
@@ -317,9 +323,9 @@ const markLessonComplete = async (course, lessonId, userId = fbAuth.currentUser?
     progress,
     currentLessonId: lessonId,
     lastLesson: lessonId,
-    status: progress >= 100 ? "completed" : "in_progress",
+    status: courseComplete ? "completed" : "in_progress",
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    ...(progress >= 100 && !existing.completedOn ? {
+    ...(courseComplete && !existing.completedOn ? {
       completedOn: firebase.firestore.FieldValue.serverTimestamp(),
     } : {}),
   }, { merge: true });
