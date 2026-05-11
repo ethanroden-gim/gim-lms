@@ -353,6 +353,7 @@ const AdminUsersPage = () => {
   const [role, setRole] = React.useState("All");
   const [statusFilter, setStatusFilter] = React.useState("All");
   const [assignFor, setAssignFor] = React.useState(null); // userId, "all" for top-bar, or null
+  const [enrollmentsFor, setEnrollmentsFor] = React.useState(null); // user doc or null
   const [selectedIds, setSelectedIds] = React.useState([]);
   const openAssign = (name) => setAssignFor(name);
 
@@ -525,7 +526,16 @@ const AdminUsersPage = () => {
                 {u.status === "leave" && <span className="chip chip-grey">On leave</span>}
                 {u.status === "inactive" && <span className="chip chip-grey">Inactive</span>}
               </td>
-              <td style={{ fontVariantNumeric: "tabular-nums" }}>{stats.assigned}</td>
+              <td style={{ fontVariantNumeric: "tabular-nums" }}>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setEnrollmentsFor(u)}
+                  style={{ height: 28, padding: "0 8px" }}
+                  title="View assigned courses"
+                >
+                  {stats.assigned}
+                </button>
+              </td>
               <td style={{ fontVariantNumeric: "tabular-nums" }}>{stats.completed}</td>
               <td>
                 {stats.overdue > 0 ? (
@@ -538,6 +548,7 @@ const AdminUsersPage = () => {
                 <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
                   <button className="btn-icon" title="Assign training" onClick={() => openAssign(u.id)}><Icon name="plus" size={14}/></button>
                   <RowMenu items={[
+                    { label: "View assigned courses", icon: "book", onClick: () => setEnrollmentsFor(u) },
                     { label: "Assign training", icon: "plus",     onClick: () => openAssign(u.id) },
                     { label: "Send reminder",   icon: "send",     onClick: async () => {
                         if (!u.email) { alert(`No email on file for ${u.name}`); return; }
@@ -590,7 +601,162 @@ const AdminUsersPage = () => {
         onClose={() => setAssignFor(null)}
         preset={assignFor && assignFor !== "all" ? { userId: assignFor } : null}
       />
+      <UserEnrollmentsModal
+        open={!!enrollmentsFor}
+        onClose={() => setEnrollmentsFor(null)}
+        user={enrollmentsFor}
+      />
     </div>
+  );
+};
+
+const _adminDate = (v) => {
+  if (!v) return "";
+  if (v.toDate) return v.toDate().toLocaleDateString();
+  if (v instanceof Date) return v.toLocaleDateString();
+  if (typeof v === "string") return v;
+  return "";
+};
+
+const UserEnrollmentsModal = ({ open, onClose, user }) => {
+  if (!open || !user) return null;
+
+  const rows = (window.ALL_ENROLLMENTS || [])
+    .filter(e => e.userId === user.id)
+    .map(e => ({
+      e,
+      c: COURSES.find(c => c.id === e.courseId) || { id: e.courseId, title: "(missing course)", cat: "" },
+    }))
+    .sort((a, b) => {
+      const rank = { overdue: 0, in_progress: 1, assigned: 2, completed: 3 };
+      const as = a.e.status !== "completed" && a.e.dueDays != null && a.e.dueDays <= 0 ? "overdue" : (a.e.status || "assigned");
+      const bs = b.e.status !== "completed" && b.e.dueDays != null && b.e.dueDays <= 0 ? "overdue" : (b.e.status || "assigned");
+      return (rank[as] ?? 9) - (rank[bs] ?? 9) || (a.c.title || "").localeCompare(b.c.title || "");
+    });
+
+  const exportCsv = () => {
+    const csvRows = rows.map(({ e, c }) => ({
+      course: c.title || "",
+      category: c.cat || "",
+      status: e.status || "assigned",
+      progress: e.progress || 0,
+      completedLessons: (e.completedLessons || []).length,
+      score: e.score ?? "",
+      assignedAt: _adminDate(e.assignedAt),
+      startedAt: _adminDate(e.startedAt),
+      completedOn: _adminDate(e.completedOn),
+      dueDays: e.dueDays ?? "",
+    }));
+    const cols = [
+      { key: "course", label: "Course" },
+      { key: "category", label: "Category" },
+      { key: "status", label: "Status" },
+      { key: "progress", label: "Progress %" },
+      { key: "completedLessons", label: "Completed lessons" },
+      { key: "score", label: "Score %" },
+      { key: "assignedAt", label: "Assigned" },
+      { key: "startedAt", label: "Started" },
+      { key: "completedOn", label: "Completed" },
+      { key: "dueDays", label: "Days until due" },
+    ];
+    downloadBlob(`${user.id}-assigned-courses-${stamp()}.csv`, toCSV(csvRows, cols), "text/csv;charset=utf-8");
+  };
+
+  const completed = rows.filter(({ e }) => e.status === "completed").length;
+  const inProgress = rows.filter(({ e }) => e.status === "in_progress").length;
+  const overdue = rows.filter(({ e }) => e.status !== "completed" && e.dueDays != null && e.dueDays <= 0).length;
+
+  return (
+    <Modal open={open} onClose={onClose} width={900}>
+      <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #ececec", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <div className="eyebrow-sm">Assigned courses</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
+            <Avatar name={user.name || user.id} size={34} />
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 800 }}>{user.name || user.id}</div>
+              <div style={{ fontSize: 12, color: "#5f635f", marginTop: 2 }}>{user.email || ""}</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+            <span className="chip chip-grey">{rows.length} assigned</span>
+            <span className="chip chip-amber">{inProgress} in progress</span>
+            <span className="chip chip-green">{completed} completed</span>
+            {overdue > 0 && <span className="chip" style={{ background: "#fdecec", color: "#a8232b" }}>{overdue} overdue</span>}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {rows.length > 0 && (
+            <button className="btn btn-ghost btn-sm" onClick={exportCsv}><Icon name="download" size={13}/> Export</button>
+          )}
+          <button className="btn-icon" onClick={onClose}><Icon name="close" size={18}/></button>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: 0 }}>
+        {rows.length === 0 ? (
+          <div className="empty" style={{ padding: 32 }}>No assigned courses for this person yet.</div>
+        ) : (
+          <table className="tbl" style={{ margin: 0 }}>
+            <thead>
+              <tr>
+                <th style={{ width: "34%" }}>Course</th>
+                <th>Status</th>
+                <th>Progress</th>
+                <th>Lessons</th>
+                <th>Score</th>
+                <th>Dates</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(({ e, c }) => {
+                const progress = e.progress || 0;
+                const completedLessons = (e.completedLessons || []).length;
+                const totalLessons = (c.sections || c.modules || []).reduce((sum, sec) => sum + (sec.lessons?.length || 0), 0) || c.lessons || 0;
+                const isOverdue = e.status !== "completed" && e.dueDays != null && e.dueDays <= 0;
+                return (
+                  <tr key={e.id || `${e.userId}_${e.courseId}`}>
+                    <td>
+                      <div style={{ fontWeight: 700, fontSize: 13 }}>{c.title}</div>
+                      <div style={{ fontSize: 11, color: "#5f635f", marginTop: 2 }}>{c.cat || ""}</div>
+                    </td>
+                    <td>
+                      {isOverdue ? <span className="chip" style={{ background: "#fdecec", color: "#a8232b" }}>Overdue</span> :
+                       e.status === "completed" ? <span className="chip chip-green">Completed</span> :
+                       e.status === "in_progress" ? <span className="chip chip-amber">In progress</span> :
+                       <span className="chip chip-grey">Assigned</span>}
+                    </td>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div className="bar bar-thin" style={{ width: 110 }}>
+                          <div style={{ width: `${progress}%`, background: progress >= 100 ? "#7ac142" : "#f5a524" }}/>
+                        </div>
+                        <span style={{ fontSize: 12, fontVariantNumeric: "tabular-nums", fontWeight: 700 }}>{progress}%</span>
+                      </div>
+                    </td>
+                    <td style={{ fontVariantNumeric: "tabular-nums", fontSize: 12 }}>
+                      {totalLessons ? `${completedLessons} / ${totalLessons}` : completedLessons}
+                    </td>
+                    <td style={{ fontVariantNumeric: "tabular-nums", fontSize: 12 }}>
+                      {e.score != null ? `${e.score}%` : "—"}
+                    </td>
+                    <td style={{ fontSize: 11, color: "#5f635f", lineHeight: 1.5 }}>
+                      {_adminDate(e.assignedAt) && <div>Assigned: {_adminDate(e.assignedAt)}</div>}
+                      {_adminDate(e.startedAt) && <div>Started: {_adminDate(e.startedAt)}</div>}
+                      {_adminDate(e.completedOn) && <div>Completed: {_adminDate(e.completedOn)}</div>}
+                      {e.status !== "completed" && e.dueDays != null && (
+                        <div style={isOverdue ? { color: "#a8232b", fontWeight: 700 } : {}}>
+                          {isOverdue ? `${Math.abs(e.dueDays)} day${Math.abs(e.dueDays) === 1 ? "" : "s"} overdue` : `${e.dueDays} day${e.dueDays === 1 ? "" : "s"} due`}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </Modal>
   );
 };
 
