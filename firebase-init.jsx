@@ -280,11 +280,11 @@ const markLessonComplete = async (course, lessonId) => {
 };
 
 // Record assessment completion (called from AssessmentPage on pass)
-const recordCompletion = async (course, score) => {
+const recordCompletion = async (course, score, userId = fbAuth.currentUser?.uid) => {
   if (!fbReady) throw new Error("Firebase not configured");
-  const ref = enrollmentDocRef(course.id);
+  const ref = enrollmentDocRef(course.id, userId);
   await ref.set({
-    userId: fbAuth.currentUser.uid,
+    userId,
     courseId: course.id,
     status: "completed",
     progress: 100,

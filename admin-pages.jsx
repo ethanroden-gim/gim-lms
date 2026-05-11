@@ -874,15 +874,11 @@ const AdminAttemptsPage = () => {
   const [tab, setTab] = React.useState("pending");
   const [grading, setGrading] = React.useState(null); // attempt being graded
 
-  const sorted = React.useMemo(() => {
-    const arr = [...ATTEMPTS];
-    arr.sort((a, b) => {
-      const ta = a.submittedAt?.seconds ?? 0;
-      const tb = b.submittedAt?.seconds ?? 0;
-      return tb - ta;
-    });
-    return arr;
-  }, [ATTEMPTS.length, ATTEMPTS]);
+  const sorted = [...ATTEMPTS].sort((a, b) => {
+    const ta = a.submittedAt?.seconds ?? 0;
+    const tb = b.submittedAt?.seconds ?? 0;
+    return tb - ta;
+  });
 
   const pending = sorted.filter(a => a.status === "pending_review");
   const graded = sorted.filter(a => a.status === "graded");
@@ -1012,7 +1008,7 @@ const GradeAttemptModal = ({ attempt, onClose }) => {
       // If passed, also record completion on the enrollment
       const course = COURSES.find(c => c.id === a.courseId);
       if (passed && course) {
-        try { await recordCompletion(course, finalScore); } catch {}
+        try { await recordCompletion(course, finalScore, a.userId); } catch {}
       }
       // Email the learner
       if (a.userEmail && (window.GIM_CONFIG || {}).appsScriptReminderUrl) {
