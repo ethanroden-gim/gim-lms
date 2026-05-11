@@ -351,6 +351,18 @@ const resetUserProgress = async (userId) => {
   return snap.size;
 };
 
+const unassignCourse = async (userId, courseId) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  const ref = fbDb.collection("enrollments").doc(`${userId}_${courseId}`);
+  const snap = await ref.get();
+  if (!snap.exists) return false;
+  const data = snap.data() || {};
+  if (data.status === "completed") throw new Error("Completed courses cannot be unassigned.");
+  await ref.delete();
+  recordAdminActivity("Unassigned course", { targetUserId: userId, courseId }).catch(() => {});
+  return true;
+};
+
 // ---- Departments ----------------------------------------------------------
 const saveDepartment = async (dept) => {
   if (!fbReady) throw new Error("Firebase not configured");
@@ -663,7 +675,7 @@ Object.assign(window, {
   saveRole, deleteRole,
   saveAssessment, archiveAssessment, deleteAssessment,
   saveCertificateTemplate,
-  assignTraining, daysUntilDue, updateUser, resetUserProgress,
+  assignTraining, daysUntilDue, updateUser, resetUserProgress, unassignCourse,
   enrollSelf, markLessonComplete, recordCompletion, recordActivity, recordAdminActivity,
   addLessonTime, recordAttempt, gradeAttempt,
   uploadImage,

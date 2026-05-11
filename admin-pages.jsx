@@ -730,6 +730,7 @@ const UserEnrollmentsModal = ({ open, onClose, user }) => {
                 <th>Lessons</th>
                 <th>Score</th>
                 <th>Dates</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -772,6 +773,23 @@ const UserEnrollmentsModal = ({ open, onClose, user }) => {
                         <div style={isOverdue ? { color: "#a8232b", fontWeight: 700 } : {}}>
                           {isOverdue ? `${Math.abs(e.dueDays)} day${Math.abs(e.dueDays) === 1 ? "" : "s"} overdue` : `${e.dueDays} day${e.dueDays === 1 ? "" : "s"} due`}
                         </div>
+                      )}
+                    </td>
+                    <td>
+                      {e.status === "completed" ? (
+                        <span className="text-xs text-muted">Locked</span>
+                      ) : (
+                        <button className="btn btn-ghost btn-sm" style={{ color: "#a8232b" }} onClick={async () => {
+                          if (!confirm(`Unassign "${c.title}" from ${user.name || user.id}?\n\nTheir progress for this course will be removed. Completed courses cannot be unassigned.`)) return;
+                          try {
+                            const changed = await unassignCourse(user.id, e.courseId);
+                            showToast?.(changed ? `Unassigned "${c.title}"` : "Enrollment was already removed");
+                          } catch (err) {
+                            alert("Unassign failed: " + err.message);
+                          }
+                        }}>
+                          Unassign
+                        </button>
                       )}
                     </td>
                   </tr>
