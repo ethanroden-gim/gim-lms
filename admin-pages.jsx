@@ -1008,7 +1008,11 @@ const GradeAttemptModal = ({ attempt, onClose }) => {
       // If passed, also record completion on the enrollment
       const course = COURSES.find(c => c.id === a.courseId);
       if (passed && course) {
-        try { await recordCompletion(course, finalScore, a.userId); } catch {}
+        if ((linkedAssessment?.type === "quiz" || a.lessonId) && a.lessonId) {
+          try { await markLessonComplete(course, a.lessonId, a.userId); } catch {}
+        } else {
+          try { await recordCompletion(course, finalScore, a.userId); } catch {}
+        }
       }
       // Email the learner
       if (a.userEmail && (window.GIM_CONFIG || {}).appsScriptReminderUrl) {

@@ -72,7 +72,7 @@ const Stepper = ({ step, steps }) => (
 // ============================================================
 // New Assessment modal — 4 steps
 // ============================================================
-const NewAssessmentModal = ({ open, onClose, initial }) => {
+const NewAssessmentModal = ({ open, onClose, initial, onSaved }) => {
   // initial may be: null/{} (brand new) | { courseId, title, ... } (prefilled new) | { id, ... } (edit)
   const isEdit = !!(initial && initial.id);
   const [step, setStep] = React.useState(1);
@@ -107,14 +107,14 @@ const NewAssessmentModal = ({ open, onClose, initial }) => {
       setCourseId(initial.courseId || "");
       setType(initial.type || "final");
       setQuestions(initial.questions || []);
-      setPassMark(initial.passMark || 80);
+      setPassMark(initial.type === "quiz" ? 100 : (initial.passMark || 80));
       setAttemptsAllowed(initial.attemptsAllowed === null || initial.attemptsAllowed === undefined
         ? "unlimited" : String(initial.attemptsAllowed));
       setTimeLimit(initial.timeLimit ? "limit" : "none");
       setTimeLimitMin(initial.timeLimit || 30);
       setShuffleQuestions(initial.shuffleQuestions !== false);
       setShowAnswers(initial.showAnswers || "after-pass");
-      setCertOnPass(initial.certOnPass !== false);
+      setCertOnPass(initial.type === "quiz" ? false : initial.certOnPass !== false);
     } else {
       setTitle(""); setDescription(""); setCourseId(""); setType("final");
       setQuestions([]);
@@ -122,6 +122,12 @@ const NewAssessmentModal = ({ open, onClose, initial }) => {
       setShuffleQuestions(true); setShowAnswers("after-pass"); setCertOnPass(true);
     }
   }, [open, initial]);
+
+  React.useEffect(() => {
+    if (type !== "quiz") return;
+    setPassMark(100);
+    setCertOnPass(false);
+  }, [type]);
 
   const valid1 = title.trim().length > 0 && courseId;
   const valid2 = questions.length >= 1;
@@ -135,21 +141,23 @@ const NewAssessmentModal = ({ open, onClose, initial }) => {
     if (!window.fbReady) { alert("Firebase isn't configured — can't save."); return; }
     setSubmitting(true);
     try {
-      await saveAssessment({
+      const saved = {
         id: initial?.id,
         title: title.trim(),
         description: description.trim(),
         courseId,
         type,
-        passMark,
+        passMark: type === "quiz" ? 100 : passMark,
         attemptsAllowed: attemptsAllowed === "unlimited" ? null : parseInt(attemptsAllowed, 10),
         timeLimit: timeLimit === "none" ? null : timeLimitMin,
         shuffleQuestions,
         showAnswers,
-        certOnPass,
+        certOnPass: type === "quiz" ? false : certOnPass,
         questions,
         status: initial?.status || "published",
-      });
+      };
+      const id = await saveAssessment(saved);
+      onSaved?.({ ...saved, id });
       showToast?.(isEdit ? `Assessment "${title}" updated` : `Assessment "${title}" created`);
       onClose();
     } catch (err) {
@@ -209,7 +217,7 @@ const NewAssessmentModal = ({ open, onClose, initial }) => {
               <div>
                 <FieldLabel>Type</FieldLabel>
                 <SelectInput value={type} onChange={e => setType(e.target.value)}>
-                  <option value="quiz">Quiz (lesson check, ungraded)</option>
+                  <option value="quiz">Quiz (knowledge check, graded)</option>
                   <option value="final">Final exam (required to complete course)</option>
                   <option value="cert">Certification exam (with certificate)</option>
                 </SelectInput>
@@ -235,10 +243,14 @@ const NewAssessmentModal = ({ open, onClose, initial }) => {
               <FieldLabel hint="Score required to pass.">Pass mark</FieldLabel>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <input type="range" min={50} max={100} step={5} value={passMark}
+                  disabled={type === "quiz"}
                   onChange={e => setPassMark(parseInt(e.target.value))}
                   style={{ flex: 1 }}/>
                 <div style={{ width: 60, fontVariantNumeric: "tabular-nums", fontWeight: 700, fontSize: 16 }}>{passMark}%</div>
               </div>
+              {type === "quiz" && (
+                <div className="text-xs text-muted" style={{ marginTop: 4 }}>Knowledge-check quizzes require 100% to pass.</div>
+              )}
             </div>
 
             <div>
@@ -286,7 +298,7 @@ const NewAssessmentModal = ({ open, onClose, initial }) => {
 
             <div style={{ gridColumn: "1 / -1", padding: 14, border: "1px solid #ececec", borderRadius: 10, background: "#fafafa" }}>
               <label style={{ display: "flex", gap: 12, cursor: "pointer" }}>
-                <input type="checkbox" checked={certOnPass} onChange={e => setCertOnPass(e.target.checked)} style={{ marginTop: 2 }}/>
+                <input type="checkbox" checked={certOnPass} disabled={type === "quiz"} onChange={e => setCertOnPass(e.target.checked)} style={{ marginTop: 2 }}/>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>Issue certificate on pass</div>
                   <div style={{ fontSize: 12, color: "#5f635f", marginTop: 2 }}>

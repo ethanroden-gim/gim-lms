@@ -253,9 +253,9 @@ const enrollSelf = async (courseId) => {
 };
 
 // Mark a single lesson complete; recomputes progress against the course
-const markLessonComplete = async (course, lessonId) => {
+const markLessonComplete = async (course, lessonId, userId = fbAuth.currentUser?.uid) => {
   if (!fbReady) throw new Error("Firebase not configured");
-  const ref = enrollmentDocRef(course.id);
+  const ref = enrollmentDocRef(course.id, userId);
   const snap = await ref.get();
   const totalLessons = (course.sections || course.modules || [])
     .reduce((s, sec) => s + (sec.lessons?.length || 0), 0) || 1;
@@ -265,7 +265,7 @@ const markLessonComplete = async (course, lessonId) => {
   const progress = Math.min(100, Math.round((completedLessons.length / totalLessons) * 100));
 
   await ref.set({
-    userId: fbAuth.currentUser.uid,
+    userId,
     courseId: course.id,
     completedLessons,
     progress,
@@ -466,8 +466,8 @@ const addLessonTime = async (courseId, lessonId, seconds) => {
 
 // ---- Quiz attempts ---------------------------------------------------------
 // Every assessment submission writes an /attempts doc with answers + scores.
-// payload = { courseId, assessmentId?, answers, autoScore, total, passMark, manualPending? }
-const recordAttempt = async ({ courseId, assessmentId, answers, autoScore, total, passMark, manualPending }) => {
+// payload = { courseId, assessmentId?, lessonId?, answers, autoScore, total, passMark, manualPending? }
+const recordAttempt = async ({ courseId, assessmentId, lessonId, answers, autoScore, total, passMark, manualPending }) => {
   if (!fbReady || !fbAuth.currentUser) throw new Error("Not signed in");
   const doc = {
     userId: fbAuth.currentUser.uid,
@@ -475,6 +475,7 @@ const recordAttempt = async ({ courseId, assessmentId, answers, autoScore, total
     userEmail: window.CURRENT_USER?.email || "",
     courseId,
     assessmentId: assessmentId || null,
+    lessonId: lessonId || null,
     answers: answers || {},
     autoScore: autoScore ?? null,
     total: total ?? null,

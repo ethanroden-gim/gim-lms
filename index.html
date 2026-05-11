@@ -142,22 +142,24 @@
       const [mode, setMode] = React.useState(saved.mode === "admin" && CURRENT_USER.isAdmin ? "admin" : "learner");
       const [route, setRoute] = React.useState(saved.route || (mode === "admin" ? "admin-overview" : "home"));
       const [courseId, setCourseId] = React.useState(saved.courseId || null);
+      const [assessmentTarget, setAssessmentTarget] = React.useState(saved.assessmentTarget || null);
       const [catalogCategory, setCatalogCategory] = React.useState("All");
       const goCategory = (cat) => { setCatalogCategory(cat); setRoute("catalog"); };
 
       // Persist route across reloads
       React.useEffect(() => {
-        localStorage.setItem(ROUTE_KEY, JSON.stringify({ mode, route, courseId }));
-      }, [mode, route, courseId]);
+        localStorage.setItem(ROUTE_KEY, JSON.stringify({ mode, route, courseId, assessmentTarget }));
+      }, [mode, route, courseId, assessmentTarget]);
 
       const switchMode = (m) => {
         setMode(m);
         setRoute(m === "admin" ? "admin-overview" : "home");
         setCourseId(null);
+        setAssessmentTarget(null);
       };
 
       const goCourse     = (id) => { setCourseId(id); setRoute("course"); };
-      const goAssessment = (id) => { setCourseId(id); setRoute("assessment"); };
+      const goAssessment = (id, target = null) => { setCourseId(id); setAssessmentTarget(target); setRoute("assessment"); };
       const goCert       = (id) => { setCourseId(id); setRoute("certificate"); };
 
       React.useEffect(() => {
@@ -173,7 +175,7 @@
         if (route === "certs")       body = <CertificatesPage goCert={goCert} />;
         if (route === "team")        body = <MyTeamPage />;
         if (route === "course")      body = <CoursePage       courseId={courseId} goBack={() => setRoute("learning")} goAssessment={goAssessment} />;
-        if (route === "assessment")  body = <AssessmentPage   courseId={courseId} goCert={goCert} goBack={() => setRoute("course")} />;
+        if (route === "assessment")  body = <AssessmentPage   courseId={courseId} target={assessmentTarget} goCert={goCert} goBack={() => setRoute("course")} />;
         if (route === "certificate") body = <CertificatePage  courseId={courseId} goBack={() => setRoute("certs")} />;
       } else {
         if (route === "admin-overview")    body = <AdminOverviewPage goRoute={setRoute} />;

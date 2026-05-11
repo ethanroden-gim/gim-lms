@@ -102,6 +102,15 @@ const AdminCourseEditorPage = ({ mode, courseId, goBack }) => {
   const [saving, setSaving] = React.useState(false);
   const [assessmentEditorState, setAssessmentEditorState] = React.useState(null); // null = closed; doc | { courseId } = open
   const set = (patch) => setC(prev => ({ ...prev, ...patch }));
+  const linkAssessmentToLesson = (mi, li, assessment) => {
+    const lesson = c.modules?.[mi]?.lessons?.[li];
+    if (!lesson || !assessment?.id) return;
+    updateLesson(mi, li, {
+      assessmentId: assessment.id,
+      assessmentTitle: assessment.title,
+      title: lesson.title || assessment.title || "Knowledge check",
+    });
+  };
 
   // If COURSES loads after the editor mounts (e.g. deep-link refresh), hydrate once
   React.useEffect(() => {
@@ -227,7 +236,8 @@ const AdminCourseEditorPage = ({ mode, courseId, goBack }) => {
 
       {tab === "details"   && <DetailsTab c={c} set={set} />}
       {tab === "content"   && <ContentTab c={c} addModule={addModule} removeModule={removeModule} updateModule={updateModule} moveModule={moveModule}
-                                addLesson={addLesson} updateLesson={updateLesson} removeLesson={removeLesson} moveLesson={moveLesson} reorderLessons={reorderLessons} />}
+                                addLesson={addLesson} updateLesson={updateLesson} removeLesson={removeLesson} moveLesson={moveLesson} reorderLessons={reorderLessons}
+                                onOpenAssessment={setAssessmentEditorState} />}
       {tab === "assess"    && <AssessmentTab c={c} set={set} isNew={isNew} onOpenAssessment={setAssessmentEditorState} />}
       {tab === "resources" && <ResourcesTab c={c} addResource={addResource} updateResource={updateResource} removeResource={removeResource} />}
 
@@ -236,6 +246,10 @@ const AdminCourseEditorPage = ({ mode, courseId, goBack }) => {
         open={assessmentEditorState !== null}
         onClose={() => setAssessmentEditorState(null)}
         initial={assessmentEditorState}
+        onSaved={(assessment) => {
+          const link = assessmentEditorState?.lessonLink;
+          if (link) linkAssessmentToLesson(link.mi, link.li, assessment);
+        }}
       />
     </div>
   );
@@ -425,7 +439,7 @@ const CoverPicker = ({ c, set }) => {
   );
 };
 
-const ContentTab = ({ c, addModule, removeModule, updateModule, moveModule, addLesson, updateLesson, removeLesson, moveLesson, reorderLessons }) => {
+const ContentTab = ({ c, addModule, removeModule, updateModule, moveModule, addLesson, updateLesson, removeLesson, moveLesson, reorderLessons, onOpenAssessment }) => {
   // Drag state — { mi, li } of the lesson being dragged
   const [dragSrc, setDragSrc] = React.useState(null);
 
@@ -449,6 +463,9 @@ const ContentTab = ({ c, addModule, removeModule, updateModule, moveModule, addL
             )}
             {m.lessons.map((l, li) => (
               <LessonRow key={l.id} l={l}
+                course={c}
+                moduleIndex={mi}
+                lessonIndex={li}
                 onChange={(p) => updateLesson(mi, li, p)}
                 onRemove={() => removeLesson(mi, li)}
                 onUp={() => moveLesson(mi, li, -1)}
@@ -463,6 +480,7 @@ const ContentTab = ({ c, addModule, removeModule, updateModule, moveModule, addL
                   }
                   setDragSrc(null);
                 }}
+                onOpenAssessment={onOpenAssessment}
               />
             ))}
             <button className="btn btn-ghost btn-sm" onClick={() => addLesson(mi)} style={{ marginTop: 8 }}>
@@ -479,7 +497,7 @@ const ContentTab = ({ c, addModule, removeModule, updateModule, moveModule, addL
   );
 };
 
-const LessonRow = ({ l, onChange, onRemove, onUp, onDown, onDragStart, onDragOver, onDrop, dragging }) => {
+const LessonRow = ({ l, course, moduleIndex, lessonIndex, onChange, onRemove, onUp, onDown, onDragStart, onDragOver, onDrop, dragging, onOpenAssessment }) => {
   const [bodyOpen, setBodyOpen] = React.useState(false);
 
   const placeholder = (() => {
@@ -495,6 +513,21 @@ const LessonRow = ({ l, onChange, onRemove, onUp, onDown, onDragStart, onDragOve
 
   const showUrlField = l.type === "video" || l.type === "link" || l.type === "pdf" || l.type === "gform";
   const showBodyButton = l.type === "article";
+  const courseAssessments = (window.ASSESSMENTS || [])
+    .filter(a => a.courseId === course?.id && a.status !== "archived");
+  const selectedAssessment = courseAssessments.find(a => a.id === l.assessmentId);
+  const canLinkQuiz = course?.id && course.id !== "new";
+  const openNewKnowledgeCheck = () => {
+    if (!canLinkQuiz) return;
+    onOpenAssessment?.({
+      courseId: course.id,
+      title: l.title ? `${l.title} - Knowledge Check` : `${course.title || "Course"} - Knowledge Check`,
+      type: "quiz",
+      passMark: 100,
+      certOnPass: false,
+      lessonLink: { mi: moduleIndex, li: lessonIndex },
+    });
+  };
 
   // Lesson-duration input: video accepts "M:SS"/"H:MM:SS"; article/pdf/link/gform accept whole minutes;
   // quiz hides the field entirely.
@@ -524,7 +557,7 @@ const LessonRow = ({ l, onChange, onRemove, onUp, onDown, onDragStart, onDragOve
         style={{ opacity: dragging ? 0.4 : 1, cursor: "grab" }}
       >
         <Icon name="grip" size={14} />
-        <select className="cd-input ce-lesson-type" value={l.type} onChange={e => onChange({ type: e.target.value })}>
+        <select className="cd-input ce-lesson-type" value={l.type} onChange={e => onChange({ type: e.target.value, ...(e.target.value === "quiz" ? { dur: "", url: "" } : {}) })}>
           {LESSON_TYPES.map(x => <option key={x.id} value={x.id}>{x.label}</option>)}
         </select>
         <input className="cd-input ce-lesson-title" value={l.title} onChange={e => onChange({ title: e.target.value })} placeholder="Lesson title" />
@@ -580,6 +613,45 @@ const LessonRow = ({ l, onChange, onRemove, onUp, onDown, onDragStart, onDragOve
             placeholder="Article body — supports plain text and basic Markdown (# headings, **bold**, links)."
             style={{ resize: "vertical", minHeight: 120 }}
           />
+        </div>
+      )}
+      {isQuiz && (
+        <div style={{ padding: "8px 12px 12px 36px", display: "grid", gridTemplateColumns: "minmax(220px, 1fr) auto", gap: 8, alignItems: "center" }}>
+          {canLinkQuiz ? (
+            <>
+              <select
+                className="cd-input"
+                value={l.assessmentId || ""}
+                onChange={e => {
+                  const assessment = courseAssessments.find(a => a.id === e.target.value);
+                  onChange({
+                    assessmentId: e.target.value,
+                    assessmentTitle: assessment?.title || "",
+                    ...(assessment?.title && !l.title ? { title: assessment.title } : {}),
+                  });
+                }}
+              >
+                <option value="">Choose a quiz / assessment...</option>
+                {courseAssessments.map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.title} ({a.type === "quiz" ? "quiz" : a.type === "cert" ? "cert" : "final"}, {a.questions?.length || 0} q, {a.passMark || 100}%)
+                  </option>
+                ))}
+              </select>
+              <button className="btn btn-primary btn-sm" onClick={openNewKnowledgeCheck}>
+                <Icon name="plus" size={12}/> Create quiz
+              </button>
+              {selectedAssessment && selectedAssessment.passMark !== 100 && (
+                <div className="text-xs text-muted" style={{ gridColumn: "1 / -1" }}>
+                  Knowledge checks require 100%; this quiz will require 100% when learners take it from this lesson.
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-xs text-muted" style={{ gridColumn: "1 / -1", padding: "7px 0" }}>
+              Save the course as a draft before linking or creating a knowledge-check quiz.
+            </div>
+          )}
         </div>
       )}
     </>

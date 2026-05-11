@@ -105,7 +105,10 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
   }
 
   const [marking, setMarking] = React.useState(false);
-  const linkedAssessment = (window.ASSESSMENTS || []).find(a => a.courseId === course.id && a.status !== "archived");
+  const linkedAssessment = (window.ASSESSMENTS || []).find(a => a.courseId === course.id && a.status !== "archived" && a.type !== "quiz");
+  const activeAssessment = active?.assessmentId
+    ? (window.ASSESSMENTS || []).find(a => a.id === active.assessmentId && a.status !== "archived")
+    : null;
   const isLast = active && activeIdx >= flatLessons.length - 1;
   const courseFullyDone = flatLessons.length > 0 && completed.size >= flatLessons.length;
 
@@ -269,7 +272,7 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
             {active.type === "quiz" && (
               <div style={{ position: "relative", color: "#fff", textAlign: "center" }}>
                 <Icon name="quiz" size={42} />
-                <div style={{ marginTop: 8, fontSize: 14, fontWeight: 600 }}>Assessment · {active.dur}</div>
+                <div style={{ marginTop: 8, fontSize: 14, fontWeight: 600 }}>Knowledge check</div>
               </div>
             )}
             {active.type === "link" && (
@@ -336,9 +339,16 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
                 {(() => {
                   // Inline quiz lesson — go straight to assessment
                   if (active.type === "quiz") {
-                    return <button className="btn btn-primary" onClick={() => goAssessment(course.id)}>
-                      Start assessment <Icon name="arrow-right" size={14}/>
-                    </button>;
+                    return (
+                      <button
+                        className="btn btn-primary"
+                        disabled={!activeAssessment}
+                        onClick={() => goAssessment(course.id, { assessmentId: active.assessmentId, lessonId: active.id })}
+                        style={!activeAssessment ? { opacity: 0.5, cursor: "not-allowed" } : {}}
+                      >
+                        {activeAssessment ? "Start knowledge check" : "No quiz linked"} <Icon name="arrow-right" size={14}/>
+                      </button>
+                    );
                   }
                   // Last lesson + linked assessment exists in /assessments
                   if (isLast && linkedAssessment) {
@@ -409,13 +419,16 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
 // ============================================================
 // Assessment
 // ============================================================
-const AssessmentPage = ({ courseId, goCert, goBack }) => {
+const AssessmentPage = ({ courseId, target, goCert, goBack }) => {
   const course = COURSES.find(c => c.id === courseId);
 
-  // Prefer a real assessment from Firestore (linked by courseId); otherwise fall back to SAMPLE_QUIZ
-  const linkedAssessment = (window.ASSESSMENTS || []).find(a => a.courseId === courseId && a.status !== "archived");
+  // Lesson-level knowledge checks can point to a specific assessment. Otherwise use the course assessment.
+  const linkedAssessment = target?.assessmentId
+    ? (window.ASSESSMENTS || []).find(a => a.id === target.assessmentId && a.status !== "archived")
+    : (window.ASSESSMENTS || []).find(a => a.courseId === courseId && a.status !== "archived" && a.type !== "quiz");
   const quiz = linkedAssessment || SAMPLE_QUIZ;
-  const passMark = linkedAssessment?.passMark || 80;
+  const isKnowledgeCheck = !!target?.lessonId || linkedAssessment?.type === "quiz";
+  const passMark = isKnowledgeCheck ? 100 : (linkedAssessment?.passMark || 80);
 
   const [answers, setAnswers] = React.useState({});
   const [qIdx, setQIdx] = React.useState(0);
@@ -485,6 +498,7 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
         await recordAttempt({
           courseId: course.id,
           assessmentId: linkedAssessment?.id,
+          lessonId: target?.lessonId,
           answers,
           autoScore: score,
           total,
@@ -494,8 +508,13 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
         if (manualPending) {
           await recordActivity(`Submitted assessment for "${course.title}" — pending review`, course.id);
         } else if (score >= passMark) {
-          await recordCompletion(course, score);
-          await recordActivity(`Passed assessment for "${course.title}" with ${score}%`, course.id);
+          if (isKnowledgeCheck && target?.lessonId) {
+            await markLessonComplete(course, target.lessonId);
+            await recordActivity(`Passed knowledge check for "${course.title}" with ${score}%`, course.id);
+          } else {
+            await recordCompletion(course, score);
+            await recordActivity(`Passed assessment for "${course.title}" with ${score}%`, course.id);
+          }
         } else {
           await recordActivity(`Attempted assessment for "${course.title}" — ${score}%`, course.id);
         }
@@ -561,9 +580,13 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
             <button className="btn btn-ghost" onClick={goBack}>Back to course</button>
-            {passed ? (
+            {passed && !isKnowledgeCheck ? (
               <button className="btn btn-primary" onClick={() => goCert(course.id)}>
                 View certificate <Icon name="award" size={14}/>
+              </button>
+            ) : passed ? (
+              <button className="btn btn-primary" onClick={goBack}>
+                Back to course <Icon name="arrow-right" size={14}/>
               </button>
             ) : (
               <button className="btn btn-primary" onClick={() => { setSubmitted(false); setAnswers({}); setQIdx(0); }}>
@@ -587,9 +610,9 @@ const AssessmentPage = ({ courseId, goCert, goBack }) => {
 
       <div className="page-head" style={{ marginBottom: 14 }}>
         <div>
-          <div className="page-head__eyebrow">Assessment</div>
+          <div className="page-head__eyebrow">{isKnowledgeCheck ? "Knowledge check" : "Assessment"}</div>
           <h1 className="page-head__title">{quiz.title}</h1>
-          <div className="page-head__sub">Answer all {total} questions. 80% required to pass.</div>
+          <div className="page-head__sub">Answer all {total} questions. {passMark}% required to pass.</div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 12, color: "#5f635f" }}>Question</div>
