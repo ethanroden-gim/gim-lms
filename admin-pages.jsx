@@ -188,6 +188,29 @@ const AdminOverviewPage = ({ goRoute }) => {
 // ============================================================
 // Admin: Courses
 // ============================================================
+const adminLessonMinutes = (l) => {
+  if (!l || !l.dur) return 0;
+  const s = String(l.dur).trim();
+  if (!s) return 0;
+  if (l.type === "video") {
+    const parts = s.split(":").map(p => parseInt(p, 10));
+    if (parts.some(n => Number.isNaN(n))) return 0;
+    if (parts.length === 3) return parts[0] * 60 + parts[1] + parts[2] / 60;
+    if (parts.length === 2) return parts[0] + parts[1] / 60;
+    return parts[0];
+  }
+  if (l.type === "quiz") return 0;
+  const n = parseInt(s, 10);
+  return Number.isNaN(n) ? 0 : n;
+};
+
+const adminCourseMinutes = (course) => {
+  const sections = course?.modules || course?.sections || [];
+  const computed = sections.reduce((sum, sec) =>
+    sum + (sec.lessons || []).reduce((lessonSum, l) => lessonSum + adminLessonMinutes(l), 0), 0);
+  return Math.round(computed || course?.duration || 0);
+};
+
 const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
   const [q, setQ] = React.useState("");
   const [cat, setCat] = React.useState("All");
@@ -199,7 +222,9 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
   const filtered = COURSES.filter(c => {
     if (q && !c.title.toLowerCase().includes(q.toLowerCase())) return false;
     if (cat !== "All" && c.cat !== cat) return false;
-    if (statusFilter !== "All" && (c.status || "published").toLowerCase() !== statusFilter.toLowerCase()) return false;
+    const status = (c.status || "published").toLowerCase();
+    if (statusFilter === "All" && status === "archived") return false;
+    if (statusFilter !== "All" && status !== statusFilter.toLowerCase()) return false;
     return true;
   });
 
@@ -218,7 +243,7 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
       </div>
 
       <div className="filterbar">
-        <input type="search" placeholder="Search by title, instructor…" value={q} onChange={e => setQ(e.target.value)} />
+        <input type="search" placeholder="Search by title..." value={q} onChange={e => setQ(e.target.value)} />
         <select value={cat} onChange={e => setCat(e.target.value)}>
           {cats.map(c => <option key={c}>{c}</option>)}
         </select>
@@ -234,7 +259,7 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
           <tr>
             <th style={{ width: "30%" }}>Course</th>
             <th>Category</th>
-            <th>Instructor</th>
+            <th>Time</th>
             <th>Lessons</th>
             <th>Enrolled</th>
             <th>Status</th>
@@ -256,14 +281,14 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{c.title}</div>
                     <div style={{ fontSize: 11, color: "#5f635f", display: "flex", gap: 8, alignItems: "center" }}>
-                      <span>{c.duration} min</span>
+                      <span>{adminCourseMinutes(c)} min</span>
                       {c.required && <span className="chip chip-required" style={{ fontSize: 10, padding: "1px 6px" }}>Required</span>}
                     </div>
                   </div>
                 </div>
               </td>
               <td><span className="chip chip-grey">{c.cat}</span></td>
-              <td>{c.instructor}</td>
+              <td>{adminCourseMinutes(c)} min</td>
               <td>{c.lessons}</td>
               <td style={{ fontVariantNumeric: "tabular-nums" }}>
                 {ENROLLMENT_COUNTS[c.id] || 0}
@@ -1309,7 +1334,7 @@ const AdminAttemptsPage = () => {
                   </td>
                   <td>
                     <button className="btn btn-ghost btn-sm" onClick={() => setGrading(a)}>
-                      {a.status === "pending_review" ? "Grade" : "View"}
+                      {a.status === "pending_review" ? "Grade" : "Edit"}
                     </button>
                   </td>
                 </tr>
@@ -1329,7 +1354,7 @@ const GradeAttemptModal = ({ attempt, onClose }) => {
   const a = attempt;
   const linkedAssessment = ASSESSMENTS.find(x => x.id === a.assessmentId);
   const questions = linkedAssessment?.questions || [];
-  const isReadonly = a.status !== "pending_review";
+  const isRegrade = a.status === "graded";
 
   const [manualScores, setManualScores] = React.useState(() => a.manualScores || {});
   const [notes, setNotes] = React.useState(a.gradedNotes || "");
@@ -1367,7 +1392,7 @@ const GradeAttemptModal = ({ attempt, onClose }) => {
   const passed = a.passMark != null ? finalScore >= a.passMark : null;
 
   const submit = async () => {
-    if (busy || isReadonly) return;
+    if (busy) return;
     setBusy(true);
     try {
       await gradeAttempt(a.id, {
@@ -1386,7 +1411,7 @@ const GradeAttemptModal = ({ attempt, onClose }) => {
         }
       }
       // Email the learner
-      if (a.userEmail && (window.GIM_CONFIG || {}).appsScriptReminderUrl) {
+      if (!isRegrade && a.userEmail && (window.GIM_CONFIG || {}).appsScriptReminderUrl) {
         try {
           await sendEmailReminder({
             recipients: [{ email: a.userEmail, name: a.userName }],
@@ -1397,7 +1422,7 @@ const GradeAttemptModal = ({ attempt, onClose }) => {
           });
         } catch {}
       }
-      showToast?.("Attempt graded");
+      showToast?.(isRegrade ? "Grade updated" : "Attempt graded");
       onClose();
     } catch (err) {
       alert("Grading failed: " + err.message);
@@ -1410,7 +1435,7 @@ const GradeAttemptModal = ({ attempt, onClose }) => {
     <Modal open={true} onClose={onClose} width={760}>
       <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #ececec", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
-          <div className="eyebrow-sm">{isReadonly ? "Graded attempt" : "Grade attempt"}</div>
+          <div className="eyebrow-sm">{isRegrade ? "Edit graded attempt" : "Grade attempt"}</div>
           <div style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>{a.userName || a.userId}</div>
           <div style={{ fontSize: 12, color: "#5f635f", marginTop: 2 }}>
             {COURSES.find(c => c.id === a.courseId)?.title || ""} · auto-score {a.autoScore != null ? `${a.autoScore}%` : "—"}
@@ -1466,7 +1491,6 @@ const GradeAttemptModal = ({ attempt, onClose }) => {
                     const v = e.target.value === "" ? undefined : Math.max(0, Math.min(q.points || 1, parseFloat(e.target.value) || 0));
                     setManualScores(prev => ({ ...prev, [i]: v }));
                   }}
-                  disabled={isReadonly}
                   style={{ width: 80, padding: "6px 10px", border: "1px solid #d8d9d8", borderRadius: 6, fontSize: 13 }}
                 />
               </div>
@@ -1479,7 +1503,6 @@ const GradeAttemptModal = ({ attempt, onClose }) => {
           <TextArea
             value={notes}
             onChange={e => setNotes(e.target.value)}
-            disabled={isReadonly}
             placeholder="Anything you'd like to share with the learner about their submission…"
           />
         </div>
@@ -1498,12 +1521,10 @@ const GradeAttemptModal = ({ attempt, onClose }) => {
       </div>
 
       <div style={{ padding: "14px 24px", borderTop: "1px solid #ececec", display: "flex", justifyContent: "flex-end", gap: 8, background: "#fafafa" }}>
-        <button className="btn btn-ghost btn-sm" onClick={onClose}>{isReadonly ? "Close" : "Cancel"}</button>
-        {!isReadonly && (
-          <button className="btn btn-primary btn-sm" onClick={submit} disabled={busy}>
-            <Icon name="check" size={14}/> {busy ? "Finalising…" : "Finalise grade & email learner"}
-          </button>
-        )}
+        <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary btn-sm" onClick={submit} disabled={busy}>
+          <Icon name="check" size={14}/> {busy ? "Saving..." : (isRegrade ? "Update grade" : "Finalise grade & email learner")}
+        </button>
       </div>
     </Modal>
   );

@@ -9,7 +9,6 @@ const blankCourse = () => ({
   dept: "",
   required: false,
   duration: 30,
-  instructor: "",
   description: "",
   cover: "cv-1",
   status: "draft",
@@ -33,7 +32,6 @@ const loadEditCourse = (id) => {
     dept: c.dept || "",
     required: !!c.required,
     duration: c.duration || 30,
-    instructor: c.instructor || "",
     description: c.description || "",
     cover: c.cover || "cv-1",
     coverUrl: c.coverUrl || "",
@@ -129,6 +127,7 @@ const AdminCourseEditorPage = ({ mode, courseId, goBack }) => {
     // Persist as both `modules` (editor) and `sections` (player) for compatibility
     const payload = {
       ...c,
+      duration: Math.round(courseRollupMinutes(c.modules) || c.duration || 0),
       status: publish ? "published" : "draft",
       modules: c.modules,
       sections: c.modules,
@@ -289,10 +288,6 @@ const DetailsTab = ({ c, set }) => (
             {DEPARTMENT_DOCS.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
             <option value="all">All departments</option>
           </select>
-        </div>
-        <div className="cd-field">
-          <label>Instructor</label>
-          <input className="cd-input" value={c.instructor} onChange={e => set({ instructor: e.target.value })} placeholder="Name" />
         </div>
         <div className="cd-field">
           <label>Duration (minutes)</label>

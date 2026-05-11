@@ -189,9 +189,6 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
           </h1>
           <div style={{ display: "flex", gap: 16, alignItems: "center", color: "#5f635f", fontSize: 13 }}>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <Icon name="users" size={14} />{course.instructor}
-            </span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
               <Icon name="clock" size={14} />{course.duration} min total
             </span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>

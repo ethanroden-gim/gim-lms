@@ -37,7 +37,6 @@ const CourseCard = ({ course, onOpen, enrollment }) => {
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
             <Icon name="play-o" size={12} />{course.lessons || 0} {course.lessons === 1 ? "lesson" : "lessons"}
           </span>
-          {course.instructor && <><span>·</span><span>{course.instructor}</span></>}
         </div>
         {e?.status === "in_progress" && (
           <div className="bar bar-thin" style={{ marginTop: 4 }}>

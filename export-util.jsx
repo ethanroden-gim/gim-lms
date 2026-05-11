@@ -53,6 +53,29 @@ const stamp = () => {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
 };
 
+const exportLessonMinutes = (l) => {
+  if (!l || !l.dur) return 0;
+  const s = String(l.dur).trim();
+  if (!s) return 0;
+  if (l.type === "video") {
+    const parts = s.split(":").map(p => parseInt(p, 10));
+    if (parts.some(n => Number.isNaN(n))) return 0;
+    if (parts.length === 3) return parts[0] * 60 + parts[1] + parts[2] / 60;
+    if (parts.length === 2) return parts[0] + parts[1] / 60;
+    return parts[0];
+  }
+  if (l.type === "quiz") return 0;
+  const n = parseInt(s, 10);
+  return Number.isNaN(n) ? 0 : n;
+};
+
+const exportCourseMinutes = (course) => {
+  const sections = course?.modules || course?.sections || [];
+  const computed = sections.reduce((sum, sec) =>
+    sum + (sec.lessons || []).reduce((lessonSum, l) => lessonSum + exportLessonMinutes(l), 0), 0);
+  return Math.round(computed || course?.duration || 0);
+};
+
 // Helper: per-user enrolment roll-up for export consistency
 const _userEnrollmentStats = () => {
   const map = {};
@@ -105,9 +128,8 @@ const EXPORT_DATASETS = {
       { key: "id",         label: "Course ID" },
       { key: "title",      label: "Title" },
       { key: "cat",        label: "Category" },
-      { key: "instructor", label: "Instructor" },
       { key: "lessons",    label: "Lessons" },
-      { key: "duration",   label: "Duration (min)" },
+      { label: "Duration (min)", get: r => exportCourseMinutes(r) },
       { label: "Required",   get: r => r.required ? "Yes" : "No" },
       { label: "Status",     get: r => r.status || "Published" },
       { label: "Enrolled",   get: r => (window.ENROLLMENT_COUNTS && window.ENROLLMENT_COUNTS[r.id]) || 0 },
