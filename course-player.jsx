@@ -109,6 +109,7 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
   const activeAssessment = active?.assessmentId
     ? (window.ASSESSMENTS || []).find(a => a.id === active.assessmentId && a.status !== "archived")
     : null;
+  const activeDone = active?.id ? completed.has(active.id) : false;
   const isLast = active && activeIdx >= flatLessons.length - 1;
   const courseFullyDone = flatLessons.length > 0 && completed.size >= flatLessons.length;
 
@@ -240,6 +241,18 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
                   Open in new tab <Icon name="external" size={12}/>
                 </a>
               </div>
+            ) : active.type === "quiz" ? (
+              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg,#17320b,#0f1f08)", color: "#fff", padding: 32 }}>
+                <div style={{ maxWidth: 620, textAlign: "center" }}>
+                  <Icon name="quiz" size={46} />
+                  <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em", color: "#b8e986" }}>Knowledge check</div>
+                  <div style={{ marginTop: 6, fontSize: 24, fontWeight: 800, lineHeight: 1.2 }}>{activeAssessment?.title || active.title}</div>
+                  <div style={{ marginTop: 10, fontSize: 14, color: "rgba(255,255,255,.78)" }}>
+                    {activeAssessment ? `${activeAssessment.questions?.length || 0} question${activeAssessment.questions?.length === 1 ? "" : "s"} - 100% required` : "No quiz is linked to this lesson yet."}
+                  </div>
+                  {activeDone && <div className="chip chip-green" style={{ marginTop: 14 }}>Completed</div>}
+                </div>
+              </div>
             ) : (
               <div className={classNames("video-frame__bg", course.cover)} />
             )}
@@ -266,12 +279,6 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
                 <div style={{ marginTop: 8, fontSize: 14, fontWeight: 600 }}>PDF · {active.dur}</div>
               </div>
             )}
-            {active.type === "quiz" && (
-              <div style={{ position: "relative", color: "#fff", textAlign: "center" }}>
-                <Icon name="quiz" size={42} />
-                <div style={{ marginTop: 8, fontSize: 14, fontWeight: 600 }}>Knowledge check</div>
-              </div>
-            )}
             {active.type === "link" && (
               <div style={{ position: "relative", color: "#fff", textAlign: "center" }}>
                 <Icon name="external" size={42} />
@@ -293,7 +300,24 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
             <div className="eyebrow-sm" style={{ marginBottom: 6 }}>{active.section}</div>
             <h2 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>{active.title}</h2>
             {/* Article-type lessons show their full body; other types show course description */}
-            {active.type === "article" && active.body ? (
+            {active.type === "quiz" ? (
+              <div style={{ fontSize: 14, lineHeight: 1.6, marginTop: 14, color: "#1f1f1f" }}>
+                {activeAssessment ? (
+                  <>
+                    <div className="text-muted" style={{ marginBottom: 12 }}>
+                      Complete this knowledge check with a perfect score to unlock the next lesson.
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <span className="chip chip-grey">{activeAssessment.questions?.length || 0} questions</span>
+                      <span className="chip chip-grey">100% required</span>
+                      {activeDone && <span className="chip chip-green">Done</span>}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-muted">This knowledge check does not have a linked quiz yet.</div>
+                )}
+              </div>
+            ) : active.type === "article" && active.body ? (
               <div style={{ fontSize: 14, lineHeight: 1.65, marginTop: 16, color: "#1f1f1f", whiteSpace: "pre-wrap" }}>
                 {active.body}
               </div>
@@ -336,6 +360,16 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
                 {(() => {
                   // Inline quiz lesson — go straight to assessment
                   if (active.type === "quiz") {
+                    if (activeDone) {
+                      if (activeIdx < flatLessons.length - 1) {
+                        return <button className="btn btn-primary" onClick={() => setActiveIdx(activeIdx + 1)}>
+                          Next lesson <Icon name="arrow-right" size={14}/>
+                        </button>;
+                      }
+                      return <button className="btn btn-primary" onClick={goBack}>
+                        Back to learning <Icon name="arrow-right" size={14}/>
+                      </button>;
+                    }
                     return (
                       <button
                         className="btn btn-primary"

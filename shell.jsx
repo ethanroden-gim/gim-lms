@@ -3,10 +3,15 @@
 // =========================================================
 
 const Sidebar = ({ route, setRoute, mode, goCategory }) => {
+  const myLearningCount = COURSES.filter(c => {
+    if (c.status === "archived") return false;
+    const status = ENROLLMENTS[c.id]?.status;
+    return status === "assigned" || status === "in_progress";
+  }).length;
   const learnerLinks = [
     { id: "home", label: "Dashboard", icon: "home" },
     { id: "catalog", label: "Course catalog", icon: "compass" },
-    { id: "learning", label: "My learning", icon: "book", badge: ASSIGNED.length || null },
+    { id: "learning", label: "My learning", icon: "book", badge: myLearningCount || null },
     { id: "certs", label: "Certificates", icon: "award" },
     ...(CURRENT_USER.isManager ? [{ id: "team", label: "My team", icon: "users" }] : []),
   ];

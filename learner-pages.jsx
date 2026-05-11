@@ -291,9 +291,10 @@ const CatalogPage = ({ goCourse, initialCategory }) => {
 // ============================================================
 const MyLearningPage = ({ goCourse }) => {
   const [tab, setTab] = React.useState("active");
-  const inProgress = COURSES.filter(c => ENROLLMENTS[c.id]?.status === "in_progress");
+  const visibleCourses = COURSES.filter(c => c.status !== "archived");
+  const inProgress = visibleCourses.filter(c => ENROLLMENTS[c.id]?.status === "in_progress");
   const completed  = COURSES.filter(c => ENROLLMENTS[c.id]?.status === "completed");
-  const assigned   = ASSIGNED.map(a => COURSES.find(c => c.id === a.id)).filter(Boolean);
+  const assigned   = ASSIGNED.map(a => visibleCourses.find(c => c.id === a.id)).filter(Boolean);
 
   return (
     <div className="page">
