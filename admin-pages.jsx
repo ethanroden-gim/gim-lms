@@ -79,6 +79,7 @@ const _adminCourseImportTemplate = [
 const _adminAssessmentImportTemplate = [
   { title: "Example Final Assessment", course_title: "Example Draft Course", course_id: "", type: "final", description: "Final assessment overview", pass_mark: "80", question: "What is the correct answer?", question_type: "single", options: "Answer A|Answer B|Answer C", correct: "Answer B", points: "1" },
   { title: "Example Final Assessment", course_title: "Example Draft Course", course_id: "", type: "final", description: "Final assessment overview", pass_mark: "80", question: "Select all correct answers", question_type: "multi", options: "One|Two|Three", correct: "One|Three", points: "1" },
+  { title: "Example Knowledge Check", course_title: "Example Draft Course", course_id: "", type: "quiz", description: "Knowledge check overview", pass_mark: "100", lesson_module: "Module 1", lesson_title: "Policy video", question: "Ready to continue?", question_type: "tf", options: "", correct: "True", points: "1" },
 ];
 
 const _adminDownloadCsvTemplate = (name, rows) => {
@@ -95,6 +96,49 @@ const _adminCorrectIndicesFromCsv = (correct, options) => {
     const idx = options.findIndex(o => o.toLowerCase() === v.toLowerCase());
     return idx >= 0 ? idx : null;
   }).filter(v => v !== null);
+};
+
+const _adminLinkQuizToCourseLesson = async (course, assessment, link = {}) => {
+  if (!course?.id || !assessment?.id) return false;
+  const moduleNeedle = String(link.lesson_module || link.module || "").trim().toLowerCase();
+  const lessonNeedle = String(link.lesson_title || link.lesson || "").trim().toLowerCase();
+  const lessonId = String(link.lesson_id || "").trim();
+  if (!moduleNeedle && !lessonNeedle && !lessonId) return false;
+
+  const modules = (course.modules || course.sections || []).map(m => ({
+    ...m,
+    lessons: (m.lessons || []).map(l => ({ ...l })),
+  }));
+  let linked = false;
+  modules.forEach(m => {
+    const moduleMatches = !moduleNeedle || String(m.title || "").trim().toLowerCase() === moduleNeedle;
+    if (!moduleMatches) return;
+    m.lessons = (m.lessons || []).map(l => {
+      const lessonMatches = lessonId
+        ? l.id === lessonId
+        : String(l.title || "").trim().toLowerCase() === lessonNeedle;
+      if (!lessonMatches) return l;
+      linked = true;
+      return {
+        ...l,
+        type: "quiz",
+        assessmentId: assessment.id,
+        assessmentTitle: assessment.title,
+        title: l.title || assessment.title || "Knowledge check",
+      };
+    });
+  });
+  if (!linked) {
+    const target = lessonId ? `lesson_id "${lessonId}"` : `lesson_title "${link.lesson_title || link.lesson}"`;
+    throw new Error(`Imported "${assessment.title}" but could not find ${target} in "${course.title}".`);
+  }
+  await saveCourse({
+    ...course,
+    modules,
+    sections: modules,
+    lessons: modules.reduce((sum, m) => sum + (m.lessons?.length || 0), 0),
+  });
+  return true;
 };
 
 // ============================================================
@@ -455,6 +499,20 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
                     <div style={{ fontSize: 11, color: "#5f635f", display: "flex", gap: 8, alignItems: "center" }}>
                       <span>{adminCourseMinutes(c)} min</span>
                       {c.required && <span className="chip chip-required" style={{ fontSize: 10, padding: "1px 6px" }}>Required</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#5f635f", display: "flex", gap: 6, alignItems: "center", marginTop: 2 }}>
+                      <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace" }}>ID: {c.id}</span>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard?.writeText(c.id);
+                          showToast?.("Course ID copied");
+                        }}
+                        style={{ height: 20, padding: "0 6px", fontSize: 10 }}
+                      >
+                        Copy
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1065,7 +1123,7 @@ const AdminAssessmentsPage = () => {
             explanation: r.explanation || "",
           };
         }).filter(Boolean);
-        await saveAssessment({
+        const saved = {
           title,
           description: first.description || "",
           courseId: linkedCourse.id,
@@ -1078,7 +1136,11 @@ const AdminAssessmentsPage = () => {
           certOnPass: type !== "quiz",
           questions,
           status: "draft",
-        });
+        };
+        const assessmentId = await saveAssessment(saved);
+        if (type === "quiz") {
+          await _adminLinkQuizToCourseLesson(linkedCourse, { ...saved, id: assessmentId }, first);
+        }
         count++;
       }
       showToast?.(`Imported ${count} draft assessment${count === 1 ? "" : "s"}`);
