@@ -38,6 +38,65 @@ const AdminSortHeader = ({ label, sortKey, sort, onSort, style }) => (
   </th>
 );
 
+const _adminParseCsv = (text) => {
+  const rows = [];
+  let row = [], cell = "", quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i], next = text[i + 1];
+    if (quoted && ch === '"' && next === '"') { cell += '"'; i++; continue; }
+    if (ch === '"') { quoted = !quoted; continue; }
+    if (!quoted && ch === ",") { row.push(cell); cell = ""; continue; }
+    if (!quoted && (ch === "\n" || ch === "\r")) {
+      if (ch === "\r" && next === "\n") i++;
+      row.push(cell);
+      if (row.some(v => String(v).trim() !== "")) rows.push(row);
+      row = []; cell = "";
+      continue;
+    }
+    cell += ch;
+  }
+  row.push(cell);
+  if (row.some(v => String(v).trim() !== "")) rows.push(row);
+  if (!rows.length) return [];
+  const headers = rows[0].map(h => String(h || "").replace(/^\ufeff/, "").trim().toLowerCase().replace(/\s+/g, "_"));
+  return rows.slice(1).map(r => Object.fromEntries(headers.map((h, i) => [h, String(r[i] || "").trim()])));
+};
+
+const _adminReadCsvFile = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(_adminParseCsv(String(reader.result || "")));
+  reader.onerror = () => reject(reader.error || new Error("Could not read CSV"));
+  reader.readAsText(file);
+});
+
+const _adminBool = (v) => /^(true|yes|y|1|required)$/i.test(String(v || "").trim());
+
+const _adminCourseImportTemplate = [
+  { title: "Example Draft Course", category: "Compliance", description: "Short course overview", duration: "30", required: "yes", module: "Module 1", lesson_title: "Welcome", lesson_type: "article", lesson_duration: "5", lesson_url: "", lesson_source: "" },
+  { title: "Example Draft Course", category: "Compliance", description: "Short course overview", duration: "30", required: "yes", module: "Module 1", lesson_title: "Policy video", lesson_type: "video", lesson_duration: "10", lesson_url: "https://example.com/video", lesson_source: "youtube" },
+];
+
+const _adminAssessmentImportTemplate = [
+  { title: "Example Final Assessment", course_title: "Example Draft Course", course_id: "", type: "final", description: "Final assessment overview", pass_mark: "80", question: "What is the correct answer?", question_type: "single", options: "Answer A|Answer B|Answer C", correct: "Answer B", points: "1" },
+  { title: "Example Final Assessment", course_title: "Example Draft Course", course_id: "", type: "final", description: "Final assessment overview", pass_mark: "80", question: "Select all correct answers", question_type: "multi", options: "One|Two|Three", correct: "One|Three", points: "1" },
+];
+
+const _adminDownloadCsvTemplate = (name, rows) => {
+  const cols = Object.keys(rows[0] || {});
+  downloadBlob(name, toCSV(rows, cols.map(key => ({ key, label: key }))), "text/csv;charset=utf-8");
+};
+
+const _adminSplitList = (v) => String(v || "").split("|").map(x => x.trim()).filter(Boolean);
+const _adminCorrectIndicesFromCsv = (correct, options) => {
+  const values = _adminSplitList(correct);
+  return values.map(v => {
+    const numeric = parseInt(v, 10);
+    if (!Number.isNaN(numeric)) return Math.max(0, numeric - 1);
+    const idx = options.findIndex(o => o.toLowerCase() === v.toLowerCase());
+    return idx >= 0 ? idx : null;
+  }).filter(v => v !== null);
+};
+
 // ============================================================
 // Admin overview
 // ============================================================
@@ -252,6 +311,8 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
   const [cat, setCat] = React.useState("All");
   const [statusFilter, setStatusFilter] = React.useState("All");
   const [sort, setSort] = React.useState({ key: "title", dir: "asc" });
+  const [importing, setImporting] = React.useState(false);
+  const importInputRef = React.useRef(null);
   const [assignFor, setAssignFor] = React.useState(null); // courseId or null
   const [enrollmentsFor, setEnrollmentsFor] = React.useState(null); // course or null
   const openAssign = (id) => setAssignFor(id);
@@ -270,6 +331,68 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
     _adminEnrolled: ENROLLMENT_COUNTS[c.id] || 0,
     _adminStatus: c.status || "published",
   })), sort);
+  const importCourses = async (file) => {
+    if (!file) return;
+    if (!window.fbReady) { alert("Firebase isn't configured - can't import."); return; }
+    setImporting(true);
+    try {
+      const rows = await _adminReadCsvFile(file);
+      const grouped = new Map();
+      rows.forEach((r, idx) => {
+        const title = r.title || r.course_title || r.name;
+        if (!title) return;
+        if (!grouped.has(title)) grouped.set(title, { first: r, rows: [] });
+        grouped.get(title).rows.push({ ...r, _row: idx + 2 });
+      });
+      if (!grouped.size) throw new Error("No rows with a title column were found.");
+      let count = 0;
+      for (const [title, group] of grouped) {
+        const first = group.first;
+        const modulesByName = new Map();
+        group.rows.forEach(r => {
+          const lessonTitle = r.lesson_title || r.lesson || "";
+          if (!lessonTitle) return;
+          const moduleName = r.module || r.module_title || "Module 1";
+          if (!modulesByName.has(moduleName)) modulesByName.set(moduleName, { title: moduleName, lessons: [] });
+          modulesByName.get(moduleName).lessons.push({
+            id: "l-" + Math.random().toString(36).slice(2, 7),
+            title: lessonTitle,
+            type: r.lesson_type || r.type || "article",
+            dur: r.lesson_duration || r.duration_minutes || r.duration || "",
+            source: r.lesson_source || r.source || "drive",
+            url: r.lesson_url || r.url || "",
+            body: r.lesson_body || r.body || "",
+          });
+        });
+        const modules = [...modulesByName.values()];
+        const duration = parseInt(first.duration || first.duration_minutes || "", 10) || modules.reduce((sum, m) => (
+          sum + m.lessons.reduce((s, l) => s + (parseInt(l.dur, 10) || 0), 0)
+        ), 0);
+        await saveCourse({
+          title,
+          description: first.description || "",
+          cat: first.category || first.cat || CATEGORIES[0] || "",
+          duration,
+          required: _adminBool(first.required),
+          status: "draft",
+          cover: first.cover || "cv-1",
+          coverUrl: first.cover_url || "",
+          modules,
+          sections: modules,
+          lessons: modules.reduce((sum, m) => sum + m.lessons.length, 0),
+          resources: [],
+          passingScore: parseInt(first.passing_score || "", 10) || 80,
+        });
+        count++;
+      }
+      showToast?.(`Imported ${count} draft course${count === 1 ? "" : "s"}`);
+    } catch (err) {
+      alert("Course import failed: " + err.message);
+    } finally {
+      setImporting(false);
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
+  };
 
   return (
     <div className="page page--wide">
@@ -281,6 +404,13 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <ExportButton page="admin-courses" label="Export" />
+          <button className="btn btn-ghost" onClick={() => _adminDownloadCsvTemplate(`course-import-template-${stamp()}.csv`, _adminCourseImportTemplate)}>
+            <Icon name="download" size={14}/> CSV template
+          </button>
+          <button className="btn btn-ghost" disabled={importing} onClick={() => importInputRef.current?.click()}>
+            <Icon name="upload" size={14}/> {importing ? "Importing..." : "Import CSV"}
+          </button>
+          <input ref={importInputRef} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={e => importCourses(e.target.files?.[0])} />
           <button className="btn btn-primary" onClick={onNew}><Icon name="plus" size={14}/> New course</button>
         </div>
       </div>
@@ -880,6 +1010,8 @@ const UserEnrollmentsModal = ({ open, onClose, user }) => {
 const AdminAssessmentsPage = () => {
   const [editing, setEditing] = React.useState(null); // null = closed, {} = new, doc = edit
   const [sort, setSort] = React.useState({ key: "title", dir: "asc" });
+  const [importing, setImporting] = React.useState(false);
+  const importInputRef = React.useRef(null);
   const visible = _adminSortRows(ASSESSMENTS
     .filter(a => a.status !== "archived")
     .map(a => {
@@ -894,6 +1026,69 @@ const AdminAssessmentsPage = () => {
       };
     }), sort);
   const totalAssessments = visible.length;
+  const importAssessments = async (file) => {
+    if (!file) return;
+    if (!window.fbReady) { alert("Firebase isn't configured - can't import."); return; }
+    setImporting(true);
+    try {
+      const rows = await _adminReadCsvFile(file);
+      const grouped = new Map();
+      rows.forEach((r, idx) => {
+        const title = r.title || r.assessment_title || r.name;
+        if (!title) return;
+        if (!grouped.has(title)) grouped.set(title, { first: r, rows: [] });
+        grouped.get(title).rows.push({ ...r, _row: idx + 2 });
+      });
+      if (!grouped.size) throw new Error("No rows with a title column were found.");
+      const coursesByTitle = Object.fromEntries(COURSES.map(c => [(c.title || "").toLowerCase(), c]));
+      let count = 0;
+      for (const [title, group] of grouped) {
+        const first = group.first;
+        const linkedCourse = first.course_id
+          ? COURSES.find(c => c.id === first.course_id)
+          : coursesByTitle[String(first.course_title || first.course || "").toLowerCase()];
+        if (!linkedCourse) throw new Error(`Could not match course for "${title}". Use course_id or an exact course_title.`);
+        const rawType = (first.type || "final").toLowerCase();
+        const type = rawType === "quiz" || rawType === "cert" ? rawType : "final";
+        const questions = group.rows.map(r => {
+          const text = r.question || r.question_text || "";
+          if (!text) return null;
+          const qType = (r.question_type || r.type || "single").toLowerCase();
+          const type = ["single", "multi", "tf", "short", "essay"].includes(qType) ? qType : "single";
+          const options = type === "tf" ? ["True", "False"] : (type === "short" || type === "essay" ? [] : _adminSplitList(r.options));
+          return {
+            type,
+            text,
+            options,
+            correct: type === "short" || type === "essay" ? [] : _adminCorrectIndicesFromCsv(r.correct || r.correct_answer, options),
+            points: parseInt(r.points || "", 10) || 1,
+            explanation: r.explanation || "",
+          };
+        }).filter(Boolean);
+        await saveAssessment({
+          title,
+          description: first.description || "",
+          courseId: linkedCourse.id,
+          type,
+          passMark: type === "quiz" ? 100 : (parseInt(first.pass_mark || first.passmark || "", 10) || 80),
+          attemptsAllowed: first.attempts_allowed ? parseInt(first.attempts_allowed, 10) : (type === "quiz" ? null : 3),
+          timeLimit: first.time_limit ? parseInt(first.time_limit, 10) : null,
+          shuffleQuestions: !_adminBool(first.no_shuffle),
+          showAnswers: first.show_answers || "after-pass",
+          certOnPass: type !== "quiz",
+          questions,
+          status: "draft",
+        });
+        count++;
+      }
+      showToast?.(`Imported ${count} draft assessment${count === 1 ? "" : "s"}`);
+    } catch (err) {
+      alert("Assessment import failed: " + err.message);
+    } finally {
+      setImporting(false);
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
+  };
 
   return (
     <div className="page page--wide">
@@ -904,6 +1099,13 @@ const AdminAssessmentsPage = () => {
           <div className="page-head__sub">Manage questions, pass thresholds, and review attempt analytics.</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-ghost" onClick={() => _adminDownloadCsvTemplate(`assessment-import-template-${stamp()}.csv`, _adminAssessmentImportTemplate)}>
+            <Icon name="download" size={14}/> CSV template
+          </button>
+          <button className="btn btn-ghost" disabled={importing} onClick={() => importInputRef.current?.click()}>
+            <Icon name="upload" size={14}/> {importing ? "Importing..." : "Import CSV"}
+          </button>
+          <input ref={importInputRef} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={e => importAssessments(e.target.files?.[0])} />
           <button className="btn btn-primary" onClick={() => setEditing({})}><Icon name="plus" size={14}/> New assessment</button>
         </div>
       </div>
