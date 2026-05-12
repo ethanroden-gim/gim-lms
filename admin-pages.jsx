@@ -31,9 +31,9 @@ const AdminSortHeader = ({ label, sortKey, sort, onSort, style }) => (
       type="button"
       className="btn btn-ghost btn-sm"
       onClick={() => onSort(_adminNextSort(sort, sortKey))}
-      style={{ height: "auto", padding: 0, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em" }}
+      style={{ height: "auto", padding: "4px 0", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em", gap: 6, width: style?.textAlign === "center" ? "100%" : "auto", justifyContent: style?.textAlign === "center" ? "center" : "flex-start" }}
     >
-      {label} {sort.key === sortKey ? (sort.dir === "asc" ? "Asc" : "Desc") : "Sort"}
+      {label}<span aria-hidden="true" style={{ color: sort.key === sortKey ? "#111" : "#9a9d9a", fontSize: 10 }}>{sort.key === sortKey ? (sort.dir === "asc" ? "▲" : "▼") : "↕"}</span>
     </button>
   </th>
 );
@@ -288,10 +288,10 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
       <div className="filterbar">
         <input type="search" placeholder="Search by title..." value={q} onChange={e => setQ(e.target.value)} />
         <select value={cat} onChange={e => setCat(e.target.value)}>
-          {cats.map(c => <option key={c}>{c}</option>)}
+          {cats.map(c => <option key={c} value={c}>Category: {c}</option>)}
         </select>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-          <option>All</option><option>Published</option><option>Draft</option><option>Archived</option>
+          <option value="All">Status: All</option><option value="Published">Status: Published</option><option value="Draft">Status: Draft</option><option value="Archived">Status: Archived</option>
         </select>
         <div className="fb-spacer" />
         <span className="text-xs text-muted">{sortedCourses.length} courses</span>
@@ -302,9 +302,8 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
           <tr>
             <AdminSortHeader label="Course" sortKey="title" sort={sort} onSort={setSort} style={{ width: "30%" }} />
             <AdminSortHeader label="Category" sortKey="cat" sort={sort} onSort={setSort} />
-            <AdminSortHeader label="Time" sortKey="_adminMinutes" sort={sort} onSort={setSort} />
-            <AdminSortHeader label="Lessons" sortKey="lessons" sort={sort} onSort={setSort} />
-            <AdminSortHeader label="Enrolled" sortKey="_adminEnrolled" sort={sort} onSort={setSort} />
+            <AdminSortHeader label="Lessons" sortKey="lessons" sort={sort} onSort={setSort} style={{ textAlign: "center" }} />
+            <AdminSortHeader label="Enrolled" sortKey="_adminEnrolled" sort={sort} onSort={setSort} style={{ textAlign: "center" }} />
             <AdminSortHeader label="Status" sortKey="_adminStatus" sort={sort} onSort={setSort} />
             <th></th>
           </tr>
@@ -331,9 +330,8 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
                 </div>
               </td>
               <td><span className="chip chip-grey">{c.cat}</span></td>
-              <td>{adminCourseMinutes(c)} min</td>
-              <td>{c.lessons}</td>
-              <td style={{ fontVariantNumeric: "tabular-nums" }}>
+              <td style={{ fontVariantNumeric: "tabular-nums", textAlign: "center" }}>{c.lessons}</td>
+              <td style={{ fontVariantNumeric: "tabular-nums", textAlign: "center" }}>
                 {ENROLLMENT_COUNTS[c.id] || 0}
               </td>
               <td>{
@@ -494,15 +492,15 @@ const AdminUsersPage = () => {
       <div className="filterbar">
         <input type="search" placeholder="Search by name or email…" value={q} onChange={e => setQ(e.target.value)} />
         <select value={dept} onChange={e => setDept(e.target.value)}>
-          <option>All</option>
-          {departmentOptions.map(d => <option key={d.id}>{d.name}</option>)}
+          <option value="All">Department: All</option>
+          {departmentOptions.map(d => <option key={d.id} value={d.name}>Department: {d.name}</option>)}
         </select>
         <select value={role} onChange={e => setRole(e.target.value)}>
-          <option>All</option><option>Learner</option><option>Manager</option><option>Admin</option>
+          <option value="All">Role: All</option><option value="Learner">Role: Learner</option><option value="Manager">Role: Manager</option><option value="Admin">Role: Admin</option>
         </select>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-          <option>All</option>
-          <option>Active</option><option>Onboarding</option><option>On leave</option><option>Inactive</option>
+          <option value="All">Status: All</option>
+          <option value="Active">Status: Active</option><option value="Onboarding">Status: Onboarding</option><option value="On leave">Status: On leave</option><option value="Inactive">Status: Inactive</option>
         </select>
         <div className="fb-spacer" />
         <span className="text-xs text-muted">{sortedUsers.length} of {ALL_USERS.length}</span>
@@ -836,9 +834,21 @@ const UserEnrollmentsModal = ({ open, onClose, user }) => {
                       )}
                     </td>
                     <td>
-                      {e.status === "completed" ? (
-                        <span className="text-xs text-muted">Locked</span>
-                      ) : (
+                      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center" }}>
+                        <button className="btn btn-ghost btn-sm" onClick={async () => {
+                          if (!confirm(`Reset progress for "${c.title}" for ${user.name || user.id}?\n\nThis keeps the course assigned, clears lesson progress and score, and moves it back to Assigned.`)) return;
+                          try {
+                            const changed = await resetCourseProgress(user.id, e.courseId);
+                            showToast?.(changed ? `Reset "${c.title}" progress` : "Enrollment was already removed");
+                          } catch (err) {
+                            alert("Reset failed: " + err.message);
+                          }
+                        }}>
+                          Reset
+                        </button>
+                        {e.status === "completed" ? (
+                          <span className="text-xs text-muted">Locked</span>
+                        ) : (
                         <button className="btn btn-ghost btn-sm" style={{ color: "#a8232b" }} onClick={async () => {
                           if (!confirm(`Unassign "${c.title}" from ${user.name || user.id}?\n\nTheir progress for this course will be removed. Completed courses cannot be unassigned.`)) return;
                           try {
@@ -850,7 +860,8 @@ const UserEnrollmentsModal = ({ open, onClose, user }) => {
                         }}>
                           Unassign
                         </button>
-                      )}
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1031,9 +1042,9 @@ const ActivitySortHeader = ({ label, sortKey, sort, onSort, style }) => {
         type="button"
         className="btn btn-ghost btn-sm"
         onClick={() => onSort(_activityNextSort(sort, sortKey))}
-        style={{ height: "auto", padding: 0, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em" }}
+        style={{ height: "auto", padding: "4px 0", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em", gap: 6 }}
       >
-        {label} {active ? (desc ? "Desc" : "Asc") : "Sort"}
+        {label}<span aria-hidden="true" style={{ color: active ? "#111" : "#9a9d9a", fontSize: 10 }}>{active ? (desc ? "▼" : "▲") : "↕"}</span>
       </button>
     </th>
   );
@@ -1487,6 +1498,28 @@ const AdminAttemptsPage = () => {
   );
 };
 
+const _adminAnswerCorrectIndices = (q) => Array.isArray(q.correct) ? q.correct : (q.correct != null ? [q.correct] : []);
+const _adminAnswerText = (q, ans) => {
+  if (Array.isArray(ans)) return ans.map(idx => q.options?.[idx]).filter(Boolean).join(", ") || "(none)";
+  if (typeof ans === "number") return q.options?.[ans] || "(none)";
+  if (typeof ans === "string") return ans.trim() || "(blank)";
+  return "(none)";
+};
+const _adminCorrectAnswerText = (q) => {
+  const idxs = _adminAnswerCorrectIndices(q);
+  return idxs.map(idx => q.options?.[idx]).filter(Boolean).join(", ") || "No answer key";
+};
+const _adminAnswerIsCorrect = (q, ans) => {
+  if (q.type === "short" || q.type === "essay") return null;
+  const idxs = _adminAnswerCorrectIndices(q);
+  if (q.type === "multi") {
+    const correctSet = new Set(idxs);
+    const givenSet = new Set(ans || []);
+    return correctSet.size === givenSet.size && [...correctSet].every(x => givenSet.has(x));
+  }
+  return ans === idxs[0];
+};
+
 // ---------- Grade Attempt modal ----------
 const GradeAttemptModal = ({ attempt, onClose }) => {
   const a = attempt;
@@ -1592,18 +1625,23 @@ const GradeAttemptModal = ({ attempt, onClose }) => {
           const isManual = q.type === "short" || q.type === "essay";
           if (!isManual) {
             // Show auto-graded summary
-            let display = "";
-            if (Array.isArray(ans)) display = ans.map(idx => q.options?.[idx]).filter(Boolean).join(", ");
-            else if (typeof ans === "number") display = q.options?.[ans] || "";
+            const display = _adminAnswerText(q, ans);
+            const correct = _adminAnswerIsCorrect(q, ans);
+            const showReview = a.status === "graded" && a.passed === true;
             return (
-              <div key={i} style={{ padding: 14, marginBottom: 10, border: "1px solid #ececec", borderRadius: 10, background: "#fafafa" }}>
+              <div key={i} style={{ padding: 14, marginBottom: 10, border: `1px solid ${showReview && correct === false ? "#f3c4c7" : "#ececec"}`, borderRadius: 10, background: showReview && correct === false ? "#fffafa" : "#fafafa" }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: "#5f635f" }}>Q{i + 1}</span>
                   <span className="chip chip-grey" style={{ fontSize: 10 }}>{qTypeLabel ? qTypeLabel(q.type) : q.type}</span>
                   <span style={{ fontSize: 11, color: "#5f635f" }}>auto-graded</span>
+                  {showReview && correct === true && <span className="chip chip-green" style={{ fontSize: 10 }}>Correct</span>}
+                  {showReview && correct === false && <span className="chip" style={{ fontSize: 10, background: "#fdecec", color: "#a8232b" }}>Incorrect</span>}
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{q.text || q.q}</div>
-                <div style={{ fontSize: 12, color: "#5f635f", marginTop: 6 }}>Their answer: <strong>{display || "(none)"}</strong></div>
+                <div style={{ fontSize: 12, color: "#5f635f", marginTop: 6 }}>Their answer: <strong>{display}</strong></div>
+                {showReview && correct === false && (
+                  <div style={{ fontSize: 12, color: "#2e5a12", marginTop: 4 }}>Correct answer: <strong>{_adminCorrectAnswerText(q)}</strong></div>
+                )}
               </div>
             );
           }

@@ -357,6 +357,28 @@ const resetUserProgress = async (userId) => {
   return snap.size;
 };
 
+const resetCourseProgress = async (userId, courseId) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  const ref = fbDb.collection("enrollments").doc(`${userId}_${courseId}`);
+  const snap = await ref.get();
+  if (!snap.exists) return false;
+  await ref.set({
+    userId,
+    courseId,
+    status: "assigned",
+    progress: 0,
+    completedLessons: [],
+    currentLessonId: firebase.firestore.FieldValue.delete(),
+    lastLesson: firebase.firestore.FieldValue.delete(),
+    score: firebase.firestore.FieldValue.delete(),
+    completedOn: firebase.firestore.FieldValue.delete(),
+    startedAt: firebase.firestore.FieldValue.delete(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  recordAdminActivity("Reset course progress", { targetUserId: userId, courseId }).catch(() => {});
+  return true;
+};
+
 const unassignCourse = async (userId, courseId) => {
   if (!fbReady) throw new Error("Firebase not configured");
   const ref = fbDb.collection("enrollments").doc(`${userId}_${courseId}`);
@@ -681,7 +703,7 @@ Object.assign(window, {
   saveRole, deleteRole,
   saveAssessment, archiveAssessment, deleteAssessment,
   saveCertificateTemplate,
-  assignTraining, daysUntilDue, updateUser, resetUserProgress, unassignCourse,
+  assignTraining, daysUntilDue, updateUser, resetUserProgress, resetCourseProgress, unassignCourse,
   enrollSelf, markLessonComplete, recordCompletion, recordActivity, recordAdminActivity,
   addLessonTime, recordAttempt, gradeAttempt,
   uploadImage,

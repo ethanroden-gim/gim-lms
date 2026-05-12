@@ -11,11 +11,31 @@ const formatDate = (val) => {
   return "";
 };
 
+const learnerCourseCoverStyle = (course) => course?.coverUrl
+  ? { backgroundImage: `url(${course.coverUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+  : undefined;
+
+const learnerCourseLessons = (course) => {
+  const sections = course?.sections || course?.modules || [];
+  return sections.flatMap(sec => sec.lessons || []);
+};
+
+const learnerLessonTitle = (course, lessonId) => {
+  if (!lessonId) return "";
+  return learnerCourseLessons(course).find(l => l.id === lessonId)?.title || "";
+};
+
+const learnerNextLessonTitle = (course, enrollment = {}) => {
+  const lessons = learnerCourseLessons(course);
+  const done = new Set(enrollment.completedLessons || []);
+  return lessons.find(l => !done.has(l.id))?.title
+    || learnerLessonTitle(course, enrollment.currentLessonId || enrollment.lastLesson);
+};
+
 // ============================================================
 // Reusable: Course card (grid)
 // ============================================================
 const CourseCard = ({ course, onOpen, enrollment }) => {
-  const isReq = course.required;
   const e = enrollment;
   const coverStyle = course.coverUrl
     ? { backgroundImage: `url(${course.coverUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
@@ -25,7 +45,6 @@ const CourseCard = ({ course, onOpen, enrollment }) => {
       <div className={classNames("course-card__cover", !course.coverUrl && course.cover)} style={coverStyle || undefined}>
         <div className="course-card__cover-tint" />
         <div className="course-card__chips">
-          {isReq && <span className="chip chip-required">Required</span>}
           {e?.status === "completed" && <span className="chip chip-green">Completed</span>}
         </div>
         <div className="course-card__duration">{course.duration} min</div>
@@ -132,14 +151,15 @@ const DashboardPage = ({ goCourse, setRoute }) => {
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {inProgress.map(c => {
               const e = ENROLLMENTS[c.id] || {};
+              const nextTitle = learnerNextLessonTitle(c, e);
               return (
                 <div key={c.id} className="ip-card" onClick={() => goCourse(c.id)}>
-                  <div className={classNames("ip-card__cover", c.cover)} />
+                  <div className={classNames("ip-card__cover", !c.coverUrl && c.cover)} style={learnerCourseCoverStyle(c)} />
                   <div className="ip-card__body">
                     <div className="ip-card__cat">{c.cat}</div>
                     <div className="ip-card__title">{c.title}</div>
-                    {e.lastLesson && (
-                      <div className="ip-card__meta"><span>Up next: {e.lastLesson}</span></div>
+                    {nextTitle && (
+                      <div className="ip-card__meta"><span>Up next: {nextTitle}</span></div>
                     )}
                     <div className="ip-card__bar"><div style={{ width: `${e.progress || 0}%` }} /></div>
                     <div className="ip-card__meta" style={{ justifyContent: "space-between" }}>
@@ -169,9 +189,7 @@ const DashboardPage = ({ goCourse, setRoute }) => {
                 if (!a.course) return null; // silently skip if course was deleted
                 return (
                   <div className="assigned-row" key={a.id} onClick={() => goCourse(a.id)}>
-                    <div className={classNames("assigned-row__icon", a.required && "req")}>
-                      <Icon name={a.required ? "shield" : "book"} />
-                    </div>
+                    <div className={classNames("assigned-row__cover", !a.course.coverUrl && a.course.cover)} style={learnerCourseCoverStyle(a.course)} />
                     <div>
                       <div className="assigned-row__title">{a.course.title}</div>
                       <div className="assigned-row__sub">{a.course.cat} · {a.course.duration} min</div>

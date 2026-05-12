@@ -452,6 +452,49 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
   );
 };
 
+const assessmentCorrectIndices = (q) => Array.isArray(q.correct) ? q.correct : (q.correct != null ? [q.correct] : []);
+const assessmentAnswerText = (q, ans) => {
+  if (Array.isArray(ans)) return ans.map(idx => q.options?.[idx]).filter(Boolean).join(", ") || "(none)";
+  if (typeof ans === "number") return q.options?.[ans] || "(none)";
+  if (typeof ans === "string") return ans.trim() || "(blank)";
+  return "(none)";
+};
+const assessmentCorrectText = (q) => {
+  const idxs = assessmentCorrectIndices(q);
+  return idxs.map(idx => q.options?.[idx]).filter(Boolean).join(", ") || "No answer key";
+};
+const assessmentIsCorrect = (q, ans) => {
+  if (q.type === "short" || q.type === "essay") return null;
+  const idxs = assessmentCorrectIndices(q);
+  if (q.type === "multi") {
+    const correctSet = new Set(idxs);
+    const givenSet = new Set(ans || []);
+    return correctSet.size === givenSet.size && [...correctSet].every(x => givenSet.has(x));
+  }
+  return ans === idxs[0];
+};
+const AssessmentReviewList = ({ questions = [], answers = {} }) => (
+  <div style={{ marginTop: 22, textAlign: "left" }}>
+    <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>Answer review</div>
+    {questions.map((q, i) => {
+      const ans = answers?.[i];
+      const correct = assessmentIsCorrect(q, ans);
+      return (
+        <div key={i} style={{ padding: 12, border: "1px solid #ececec", borderRadius: 10, marginBottom: 8, background: "#fff" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: "#5f635f" }}>Q{i + 1}</span>
+            {correct === true && <span className="chip chip-green" style={{ fontSize: 10 }}>Correct</span>}
+            {correct === false && <span className="chip" style={{ fontSize: 10, background: "#fdecec", color: "#a8232b" }}>Incorrect</span>}
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{q.text || q.q}</div>
+          <div style={{ fontSize: 12, color: "#5f635f" }}>Your answer: <strong>{assessmentAnswerText(q, ans)}</strong></div>
+          {correct === false && <div style={{ fontSize: 12, color: "#2e5a12", marginTop: 4 }}>Correct answer: <strong>{assessmentCorrectText(q)}</strong></div>}
+        </div>
+      );
+    })}
+  </div>
+);
+
 // ============================================================
 // Assessment
 // ============================================================
@@ -614,6 +657,7 @@ const AssessmentPage = ({ courseId, target, goCert, goBack }) => {
           <div className="text-muted" style={{ fontSize: 14, marginBottom: 24 }}>
             {course.title} · {autoGraded.correct} of {autoGraded.autoTotal} correct · {passMark}% required to pass
           </div>
+          {passed && <AssessmentReviewList questions={quiz.questions} answers={answers} />}
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
             <button className="btn btn-ghost" onClick={goBack}>Back to course</button>
             {passed && !isKnowledgeCheck ? (
@@ -794,6 +838,12 @@ const CertificatePage = ({ courseId, goBack }) => {
   const template = window.CERTIFICATE_TEMPLATE || CERTIFICATE_DEFAULTS;
   const PREVIEW_W = 920;
   const scale = PREVIEW_W / 1056;
+  const passedAttempt = [...(window.ATTEMPTS || [])]
+    .filter(a => a.userId === CURRENT_USER.uid && a.courseId === course.id && a.status === "graded" && a.passed === true)
+    .sort((a, b) => (b.gradedAt?.seconds || b.submittedAt?.seconds || 0) - (a.gradedAt?.seconds || a.submittedAt?.seconds || 0))[0];
+  const passedAssessment = passedAttempt?.assessmentId
+    ? (window.ASSESSMENTS || []).find(a => a.id === passedAttempt.assessmentId)
+    : null;
 
   return (
     <div className="page cert-page">
@@ -833,6 +883,15 @@ const CertificatePage = ({ courseId, goBack }) => {
           />
         </div>
       </div>
+
+      {passedAssessment?.questions?.length > 0 && (
+        <div className="card card-pad-lg" style={{ width: "100%", maxWidth: 920, marginTop: 20 }}>
+          <div className="eyebrow-sm">Completed assessment</div>
+          <h2 style={{ fontSize: 18, fontWeight: 800, margin: "4px 0 0" }}>{passedAssessment.title}</h2>
+          <div className="text-muted text-sm" style={{ marginTop: 4 }}>Review your answers and the answer key for this passed assessment.</div>
+          <AssessmentReviewList questions={passedAssessment.questions} answers={passedAttempt.answers || {}} />
+        </div>
+      )}
 
       <div style={{ display: "none" }}>
         <div className="cert__eyebrow">Certificate of Completion</div>

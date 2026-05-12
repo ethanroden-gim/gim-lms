@@ -366,9 +366,9 @@ const EnrollmentSortHeader = ({ label, sortKey, sort, onSort }) => (
       type="button"
       className="btn btn-ghost btn-sm"
       onClick={() => onSort({ key: sortKey, dir: sort.key === sortKey && sort.dir === "asc" ? "desc" : "asc" })}
-      style={{ height: "auto", padding: 0, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em" }}
+      style={{ height: "auto", padding: "4px 0", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em", gap: 6 }}
     >
-      {label} {sort.key === sortKey ? (sort.dir === "asc" ? "Asc" : "Desc") : "Sort"}
+      {label}<span aria-hidden="true" style={{ color: sort.key === sortKey ? "#111" : "#9a9d9a", fontSize: 10 }}>{sort.key === sortKey ? (sort.dir === "asc" ? "▲" : "▼") : "↕"}</span>
     </button>
   </th>
 );
