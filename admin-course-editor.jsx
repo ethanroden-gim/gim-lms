@@ -305,7 +305,7 @@ const DetailsTab = ({ c, set }) => (
       <div className="cd-field" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18 }}>
         <div>
           <label style={{ marginBottom: 2 }}>Required course</label>
-          <div className="text-xs text-muted">Auto-assigns to everyone in the selected department.</div>
+          <div className="text-xs text-muted">Marks this course as required when assigned to learners.</div>
         </div>
         <CourseToggle checked={c.required} onChange={v => set({ required: v })} />
       </div>

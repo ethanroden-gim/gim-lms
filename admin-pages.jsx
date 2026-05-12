@@ -31,7 +31,7 @@ const AdminSortHeader = ({ label, sortKey, sort, onSort, style }) => (
       type="button"
       className="btn btn-ghost btn-sm"
       onClick={() => onSort(_adminNextSort(sort, sortKey))}
-      style={{ height: "auto", padding: "4px 0", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em", gap: 6, width: style?.textAlign === "center" ? "100%" : "auto", justifyContent: style?.textAlign === "center" ? "center" : "flex-start" }}
+      style={{ height: "auto", padding: "6px 8px", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em", gap: 8, width: style?.textAlign === "center" ? "100%" : "auto", justifyContent: style?.textAlign === "center" ? "center" : "flex-start" }}
     >
       {label}<span aria-hidden="true" style={{ color: sort.key === sortKey ? "#111" : "#9a9d9a", fontSize: 10 }}>{sort.key === sortKey ? (sort.dir === "asc" ? "▲" : "▼") : "↕"}</span>
     </button>
@@ -520,7 +520,14 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
               <td><span className="chip chip-grey">{c.cat}</span></td>
               <td style={{ fontVariantNumeric: "tabular-nums", textAlign: "center" }}>{c.lessons}</td>
               <td style={{ fontVariantNumeric: "tabular-nums", textAlign: "center" }}>
-                {ENROLLMENT_COUNTS[c.id] || 0}
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setEnrollmentsFor(c)}
+                  title="View enrolled learners"
+                  style={{ height: 28, minWidth: 36, padding: "0 8px", justifyContent: "center" }}
+                >
+                  {ENROLLMENT_COUNTS[c.id] || 0}
+                </button>
               </td>
               <td>{
                 c.status === "archived" ? <span className="chip chip-grey">Archived</span> :
@@ -1069,9 +1076,15 @@ const AdminAssessmentsPage = () => {
   const [editing, setEditing] = React.useState(null); // null = closed, {} = new, doc = edit
   const [sort, setSort] = React.useState({ key: "title", dir: "asc" });
   const [importing, setImporting] = React.useState(false);
+  const [statusFilter, setStatusFilter] = React.useState("All");
   const importInputRef = React.useRef(null);
   const visible = _adminSortRows(ASSESSMENTS
-    .filter(a => a.status !== "archived")
+    .filter(a => {
+      const status = (a.status || "published").toLowerCase();
+      if (statusFilter === "All" && status === "archived") return false;
+      if (statusFilter !== "All" && status !== statusFilter.toLowerCase()) return false;
+      return true;
+    })
     .map(a => {
       const linked = COURSES.find(c => c.id === a.courseId);
       return {
@@ -1177,6 +1190,14 @@ const AdminAssessmentsPage = () => {
         initial={editing && editing.id ? editing : null}
       />
 
+      <div className="filterbar">
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+          <option value="All">Status: All</option><option value="Published">Status: Published</option><option value="Draft">Status: Draft</option><option value="Archived">Status: Archived</option>
+        </select>
+        <div className="fb-spacer" />
+        <span className="text-xs text-muted">{visible.length} assessments</span>
+      </div>
+
       <div className="dash-grid mb-6">
         <div className="stat">
           <div className="stat__label">Total assessments</div>
@@ -1239,26 +1260,43 @@ const AdminAssessmentsPage = () => {
                   <td>
                     <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
                       <button className="btn-icon" title="Edit" onClick={() => setEditing(a)}><Icon name="edit" size={14}/></button>
-                      <RowMenu items={[
-                        { label: "Edit questions & settings", icon: "edit", onClick: () => setEditing(a) },
-                        { label: a.status === "draft" ? "Publish" : "Unpublish", icon: a.status === "draft" ? "check" : "eye-off",
-                          onClick: async () => {
-                            const next = a.status === "draft" ? "published" : "draft";
-                            try { await saveAssessment({ id: a.id, status: next }); showToast?.(`${a.title} ${next === "published" ? "published" : "unpublished"}`); }
-                            catch (err) { alert("Failed: " + err.message); }
-                          } },
-                        "divider",
-                        { label: "Archive", icon: "trash", danger: true, onClick: async () => {
-                            if (!confirm(`Archive "${a.title}"?`)) return;
-                            try { await archiveAssessment(a.id); showToast?.(`${a.title} archived`); }
-                            catch (err) { alert("Archive failed: " + err.message); }
-                          } },
-                        { label: "Delete permanently", icon: "trash", danger: true, onClick: async () => {
-                            if (!confirm(`Permanently delete "${a.title}"? This cannot be undone.`)) return;
-                            try { await deleteAssessment(a.id); showToast?.(`"${a.title}" deleted`); }
-                            catch (err) { alert("Delete failed: " + err.message); }
-                          } },
-                      ]}/>
+                      <RowMenu items={(() => {
+                        const isArchived = a.status === "archived";
+                        const items = [
+                          { label: "Edit questions & settings", icon: "edit", onClick: () => setEditing(a) },
+                          "divider",
+                        ];
+                        if (isArchived) {
+                          items.push(
+                            { label: "Restore (unarchive)", icon: "refresh", onClick: async () => {
+                                try { await saveAssessment({ id: a.id, status: "draft" }); showToast?.(`${a.title} restored as draft`); }
+                                catch (err) { alert("Restore failed: " + err.message); }
+                              } },
+                            { label: "Delete permanently", icon: "trash", danger: true, onClick: async () => {
+                                if (!confirm(`Permanently delete "${a.title}"?\n\nThis cannot be undone. Type-confirm in the next prompt.`)) return;
+                                const typed = prompt(`Type the assessment title to confirm deletion:\n\n${a.title}`);
+                                if (typed !== a.title) { showToast?.("Deletion cancelled - title didn't match"); return; }
+                                try { await deleteAssessment(a.id); showToast?.(`"${a.title}" deleted`); }
+                                catch (err) { alert("Delete failed: " + err.message); }
+                              } },
+                          );
+                        } else {
+                          items.push(
+                            { label: a.status === "draft" ? "Publish" : "Unpublish", icon: a.status === "draft" ? "check" : "eye-off",
+                              onClick: async () => {
+                                const next = a.status === "draft" ? "published" : "draft";
+                                try { await saveAssessment({ id: a.id, status: next }); showToast?.(`${a.title} ${next === "published" ? "published" : "unpublished"}`); }
+                                catch (err) { alert("Failed: " + err.message); }
+                              } },
+                            { label: "Archive", icon: "trash", danger: true, onClick: async () => {
+                                if (!confirm(`Archive "${a.title}"? It will be hidden from the default assessment list. You can permanently delete it from the Archived view afterwards.`)) return;
+                                try { await archiveAssessment(a.id); showToast?.(`${a.title} archived`); }
+                                catch (err) { alert("Archive failed: " + err.message); }
+                              } },
+                          );
+                        }
+                        return items;
+                      })()}/>
                     </div>
                   </td>
                 </tr>
@@ -1306,7 +1344,7 @@ const ActivitySortHeader = ({ label, sortKey, sort, onSort, style }) => {
         type="button"
         className="btn btn-ghost btn-sm"
         onClick={() => onSort(_activityNextSort(sort, sortKey))}
-        style={{ height: "auto", padding: "4px 0", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em", gap: 6 }}
+        style={{ height: "auto", padding: "6px 8px", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em", gap: 8 }}
       >
         {label}<span aria-hidden="true" style={{ color: active ? "#111" : "#9a9d9a", fontSize: 10 }}>{active ? (desc ? "▼" : "▲") : "↕"}</span>
       </button>
