@@ -629,7 +629,7 @@ const LessonRow = ({ l, course, moduleIndex, lessonIndex, onChange, onRemove, on
                 <option value="">Choose a quiz / assessment...</option>
                 {courseAssessments.map(a => (
                   <option key={a.id} value={a.id}>
-                    {a.title} ({a.type === "quiz" ? "quiz" : a.type === "cert" ? "cert" : "final"}, {a.questions?.length || 0} q, {a.passMark || 100}%)
+                    {a.title} ({a.type === "quiz" ? "quiz" : "final certification"}, {a.questions?.length || 0} q, {a.passMark || 100}%)
                   </option>
                 ))}
               </select>

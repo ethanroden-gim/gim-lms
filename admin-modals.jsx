@@ -105,7 +105,7 @@ const NewAssessmentModal = ({ open, onClose, initial, onSaved }) => {
       setTitle(initial.title || "");
       setDescription(initial.description || "");
       setCourseId(initial.courseId || "");
-      setType(initial.type || "final");
+      setType(initial.type === "cert" ? "final" : (initial.type || "final"));
       setQuestions(initial.questions || []);
       setPassMark(initial.type === "quiz" ? 100 : (initial.passMark || 80));
       setAttemptsAllowed(initial.attemptsAllowed === null || initial.attemptsAllowed === undefined
@@ -114,7 +114,7 @@ const NewAssessmentModal = ({ open, onClose, initial, onSaved }) => {
       setTimeLimitMin(initial.timeLimit || 30);
       setShuffleQuestions(initial.shuffleQuestions !== false);
       setShowAnswers(initial.showAnswers || "after-pass");
-      setCertOnPass(initial.type === "quiz" ? false : initial.certOnPass !== false);
+      setCertOnPass(initial.type === "quiz" ? false : true);
     } else {
       setTitle(""); setDescription(""); setCourseId(""); setType("final");
       setQuestions([]);
@@ -152,7 +152,7 @@ const NewAssessmentModal = ({ open, onClose, initial, onSaved }) => {
         timeLimit: timeLimit === "none" ? null : timeLimitMin,
         shuffleQuestions,
         showAnswers,
-        certOnPass: type === "quiz" ? false : certOnPass,
+        certOnPass: type === "quiz" ? false : true,
         questions,
         status: initial?.status || "published",
       };
@@ -218,8 +218,7 @@ const NewAssessmentModal = ({ open, onClose, initial, onSaved }) => {
                 <FieldLabel>Type</FieldLabel>
                 <SelectInput value={type} onChange={e => setType(e.target.value)}>
                   <option value="quiz">Quiz (knowledge check, graded)</option>
-                  <option value="final">Final exam (required to complete course)</option>
-                  <option value="cert">Certification exam (with certificate)</option>
+                  <option value="final">Final certification assessment</option>
                 </SelectInput>
               </div>
             </div>
@@ -298,12 +297,11 @@ const NewAssessmentModal = ({ open, onClose, initial, onSaved }) => {
 
             <div style={{ gridColumn: "1 / -1", padding: 14, border: "1px solid #ececec", borderRadius: 10, background: "#fafafa" }}>
               <label style={{ display: "flex", gap: 12, cursor: "pointer" }}>
-                <input type="checkbox" checked={certOnPass} disabled={type === "quiz"} onChange={e => setCertOnPass(e.target.checked)} style={{ marginTop: 2 }}/>
+                <input type="checkbox" checked={type !== "quiz"} disabled={true} onChange={() => {}} style={{ marginTop: 2 }}/>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>Issue certificate on pass</div>
                   <div style={{ fontSize: 12, color: "#5f635f", marginTop: 2 }}>
-                    Learners passing this assessment get a certificate with their name, score,
-                    pass date, and a verification ID. Recommended for any compliance training.
+                    Final assessments always issue a certificate. Knowledge checks do not.
                   </div>
                 </div>
               </label>
@@ -324,7 +322,7 @@ const NewAssessmentModal = ({ open, onClose, initial, onSaved }) => {
             timeLimitMin={timeLimitMin}
             shuffleQuestions={shuffleQuestions}
             showAnswers={showAnswers}
-            certOnPass={certOnPass}
+            certOnPass={type !== "quiz"}
           />
         )}
       </div>
@@ -417,16 +415,17 @@ const QuestionsStep = ({ questions, removeQuestion, editingQ, setEditingQ, upser
                     <span style={{ fontSize: 11, color: "#5f635f" }}>{q.points || 1} pt</span>
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, wordWrap: "break-word" }}>{q.text}</div>
-                  {q.type !== "short" && q.type !== "essay" && q.options && (
+                  {q.type !== "short" && q.type !== "essay" && q.type !== "hotspot" && q.options && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                       {q.options.map((opt, oi) => (
-                        <div key={oi} style={{ fontSize: 11, color: q.correct.includes(oi) ? "#2e5a12" : "#5f635f", display: "flex", gap: 6 }}>
-                          {q.correct.includes(oi) ? <Icon name="check" size={11}/> : <span style={{ width: 11, display: "inline-block" }}/>}
-                          <span>{opt}</span>
+                        <div key={oi} style={{ fontSize: 11, color: q.type === "ranking" || q.type === "matching" || q.correct.includes(oi) ? "#2e5a12" : "#5f635f", display: "flex", gap: 6 }}>
+                          {q.type === "ranking" || q.type === "matching" || q.correct.includes(oi) ? <Icon name="check" size={11}/> : <span style={{ width: 11, display: "inline-block" }}/>}
+                          <span>{opt}{q.type === "matching" && q.matchOptions?.[oi] ? ` -> ${q.matchOptions[oi]}` : ""}</span>
                         </div>
                       ))}
                     </div>
                   )}
+                  {q.type === "hotspot" && <div className="text-xs text-muted">Hotspot: {q.imageUrl || "no image"} ({q.hotspot?.x || 0}%, {q.hotspot?.y || 0}%, r {q.hotspot?.r || 0}%)</div>}
                 </div>
                 <div style={{ display: "flex", gap: 4 }}>
                   <button className="btn-icon" onClick={() => setEditingQ(i)}><Icon name="edit" size={14}/></button>
@@ -445,6 +444,9 @@ const qTypeLabel = (t) =>
   t === "single" ? "Single choice"
   : t === "multi" ? "Multi-select"
   : t === "tf" ? "True / False"
+  : t === "ranking" ? "Ranking"
+  : t === "matching" ? "Matching"
+  : t === "hotspot" ? "Hotspot"
   : t === "short" ? "Short answer"
   : t === "essay" ? "Essay"
   : t;
@@ -456,6 +458,9 @@ const QuestionEditor = ({ initial, onSave, onCancel }) => {
   const [type, setType] = React.useState(initial?.type || "single");
   const [text, setText] = React.useState(initial?.text || "");
   const [options, setOptions] = React.useState(initial?.options || ["", "", "", ""]);
+  const [matchOptions, setMatchOptions] = React.useState(initial?.matchOptions || ["", "", "", ""]);
+  const [imageUrl, setImageUrl] = React.useState(initial?.imageUrl || "");
+  const [hotspot, setHotspot] = React.useState(initial?.hotspot || { x: 50, y: 50, r: 10 });
   const [correct, setCorrect] = React.useState(initial?.correct || []);
   const [points, setPoints] = React.useState(initial?.points || 1);
   const [explanation, setExplanation] = React.useState(initial?.explanation || "");
@@ -466,6 +471,16 @@ const QuestionEditor = ({ initial, onSave, onCancel }) => {
       setOptions(["True", "False"]);
       setCorrect([]);
     } else if (type === "short" || type === "essay") {
+      setOptions([]);
+      setCorrect([]);
+    } else if (type === "ranking") {
+      if (options.length === 0 || options[0] === "True") setOptions(["", "", "", ""]);
+      setCorrect([]);
+    } else if (type === "matching") {
+      if (options.length === 0 || options[0] === "True") setOptions(["", "", "", ""]);
+      if (matchOptions.length === 0) setMatchOptions(["", "", "", ""]);
+      setCorrect([]);
+    } else if (type === "hotspot") {
       setOptions([]);
       setCorrect([]);
     } else if (options.length === 0 || options[0] === "True") {
@@ -480,17 +495,40 @@ const QuestionEditor = ({ initial, onSave, onCancel }) => {
     else setCorrect(p => p.includes(i) ? p.filter(x => x !== i) : [...p, i]);
   };
   const updateOption = (i, v) => setOptions(p => p.map((o, idx) => idx === i ? v : o));
+  const updateMatchOption = (i, v) => setMatchOptions(p => p.map((o, idx) => idx === i ? v : o));
   const addOption = () => setOptions(p => [...p, ""]);
+  const addMatchPair = () => { setOptions(p => [...p, ""]); setMatchOptions(p => [...p, ""]); };
   const removeOption = (i) => {
     setOptions(p => p.filter((_, idx) => idx !== i));
+    setMatchOptions(p => p.filter((_, idx) => idx !== i));
     setCorrect(p => p.filter(x => x !== i).map(x => x > i ? x - 1 : x));
   };
 
+  const pairedMatches = options
+    .map((left, i) => ({ left: left.trim(), right: (matchOptions[i] || "").trim() }))
+    .filter(pair => pair.left && pair.right);
+
   const valid = text.trim().length > 0
-    && (type === "short" || type === "essay" || (options.filter(o => o.trim()).length >= 2 && correct.length >= 1));
+    && (type === "short" || type === "essay"
+      || (type === "hotspot" && imageUrl.trim().length > 0)
+      || (type === "ranking" && options.filter(o => o.trim()).length >= 2)
+      || (type === "matching" && pairedMatches.length >= 2)
+      || (options.filter(o => o.trim()).length >= 2 && correct.length >= 1));
 
   const save = () => {
-    onSave({ type, text: text.trim(), options, correct, points, explanation: explanation.trim() });
+    const cleanOptions = type === "matching" ? pairedMatches.map(pair => pair.left) : options.map(o => o.trim()).filter(Boolean);
+    const cleanMatches = type === "matching" ? pairedMatches.map(pair => pair.right) : matchOptions.map(o => o.trim()).filter(Boolean);
+    onSave({
+      type,
+      text: text.trim(),
+      options: cleanOptions,
+      matchOptions: type === "matching" ? cleanMatches : undefined,
+      correct: type === "ranking" || type === "matching" ? cleanOptions.map((_, i) => i) : correct,
+      imageUrl: type === "hotspot" ? imageUrl.trim() : undefined,
+      hotspot: type === "hotspot" ? hotspot : undefined,
+      points,
+      explanation: explanation.trim(),
+    });
   };
 
   return (
@@ -507,6 +545,9 @@ const QuestionEditor = ({ initial, onSave, onCancel }) => {
             <option value="single">Single choice (one correct)</option>
             <option value="multi">Multi-select (multiple correct)</option>
             <option value="tf">True / False</option>
+            <option value="ranking">Ranking</option>
+            <option value="matching">Matching</option>
+            <option value="hotspot">Hotspot</option>
             <option value="short">Short answer (manually graded)</option>
             <option value="essay">Essay (manually graded)</option>
           </SelectInput>
@@ -540,7 +581,42 @@ const QuestionEditor = ({ initial, onSave, onCancel }) => {
         </div>
       )}
 
-      {type !== "short" && type !== "essay" && (
+      {(type === "ranking" || type === "matching") && (
+        <div style={{ marginBottom: 14 }}>
+          <FieldLabel hint={type === "ranking" ? "Enter options in the correct order. Learners will reorder them." : "Enter matching pairs. Learners will match each left value to the right value."}>
+            {type === "ranking" ? "Correct order" : "Matching pairs"}
+          </FieldLabel>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {options.map((opt, i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: type === "matching" ? "1fr 1fr auto" : "32px 1fr auto", gap: 8, alignItems: "center" }}>
+                {type === "ranking" && <div style={{ fontSize: 12, fontWeight: 700, color: "#5f635f" }}>{i + 1}</div>}
+                <input value={opt} onChange={e => updateOption(i, e.target.value)} placeholder={type === "matching" ? `Left value ${i + 1}` : `Item ${i + 1}`} style={{ padding: "8px 12px", border: "1px solid #d8d9d8", borderRadius: 8, fontSize: 13 }} />
+                {type === "matching" && <input value={matchOptions[i] || ""} onChange={e => updateMatchOption(i, e.target.value)} placeholder={`Matching value ${i + 1}`} style={{ padding: "8px 12px", border: "1px solid #d8d9d8", borderRadius: 8, fontSize: 13 }} />}
+                {options.length > 2 && <button className="btn-icon" onClick={() => removeOption(i)}><Icon name="trash" size={14}/></button>}
+              </div>
+            ))}
+            <button className="btn btn-ghost btn-sm" onClick={type === "matching" ? addMatchPair : addOption} style={{ alignSelf: "flex-start", marginTop: 4 }}>
+              <Icon name="plus" size={12}/> Add {type === "matching" ? "pair" : "item"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {type === "hotspot" && (
+        <div style={{ marginBottom: 14, display: "grid", gap: 10 }}>
+          <div>
+            <FieldLabel required>Image URL</FieldLabel>
+            <TextInput value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            <div><FieldLabel>Target X %</FieldLabel><TextInput type="number" min="0" max="100" value={hotspot.x} onChange={e => setHotspot(h => ({ ...h, x: parseFloat(e.target.value) || 0 }))} /></div>
+            <div><FieldLabel>Target Y %</FieldLabel><TextInput type="number" min="0" max="100" value={hotspot.y} onChange={e => setHotspot(h => ({ ...h, y: parseFloat(e.target.value) || 0 }))} /></div>
+            <div><FieldLabel>Radius %</FieldLabel><TextInput type="number" min="1" max="50" value={hotspot.r} onChange={e => setHotspot(h => ({ ...h, r: parseFloat(e.target.value) || 1 }))} /></div>
+          </div>
+        </div>
+      )}
+
+      {type !== "short" && type !== "essay" && type !== "ranking" && type !== "matching" && type !== "hotspot" && (
         <div style={{ marginBottom: 14 }}>
           <FieldLabel hint={type === "multi" ? "Tap the circles to mark correct answers (multiple)." : "Tap the circle to mark the correct answer."}>
             Answer options
@@ -621,7 +697,7 @@ const ReviewStep = ({ title, description, type, courseTitle, questions, passMark
         {description && <div style={{ fontSize: 13, color: "#5f635f", marginTop: 4, lineHeight: 1.5 }}>{description}</div>}
       </div>
 
-      <Row label="Type" value={type === "quiz" ? "Quiz" : type === "final" ? "Final exam" : "Certification exam"} />
+      <Row label="Type" value={type === "quiz" ? "Quiz" : "Final certification assessment"} />
       <Row label="Linked course" value={courseTitle} />
       <Row label="Questions" value={`${questions.length} (${totalPoints} pts total)`} />
       <Row label="Pass mark" value={`${passMark}%`} />

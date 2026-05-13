@@ -454,17 +454,40 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
 
 const assessmentCorrectIndices = (q) => Array.isArray(q.correct) ? q.correct : (q.correct != null ? [q.correct] : []);
 const assessmentAnswerText = (q, ans) => {
+  if (q.type === "ranking") return Array.isArray(ans) ? ans.map(idx => q.options?.[idx]).filter(Boolean).join(" -> ") : "(none)";
+  if (q.type === "matching") {
+    if (!ans || typeof ans !== "object") return "(none)";
+    return (q.options || []).map((left, i) => `${left}: ${q.matchOptions?.[ans[i]] || "(none)"}`).join("; ");
+  }
+  if (q.type === "hotspot") return ans && typeof ans === "object" ? `${Math.round(ans.x)}%, ${Math.round(ans.y)}%` : "(none)";
   if (Array.isArray(ans)) return ans.map(idx => q.options?.[idx]).filter(Boolean).join(", ") || "(none)";
   if (typeof ans === "number") return q.options?.[ans] || "(none)";
   if (typeof ans === "string") return ans.trim() || "(blank)";
   return "(none)";
 };
 const assessmentCorrectText = (q) => {
+  if (q.type === "ranking") return (q.options || []).join(" -> ") || "No answer key";
+  if (q.type === "matching") return (q.options || []).map((left, i) => `${left}: ${q.matchOptions?.[i] || ""}`).join("; ") || "No answer key";
+  if (q.type === "hotspot") return q.hotspot ? `${q.hotspot.x}%, ${q.hotspot.y}% within ${q.hotspot.r}%` : "No hotspot set";
   const idxs = assessmentCorrectIndices(q);
   return idxs.map(idx => q.options?.[idx]).filter(Boolean).join(", ") || "No answer key";
 };
 const assessmentIsCorrect = (q, ans) => {
   if (q.type === "short" || q.type === "essay") return null;
+  if (q.type === "ranking") {
+    const expected = (q.options || []).map((_, i) => i);
+    return Array.isArray(ans) && expected.length === ans.length && expected.every((idx, i) => ans[i] === idx);
+  }
+  if (q.type === "matching") {
+    const expected = (q.matchOptions || []).map((_, i) => i);
+    return ans && typeof ans === "object" && expected.every((idx, i) => Number(ans[i]) === idx);
+  }
+  if (q.type === "hotspot") {
+    if (!ans || typeof ans !== "object" || !q.hotspot) return false;
+    const dx = Number(ans.x) - Number(q.hotspot.x);
+    const dy = Number(ans.y) - Number(q.hotspot.y);
+    return Math.sqrt(dx * dx + dy * dy) <= Number(q.hotspot.r || 0);
+  }
   const idxs = assessmentCorrectIndices(q);
   if (q.type === "multi") {
     const correctSet = new Set(idxs);
@@ -537,6 +560,15 @@ const AssessmentPage = ({ courseId, target, goCert, goBack }) => {
 
   const total = quiz.questions.length;
   const q = quiz.questions[qIdx];
+  React.useEffect(() => {
+    if (q?.type === "ranking" && !answers[qIdx]) {
+      const initialOrder = (q.options || []).map((_, i) => i);
+      setAnswers(prev => ({
+        ...prev,
+        [qIdx]: initialOrder.length > 1 ? [...initialOrder].reverse() : initialOrder,
+      }));
+    }
+  }, [qIdx, q?.type]);
 
   // Normalise correct-answer field — QuestionEditor saves arrays, legacy SAMPLE_QUIZ uses numbers
   const correctIndices = (qq) => Array.isArray(qq.correct) ? qq.correct : (qq.correct != null ? [qq.correct] : []);
@@ -545,6 +577,9 @@ const AssessmentPage = ({ courseId, target, goCert, goBack }) => {
     const a = answers[i];
     if (qq.type === "short" || qq.type === "essay") return typeof a === "string" && a.trim().length > 0;
     if (qq.type === "multi") return Array.isArray(a) && a.length > 0;
+    if (qq.type === "ranking") return Array.isArray(a) && a.length === (qq.options || []).length;
+    if (qq.type === "matching") return a && typeof a === "object" && (qq.options || []).every((_, idx) => a[idx] !== undefined);
+    if (qq.type === "hotspot") return a && typeof a === "object" && a.x != null && a.y != null;
     return a !== undefined; // single, tf, default
   });
 
@@ -554,12 +589,15 @@ const AssessmentPage = ({ courseId, target, goCert, goBack }) => {
     quiz.questions.forEach((qq, i) => {
       if (qq.type === "short" || qq.type === "essay") return;
       autoTotal++;
-      const cIdxs = correctIndices(qq);
-      if (qq.type === "multi") {
+      if (assessmentIsCorrect(qq, answers[i])) {
+        correct++;
+      } else if (qq.type === "multi") {
+        const cIdxs = correctIndices(qq);
         const correctSet = new Set(cIdxs);
         const givenSet = new Set(answers[i] || []);
         if (correctSet.size === givenSet.size && [...correctSet].every(x => givenSet.has(x))) correct++;
       } else { // single, tf, or default
+        const cIdxs = correctIndices(qq);
         if (answers[i] === cIdxs[0]) correct++;
       }
     });
@@ -744,6 +782,64 @@ const AssessmentPage = ({ courseId, target, goCert, goBack }) => {
           );
         })}
 
+        {/* Ranking */}
+        {q.type === "ranking" && (() => {
+          const order = answers[qIdx] || (q.options || []).map((_, i) => i);
+          const move = (pos, dir) => {
+            const next = [...order];
+            const target = pos + dir;
+            if (target < 0 || target >= next.length) return;
+            [next[pos], next[target]] = [next[target], next[pos]];
+            setAnswers({ ...answers, [qIdx]: next });
+          };
+          return (
+            <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+              {order.map((optIdx, pos) => (
+                <div key={`${optIdx}-${pos}`} className="quiz-option selected" style={{ cursor: "default" }}>
+                  <div style={{ width: 24, fontWeight: 800, color: "#5f635f" }}>{pos + 1}</div>
+                  <div style={{ flex: 1 }}>{q.options?.[optIdx]}</div>
+                  <button className="btn btn-ghost btn-sm" disabled={pos === 0} onClick={() => move(pos, -1)}>Up</button>
+                  <button className="btn btn-ghost btn-sm" disabled={pos === order.length - 1} onClick={() => move(pos, 1)}>Down</button>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
+        {/* Matching */}
+        {q.type === "matching" && (
+          <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+            {(q.options || []).map((left, i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, alignItems: "center" }}>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{left}</div>
+                <select className="cd-input" value={(answers[qIdx] || {})[i] ?? ""} onChange={e => setAnswers({ ...answers, [qIdx]: { ...(answers[qIdx] || {}), [i]: parseInt(e.target.value, 10) } })}>
+                  <option value="">Choose match...</option>
+                  {(q.matchOptions || []).map((right, ri) => <option key={ri} value={ri}>{right}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Hotspot */}
+        {q.type === "hotspot" && (
+          <div style={{ marginTop: 12 }}>
+            <div
+              style={{ position: "relative", borderRadius: 10, overflow: "hidden", border: "1px solid #ececec", background: "#f8f7f2", cursor: "crosshair" }}
+              onClick={e => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setAnswers({ ...answers, [qIdx]: { x: ((e.clientX - rect.left) / rect.width) * 100, y: ((e.clientY - rect.top) / rect.height) * 100 } });
+              }}
+            >
+              {q.imageUrl ? <img src={q.imageUrl} alt="" style={{ display: "block", width: "100%" }} /> : <div className="empty">No image configured.</div>}
+              {answers[qIdx] && (
+                <div style={{ position: "absolute", left: `${answers[qIdx].x}%`, top: `${answers[qIdx].y}%`, width: 18, height: 18, borderRadius: 999, border: "3px solid #7ac142", transform: "translate(-50%, -50%)", background: "rgba(122,193,66,.18)" }} />
+              )}
+            </div>
+            <div className="text-xs text-muted" style={{ marginTop: 6 }}>Click the correct area on the image.</div>
+          </div>
+        )}
+
         {/* Short answer */}
         {q.type === "short" && (
           <input
@@ -780,6 +876,9 @@ const AssessmentPage = ({ courseId, target, goCert, goBack }) => {
           {qIdx < total - 1 ? (() => {
             const a = answers[qIdx];
             const ok = q.type === "multi" ? Array.isArray(a) && a.length > 0
+                     : q.type === "ranking" ? Array.isArray(a) && a.length === (q.options || []).length
+                     : q.type === "matching" ? a && typeof a === "object" && (q.options || []).every((_, idx) => a[idx] !== undefined)
+                     : q.type === "hotspot" ? a && typeof a === "object" && a.x != null && a.y != null
                      : (q.type === "short" || q.type === "essay") ? typeof a === "string" && a.trim().length > 0
                      : a !== undefined; // single, tf, default
             return (
