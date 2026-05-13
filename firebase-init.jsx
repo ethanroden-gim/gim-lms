@@ -16,6 +16,19 @@ if (fbReady && !firebase.apps.length) {
 const fbAuth = fbReady ? firebase.auth() : null;
 const fbDb   = fbReady ? firebase.firestore() : null;
 
+const stripUndefinedFields = (value) => {
+  if (value === undefined) return undefined;
+  if (Array.isArray(value)) return value.map(stripUndefinedFields).filter(v => v !== undefined);
+  if (!value || typeof value !== "object") return value;
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([k, v]) => [k, stripUndefinedFields(v)])
+      .filter(([, v]) => v !== undefined)
+  );
+};
+
 // Exchange the Google Identity Services JWT for a Firebase Auth session.
 const signIntoFirebase = (googleIdToken) => {
   if (!fbReady) return Promise.resolve(null);
@@ -439,16 +452,17 @@ const deleteRole = async (id) => {
 const saveAssessment = async (a) => {
   if (!fbReady) throw new Error("Firebase not configured");
   const { id, ...data } = a;
-  data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+  const cleanData = stripUndefinedFields(data);
+  cleanData.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
   if (id) {
-    await fbDb.collection("assessments").doc(id).set(data, { merge: true });
-    recordAdminActivity("Updated assessment", { assessmentId: id, title: data.title || "", status: data.status || "" }).catch(() => {});
+    await fbDb.collection("assessments").doc(id).set(cleanData, { merge: true });
+    recordAdminActivity("Updated assessment", { assessmentId: id, title: cleanData.title || "", status: cleanData.status || "" }).catch(() => {});
     return id;
   }
-  data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-  if (window.CURRENT_USER?.uid) data.createdBy = window.CURRENT_USER.uid;
-  const ref = await fbDb.collection("assessments").add(data);
-  recordAdminActivity("Created assessment", { assessmentId: ref.id, title: data.title || "", type: data.type || "" }).catch(() => {});
+  cleanData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+  if (window.CURRENT_USER?.uid) cleanData.createdBy = window.CURRENT_USER.uid;
+  const ref = await fbDb.collection("assessments").add(cleanData);
+  recordAdminActivity("Created assessment", { assessmentId: ref.id, title: cleanData.title || "", type: cleanData.type || "" }).catch(() => {});
   return ref.id;
 };
 

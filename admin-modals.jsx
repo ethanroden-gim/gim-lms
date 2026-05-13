@@ -518,17 +518,20 @@ const QuestionEditor = ({ initial, onSave, onCancel }) => {
   const save = () => {
     const cleanOptions = type === "matching" ? pairedMatches.map(pair => pair.left) : options.map(o => o.trim()).filter(Boolean);
     const cleanMatches = type === "matching" ? pairedMatches.map(pair => pair.right) : matchOptions.map(o => o.trim()).filter(Boolean);
-    onSave({
+    const question = {
       type,
       text: text.trim(),
       options: cleanOptions,
-      matchOptions: type === "matching" ? cleanMatches : undefined,
       correct: type === "ranking" || type === "matching" ? cleanOptions.map((_, i) => i) : correct,
-      imageUrl: type === "hotspot" ? imageUrl.trim() : undefined,
-      hotspot: type === "hotspot" ? hotspot : undefined,
       points,
       explanation: explanation.trim(),
-    });
+    };
+    if (type === "matching") question.matchOptions = cleanMatches;
+    if (type === "hotspot") {
+      question.imageUrl = imageUrl.trim();
+      question.hotspot = hotspot;
+    }
+    onSave(question);
   };
 
   return (

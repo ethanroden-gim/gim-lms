@@ -1130,18 +1130,20 @@ const AdminAssessmentsPage = () => {
           const qType = (r.question_type || r.type || "single").toLowerCase();
           const type = ["single", "multi", "tf", "short", "essay", "ranking", "matching", "hotspot"].includes(qType) ? qType : "single";
           const options = type === "tf" ? ["True", "False"] : (type === "short" || type === "essay" || type === "hotspot" ? [] : _adminSplitList(r.options));
-          const matchOptions = type === "matching" ? _adminSplitList(r.matches || r.match_options || r.matching_values) : undefined;
-          return {
+          const q = {
             type,
             text,
             options,
-            matchOptions,
             correct: type === "short" || type === "essay" || type === "hotspot" ? [] : (type === "ranking" || type === "matching" ? options.map((_, i) => i) : _adminCorrectIndicesFromCsv(r.correct || r.correct_answer, options)),
-            imageUrl: type === "hotspot" ? (r.image_url || r.hotspot_image || "") : undefined,
-            hotspot: type === "hotspot" ? { x: parseFloat(r.hotspot_x || r.x || "50") || 50, y: parseFloat(r.hotspot_y || r.y || "50") || 50, r: parseFloat(r.hotspot_r || r.radius || "10") || 10 } : undefined,
             points: parseInt(r.points || "", 10) || 1,
             explanation: r.explanation || "",
           };
+          if (type === "matching") q.matchOptions = _adminSplitList(r.matches || r.match_options || r.matching_values);
+          if (type === "hotspot") {
+            q.imageUrl = r.image_url || r.hotspot_image || "";
+            q.hotspot = { x: parseFloat(r.hotspot_x || r.x || "50") || 50, y: parseFloat(r.hotspot_y || r.y || "50") || 50, r: parseFloat(r.hotspot_r || r.radius || "10") || 10 };
+          }
+          return q;
         }).filter(Boolean);
         const saved = {
           title,
