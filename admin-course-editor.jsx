@@ -714,45 +714,11 @@ const AssessmentTab = ({ c, set, isNew, onOpenAssessment }) => {
   );
 };
 
-const formatFileSize = (bytes) => {
-  if (!bytes) return "";
-  const units = ["B", "KB", "MB", "GB"];
-  let size = bytes;
-  let unit = 0;
-  while (size >= 1024 && unit < units.length - 1) {
-    size /= 1024;
-    unit++;
-  }
-  return `${size >= 10 || unit === 0 ? Math.round(size) : size.toFixed(1)} ${units[unit]}`;
-};
-
 const ResourcesTab = ({ c, addResource, updateResource, removeResource }) => {
-  const [uploading, setUploading] = React.useState({});
-  const uploadResource = async (i, file) => {
-    if (!file) return;
-    if (!window.uploadImage) { alert("Resource upload requires Firebase Storage."); return; }
-    setUploading(prev => ({ ...prev, [i]: true }));
-    try {
-      const url = await uploadImage(file, "resources");
-      const ext = (file.name || "").split(".").pop()?.toLowerCase();
-      updateResource(i, {
-        name: c.resources[i]?.name || file.name.replace(/\.[^.]+$/, ""),
-        type: ext === "pdf" ? "pdf" : "doc",
-        url,
-        size: formatFileSize(file.size),
-      });
-    } catch (err) {
-      console.error("uploadResource:", err);
-      alert("Upload failed: " + err.message);
-    } finally {
-      setUploading(prev => ({ ...prev, [i]: false }));
-    }
-  };
-
   return (
     <div className="card card-pad" style={{ maxWidth: 920 }}>
       <div className="cd-section-title">Downloadable resources</div>
-      <div className="text-xs text-muted" style={{ marginTop: 4 }}>Attach PDFs, docs, or links learners can open while taking the course.</div>
+      <div className="text-xs text-muted" style={{ marginTop: 4 }}>Attach URLs for PDFs, docs, or links learners can open while taking the course.</div>
 
       <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
         {c.resources.map((r, i) => (
@@ -763,28 +729,13 @@ const ResourcesTab = ({ c, addResource, updateResource, removeResource }) => {
             <div style={{ display: "grid", gap: 8, flex: 1 }}>
               <div style={{ display: "grid", gridTemplateColumns: "minmax(180px, 1fr) 120px", gap: 8 }}>
                 <input className="cd-input" value={r.name || ""} onChange={e => updateResource(i, { name: e.target.value })} placeholder="Resource name" />
-                <select className="cd-input" value={r.type || "pdf"} onChange={e => updateResource(i, { type: e.target.value, size: e.target.value === "link" ? "" : r.size })}>
+                <select className="cd-input" value={r.type || "pdf"} onChange={e => updateResource(i, { type: e.target.value, size: "" })}>
                   <option value="pdf">PDF</option>
                   <option value="doc">Doc</option>
                   <option value="link">Link</option>
                 </select>
               </div>
-              <input className="cd-input" value={r.url || ""} onChange={e => updateResource(i, { url: e.target.value })} placeholder={r.type === "link" ? "https://..." : "Upload a file or paste a file URL"} />
-              {r.type !== "link" && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <label className="btn btn-ghost btn-sm" style={{ margin: 0, cursor: uploading[i] ? "default" : "pointer" }}>
-                    <Icon name="upload" size={12}/> {uploading[i] ? "Uploading..." : "Upload file"}
-                    <input
-                      type="file"
-                      accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx"
-                      disabled={uploading[i]}
-                      onChange={e => uploadResource(i, e.target.files?.[0])}
-                      style={{ display: "none" }}
-                    />
-                  </label>
-                  {r.size && <span className="text-xs text-muted">{r.size}</span>}
-                </div>
-              )}
+              <input className="cd-input" value={r.url || ""} onChange={e => updateResource(i, { url: e.target.value })} placeholder={r.type === "link" ? "https://..." : "Paste the PDF/doc URL"} />
             </div>
             <button className="btn-icon" title="Remove" style={{ color: "#a8232b", marginTop: 4 }} onClick={() => removeResource(i)}><Icon name="trash" size={14}/></button>
           </div>
