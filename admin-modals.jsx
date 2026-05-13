@@ -415,7 +415,7 @@ const QuestionsStep = ({ questions, removeQuestion, editingQ, setEditingQ, upser
                     <span style={{ fontSize: 11, color: "#5f635f" }}>{q.points || 1} pt</span>
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, wordWrap: "break-word" }}>{q.text}</div>
-                  {q.type !== "short" && q.type !== "essay" && q.type !== "hotspot" && q.options && (
+                  {q.type !== "short" && q.type !== "essay" && q.options && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                       {q.options.map((opt, oi) => (
                         <div key={oi} style={{ fontSize: 11, color: q.type === "ranking" || q.type === "matching" || q.correct.includes(oi) ? "#2e5a12" : "#5f635f", display: "flex", gap: 6 }}>
@@ -425,7 +425,6 @@ const QuestionsStep = ({ questions, removeQuestion, editingQ, setEditingQ, upser
                       ))}
                     </div>
                   )}
-                  {q.type === "hotspot" && <div className="text-xs text-muted">Hotspot: {q.imageUrl || "no image"} ({q.hotspot?.x || 0}%, {q.hotspot?.y || 0}%, r {q.hotspot?.r || 0}%)</div>}
                 </div>
                 <div style={{ display: "flex", gap: 4 }}>
                   <button className="btn-icon" onClick={() => setEditingQ(i)}><Icon name="edit" size={14}/></button>
@@ -446,7 +445,6 @@ const qTypeLabel = (t) =>
   : t === "tf" ? "True / False"
   : t === "ranking" ? "Ranking"
   : t === "matching" ? "Matching"
-  : t === "hotspot" ? "Hotspot"
   : t === "short" ? "Short answer"
   : t === "essay" ? "Essay"
   : t;
@@ -459,8 +457,6 @@ const QuestionEditor = ({ initial, onSave, onCancel }) => {
   const [text, setText] = React.useState(initial?.text || "");
   const [options, setOptions] = React.useState(initial?.options || ["", "", "", ""]);
   const [matchOptions, setMatchOptions] = React.useState(initial?.matchOptions || ["", "", "", ""]);
-  const [imageUrl, setImageUrl] = React.useState(initial?.imageUrl || "");
-  const [hotspot, setHotspot] = React.useState(initial?.hotspot || { x: 50, y: 50, r: 10 });
   const [correct, setCorrect] = React.useState(initial?.correct || []);
   const [points, setPoints] = React.useState(initial?.points || 1);
   const [explanation, setExplanation] = React.useState(initial?.explanation || "");
@@ -479,9 +475,6 @@ const QuestionEditor = ({ initial, onSave, onCancel }) => {
     } else if (type === "matching") {
       if (options.length === 0 || options[0] === "True") setOptions(["", "", "", ""]);
       if (matchOptions.length === 0) setMatchOptions(["", "", "", ""]);
-      setCorrect([]);
-    } else if (type === "hotspot") {
-      setOptions([]);
       setCorrect([]);
     } else if (options.length === 0 || options[0] === "True") {
       setOptions(["", "", "", ""]);
@@ -510,7 +503,6 @@ const QuestionEditor = ({ initial, onSave, onCancel }) => {
 
   const valid = text.trim().length > 0
     && (type === "short" || type === "essay"
-      || (type === "hotspot" && imageUrl.trim().length > 0)
       || (type === "ranking" && options.filter(o => o.trim()).length >= 2)
       || (type === "matching" && pairedMatches.length >= 2)
       || (options.filter(o => o.trim()).length >= 2 && correct.length >= 1));
@@ -527,10 +519,6 @@ const QuestionEditor = ({ initial, onSave, onCancel }) => {
       explanation: explanation.trim(),
     };
     if (type === "matching") question.matchOptions = cleanMatches;
-    if (type === "hotspot") {
-      question.imageUrl = imageUrl.trim();
-      question.hotspot = hotspot;
-    }
     onSave(question);
   };
 
@@ -550,7 +538,6 @@ const QuestionEditor = ({ initial, onSave, onCancel }) => {
             <option value="tf">True / False</option>
             <option value="ranking">Ranking</option>
             <option value="matching">Matching</option>
-            <option value="hotspot">Hotspot</option>
             <option value="short">Short answer (manually graded)</option>
             <option value="essay">Essay (manually graded)</option>
           </SelectInput>
@@ -605,21 +592,7 @@ const QuestionEditor = ({ initial, onSave, onCancel }) => {
         </div>
       )}
 
-      {type === "hotspot" && (
-        <div style={{ marginBottom: 14, display: "grid", gap: 10 }}>
-          <div>
-            <FieldLabel required>Image URL</FieldLabel>
-            <TextInput value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-            <div><FieldLabel>Target X %</FieldLabel><TextInput type="number" min="0" max="100" value={hotspot.x} onChange={e => setHotspot(h => ({ ...h, x: parseFloat(e.target.value) || 0 }))} /></div>
-            <div><FieldLabel>Target Y %</FieldLabel><TextInput type="number" min="0" max="100" value={hotspot.y} onChange={e => setHotspot(h => ({ ...h, y: parseFloat(e.target.value) || 0 }))} /></div>
-            <div><FieldLabel>Radius %</FieldLabel><TextInput type="number" min="1" max="50" value={hotspot.r} onChange={e => setHotspot(h => ({ ...h, r: parseFloat(e.target.value) || 1 }))} /></div>
-          </div>
-        </div>
-      )}
-
-      {type !== "short" && type !== "essay" && type !== "ranking" && type !== "matching" && type !== "hotspot" && (
+      {type !== "short" && type !== "essay" && type !== "ranking" && type !== "matching" && (
         <div style={{ marginBottom: 14 }}>
           <FieldLabel hint={type === "multi" ? "Tap the circles to mark correct answers (multiple)." : "Tap the circle to mark the correct answer."}>
             Answer options

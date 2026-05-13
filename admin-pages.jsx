@@ -82,7 +82,6 @@ const _adminAssessmentImportTemplate = [
   { title: "Example Knowledge Check", course_title: "Example Draft Course", course_id: "", type: "quiz", description: "Knowledge check overview", pass_mark: "100", lesson_module: "Module 1", lesson_title: "Policy video", question: "Ready to continue?", question_type: "tf", options: "", correct: "True", points: "1" },
   { title: "Example Final Assessment", course_title: "Example Draft Course", course_id: "", type: "final", description: "Final assessment overview", pass_mark: "80", question: "Rank these steps", question_type: "ranking", options: "First|Second|Third", correct: "", points: "1" },
   { title: "Example Final Assessment", course_title: "Example Draft Course", course_id: "", type: "final", description: "Final assessment overview", pass_mark: "80", question: "Match each term", question_type: "matching", options: "Term A|Term B", matches: "Definition A|Definition B", correct: "", points: "1" },
-  { title: "Example Final Assessment", course_title: "Example Draft Course", course_id: "", type: "final", description: "Final assessment overview", pass_mark: "80", question: "Click the component", question_type: "hotspot", image_url: "https://example.com/image.png", hotspot_x: "50", hotspot_y: "50", hotspot_r: "10", points: "1" },
 ];
 
 const _adminDownloadCsvTemplate = (name, rows) => {
@@ -1128,21 +1127,17 @@ const AdminAssessmentsPage = () => {
           const text = r.question || r.question_text || "";
           if (!text) return null;
           const qType = (r.question_type || r.type || "single").toLowerCase();
-          const type = ["single", "multi", "tf", "short", "essay", "ranking", "matching", "hotspot"].includes(qType) ? qType : "single";
-          const options = type === "tf" ? ["True", "False"] : (type === "short" || type === "essay" || type === "hotspot" ? [] : _adminSplitList(r.options));
+          const type = ["single", "multi", "tf", "short", "essay", "ranking", "matching"].includes(qType) ? qType : "single";
+          const options = type === "tf" ? ["True", "False"] : (type === "short" || type === "essay" ? [] : _adminSplitList(r.options));
           const q = {
             type,
             text,
             options,
-            correct: type === "short" || type === "essay" || type === "hotspot" ? [] : (type === "ranking" || type === "matching" ? options.map((_, i) => i) : _adminCorrectIndicesFromCsv(r.correct || r.correct_answer, options)),
+            correct: type === "short" || type === "essay" ? [] : (type === "ranking" || type === "matching" ? options.map((_, i) => i) : _adminCorrectIndicesFromCsv(r.correct || r.correct_answer, options)),
             points: parseInt(r.points || "", 10) || 1,
             explanation: r.explanation || "",
           };
           if (type === "matching") q.matchOptions = _adminSplitList(r.matches || r.match_options || r.matching_values);
-          if (type === "hotspot") {
-            q.imageUrl = r.image_url || r.hotspot_image || "";
-            q.hotspot = { x: parseFloat(r.hotspot_x || r.x || "50") || 50, y: parseFloat(r.hotspot_y || r.y || "50") || 50, r: parseFloat(r.hotspot_r || r.radius || "10") || 10 };
-          }
           return q;
         }).filter(Boolean);
         const saved = {
@@ -1813,7 +1808,6 @@ const _adminAnswerCorrectIndices = (q) => Array.isArray(q.correct) ? q.correct :
 const _adminAnswerText = (q, ans) => {
   if (q.type === "ranking") return Array.isArray(ans) ? ans.map(idx => q.options?.[idx]).filter(Boolean).join(" -> ") : "(none)";
   if (q.type === "matching") return ans && typeof ans === "object" ? (q.options || []).map((left, i) => `${left}: ${q.matchOptions?.[ans[i]] || "(none)"}`).join("; ") : "(none)";
-  if (q.type === "hotspot") return ans && typeof ans === "object" ? `${Math.round(ans.x)}%, ${Math.round(ans.y)}%` : "(none)";
   if (Array.isArray(ans)) return ans.map(idx => q.options?.[idx]).filter(Boolean).join(", ") || "(none)";
   if (typeof ans === "number") return q.options?.[ans] || "(none)";
   if (typeof ans === "string") return ans.trim() || "(blank)";
@@ -1822,7 +1816,6 @@ const _adminAnswerText = (q, ans) => {
 const _adminCorrectAnswerText = (q) => {
   if (q.type === "ranking") return (q.options || []).join(" -> ") || "No answer key";
   if (q.type === "matching") return (q.options || []).map((left, i) => `${left}: ${q.matchOptions?.[i] || ""}`).join("; ") || "No answer key";
-  if (q.type === "hotspot") return q.hotspot ? `${q.hotspot.x}%, ${q.hotspot.y}% within ${q.hotspot.r}%` : "No hotspot set";
   const idxs = _adminAnswerCorrectIndices(q);
   return idxs.map(idx => q.options?.[idx]).filter(Boolean).join(", ") || "No answer key";
 };
@@ -1835,12 +1828,6 @@ const _adminAnswerIsCorrect = (q, ans) => {
   if (q.type === "matching") {
     const expected = (q.matchOptions || []).map((_, i) => i);
     return ans && typeof ans === "object" && expected.every((idx, i) => Number(ans[i]) === idx);
-  }
-  if (q.type === "hotspot") {
-    if (!ans || typeof ans !== "object" || !q.hotspot) return false;
-    const dx = Number(ans.x) - Number(q.hotspot.x);
-    const dy = Number(ans.y) - Number(q.hotspot.y);
-    return Math.sqrt(dx * dx + dy * dy) <= Number(q.hotspot.r || 0);
   }
   const idxs = _adminAnswerCorrectIndices(q);
   if (q.type === "multi") {

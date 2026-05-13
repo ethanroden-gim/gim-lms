@@ -459,7 +459,6 @@ const assessmentAnswerText = (q, ans) => {
     if (!ans || typeof ans !== "object") return "(none)";
     return (q.options || []).map((left, i) => `${left}: ${q.matchOptions?.[ans[i]] || "(none)"}`).join("; ");
   }
-  if (q.type === "hotspot") return ans && typeof ans === "object" ? `${Math.round(ans.x)}%, ${Math.round(ans.y)}%` : "(none)";
   if (Array.isArray(ans)) return ans.map(idx => q.options?.[idx]).filter(Boolean).join(", ") || "(none)";
   if (typeof ans === "number") return q.options?.[ans] || "(none)";
   if (typeof ans === "string") return ans.trim() || "(blank)";
@@ -468,7 +467,6 @@ const assessmentAnswerText = (q, ans) => {
 const assessmentCorrectText = (q) => {
   if (q.type === "ranking") return (q.options || []).join(" -> ") || "No answer key";
   if (q.type === "matching") return (q.options || []).map((left, i) => `${left}: ${q.matchOptions?.[i] || ""}`).join("; ") || "No answer key";
-  if (q.type === "hotspot") return q.hotspot ? `${q.hotspot.x}%, ${q.hotspot.y}% within ${q.hotspot.r}%` : "No hotspot set";
   const idxs = assessmentCorrectIndices(q);
   return idxs.map(idx => q.options?.[idx]).filter(Boolean).join(", ") || "No answer key";
 };
@@ -481,12 +479,6 @@ const assessmentIsCorrect = (q, ans) => {
   if (q.type === "matching") {
     const expected = (q.matchOptions || []).map((_, i) => i);
     return ans && typeof ans === "object" && expected.every((idx, i) => Number(ans[i]) === idx);
-  }
-  if (q.type === "hotspot") {
-    if (!ans || typeof ans !== "object" || !q.hotspot) return false;
-    const dx = Number(ans.x) - Number(q.hotspot.x);
-    const dy = Number(ans.y) - Number(q.hotspot.y);
-    return Math.sqrt(dx * dx + dy * dy) <= Number(q.hotspot.r || 0);
   }
   const idxs = assessmentCorrectIndices(q);
   if (q.type === "multi") {
@@ -579,7 +571,6 @@ const AssessmentPage = ({ courseId, target, goCert, goBack }) => {
     if (qq.type === "multi") return Array.isArray(a) && a.length > 0;
     if (qq.type === "ranking") return Array.isArray(a) && a.length === (qq.options || []).length;
     if (qq.type === "matching") return a && typeof a === "object" && (qq.options || []).every((_, idx) => a[idx] !== undefined);
-    if (qq.type === "hotspot") return a && typeof a === "object" && a.x != null && a.y != null;
     return a !== undefined; // single, tf, default
   });
 
@@ -821,25 +812,6 @@ const AssessmentPage = ({ courseId, target, goCert, goBack }) => {
           </div>
         )}
 
-        {/* Hotspot */}
-        {q.type === "hotspot" && (
-          <div style={{ marginTop: 12 }}>
-            <div
-              style={{ position: "relative", borderRadius: 10, overflow: "hidden", border: "1px solid #ececec", background: "#f8f7f2", cursor: "crosshair" }}
-              onClick={e => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                setAnswers({ ...answers, [qIdx]: { x: ((e.clientX - rect.left) / rect.width) * 100, y: ((e.clientY - rect.top) / rect.height) * 100 } });
-              }}
-            >
-              {q.imageUrl ? <img src={q.imageUrl} alt="" style={{ display: "block", width: "100%" }} /> : <div className="empty">No image configured.</div>}
-              {answers[qIdx] && (
-                <div style={{ position: "absolute", left: `${answers[qIdx].x}%`, top: `${answers[qIdx].y}%`, width: 18, height: 18, borderRadius: 999, border: "3px solid #7ac142", transform: "translate(-50%, -50%)", background: "rgba(122,193,66,.18)" }} />
-              )}
-            </div>
-            <div className="text-xs text-muted" style={{ marginTop: 6 }}>Click the correct area on the image.</div>
-          </div>
-        )}
-
         {/* Short answer */}
         {q.type === "short" && (
           <input
@@ -878,7 +850,6 @@ const AssessmentPage = ({ courseId, target, goCert, goBack }) => {
             const ok = q.type === "multi" ? Array.isArray(a) && a.length > 0
                      : q.type === "ranking" ? Array.isArray(a) && a.length === (q.options || []).length
                      : q.type === "matching" ? a && typeof a === "object" && (q.options || []).every((_, idx) => a[idx] !== undefined)
-                     : q.type === "hotspot" ? a && typeof a === "object" && a.x != null && a.y != null
                      : (q.type === "short" || q.type === "essay") ? typeof a === "string" && a.trim().length > 0
                      : a !== undefined; // single, tf, default
             return (
