@@ -1936,7 +1936,7 @@ const GradeAttemptModal = ({ attempt, onClose }) => {
             // Show auto-graded summary
             const display = _adminAnswerText(q, ans);
             const correct = _adminAnswerIsCorrect(q, ans);
-            const showReview = a.status === "graded" && a.passed === true;
+            const showReview = a.status === "graded";
             return (
               <div key={i} style={{ padding: 14, marginBottom: 10, border: `1px solid ${showReview && correct === false ? "#f3c4c7" : "#ececec"}`, borderRadius: 10, background: showReview && correct === false ? "#fffafa" : "#fafafa" }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>

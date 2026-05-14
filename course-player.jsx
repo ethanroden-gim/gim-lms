@@ -329,20 +329,27 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
 
             {/* Resources */}
             {(course.resources?.length > 0) && (
-              <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" }}>
-                {course.resources.map((r, i) => (
-                  <a key={i}
-                    href={r.url || "#"}
-                    target={r.url ? "_blank" : undefined}
-                    rel={r.url ? "noopener noreferrer" : undefined}
-                    onClick={r.url ? undefined : (e) => e.preventDefault()}
-                    className="btn btn-ghost btn-sm"
-                    style={{ textDecoration: "none" }}>
-                    <Icon name={r.type === "link" ? "external" : "download"} size={14} />
-                    {r.name || (r.type === "link" ? "Reference" : "Resource")}
-                    {r.size ? ` · ${r.size}` : ""}
-                  </a>
-                ))}
+              <div style={{ marginTop: 18, padding: 14, border: "1px solid #dfead4", borderRadius: 10, background: "#f6fbf0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#2e5a12", fontSize: 13, fontWeight: 800 }}>
+                  <Icon name="download" size={15} />
+                  Course resources available
+                </div>
+                <div className="text-xs text-muted" style={{ marginTop: 3 }}>Open the supporting files or links for this course below.</div>
+                <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                  {course.resources.map((r, i) => (
+                    <a key={i}
+                      href={r.url || "#"}
+                      target={r.url ? "_blank" : undefined}
+                      rel={r.url ? "noopener noreferrer" : undefined}
+                      onClick={r.url ? undefined : (e) => e.preventDefault()}
+                      className="btn btn-ghost btn-sm"
+                      style={{ textDecoration: "none", background: "#fff" }}>
+                      <Icon name={r.type === "link" ? "external" : "download"} size={14} />
+                      {r.name || (r.type === "link" ? "Reference" : "Resource")}
+                      {r.size ? ` · ${r.size}` : ""}
+                    </a>
+                  ))}
+                </div>
               </div>
             )}
 
