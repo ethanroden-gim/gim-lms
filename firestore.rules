@@ -2,7 +2,7 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() {
+    function isSignedIn() {
       return request.auth != null;
     }
 
@@ -11,64 +11,105 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return signedIn()
+      return isSignedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && currentUser().data.isAdmin == true;
     }
 
-    match /users/{userId} {
-      allow read: if signedIn();
-      allow create: if signedIn() && (userId == request.auth.uid || isAdmin());
-      allow update: if signedIn() && (userId == request.auth.uid || isAdmin());
+    function isManager() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && currentUser().data.isManager == true;
+    }
+
+    // Users - anyone signed in can read. Admins can create/update any user,
+    // including pre-login pending_* users. Learners can only update basic
+    // profile fields on their own record.
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (uid == request.auth.uid || isAdmin());
+      allow update: if isAdmin()
+        || (
+          request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'name',
+            'photoURL',
+            'lastSignInAt',
+            'email',
+            'emailLower'
+          ])
+        );
       allow delete: if isAdmin();
     }
 
+    // Courses, assessments, departments, roles, settings - admins write, signed-in users read.
     match /courses/{id} {
-      allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
-    }
-
-    match /enrollments/{id} {
-      allow read: if signedIn();
-      allow create, update, delete: if isAdmin()
-        || (signedIn() && request.resource.data.userId == request.auth.uid)
-        || (signedIn() && resource.data.userId == request.auth.uid);
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
     match /assessments/{id} {
-      allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
-    }
-
-    match /attempts/{id} {
-      allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin();
-    }
-
-    match /activity/{id} {
-      allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin();
-    }
-
-    match /adminActivity/{id} {
-      allow read, create, update, delete: if isAdmin();
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
     match /departments/{id} {
-      allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
     match /roles/{id} {
-      allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
     match /settings/{id} {
-      allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Enrollments - learners read/update their own progress. Admins/managers
+    // read all and can assign/update. Only admins can delete/unassign.
+    match /enrollments/{id} {
+      allow read: if isSignedIn()
+        && (resource.data.userId == request.auth.uid || isAdmin() || isManager());
+      allow create: if isAdmin()
+        || isManager()
+        || (isSignedIn() && request.resource.data.userId == request.auth.uid);
+      allow update: if isAdmin()
+        || isManager()
+        || (
+          isSignedIn()
+          && resource.data.userId == request.auth.uid
+          && request.resource.data.userId == request.auth.uid
+        );
+      allow delete: if isAdmin();
+    }
+
+    // Activity - learners write/read their own, admins read all.
+    match /activity/{id} {
+      allow read: if isSignedIn()
+        && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Admin audit log.
+    match /adminActivity/{id} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // Attempts - learners create their own attempts. Admins need read/update
+    // access for grading, including failed graded attempts.
+    match /attempts/{id} {
+      allow read: if isSignedIn()
+        && (resource.data.userId == request.auth.uid || isAdmin() || isManager());
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
   }
 }
