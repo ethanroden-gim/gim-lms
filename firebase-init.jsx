@@ -338,7 +338,18 @@ const createDirectoryUser = async ({ name, email, role = "Learner", dept = "", s
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     createdBy: window.CURRENT_USER?.uid || null,
   };
-  await ref.set(stripUndefinedFields(data));
+  try {
+    await ref.set(stripUndefinedFields(data));
+  } catch (err) {
+    if (err.code === "permission-denied") {
+      throw new Error(
+        "Firestore rules are blocking admins from creating pre-login users. " +
+        "Update the /users rules to allow signed-in admins to create user docs. " +
+        "A ready-to-copy rules reference is included in firestore.rules in this repo."
+      );
+    }
+    throw err;
+  }
   recordAdminActivity("Created directory user", { targetUserId: ref.id, email: cleanEmail, role, dept }).catch(() => {});
   return ref.id;
 };
