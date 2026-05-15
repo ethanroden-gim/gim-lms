@@ -45,12 +45,14 @@ const upsertUserDoc = async (firebaseUser, gisProfile) => {
   const adminEmails = (window.GIM_CONFIG || {}).adminEmails || [];
   const managerEmails = (window.GIM_CONFIG || {}).managerEmails || [];
   const email = firebaseUser.email || gisProfile?.email || "";
+  const emailLower = email.toLowerCase();
   const inheritsAdmin = adminEmails.length === 0 || adminEmails.includes(email);
   const inheritsManager = managerEmails.length === 0 || managerEmails.includes(email) || inheritsAdmin;
 
   const volatile = {
     name: firebaseUser.displayName || gisProfile?.name || email,
     email,
+    emailLower,
     photoURL: firebaseUser.photoURL || gisProfile?.picture || null,
     lastSignInAt: firebase.firestore.FieldValue.serverTimestamp(),
   };
@@ -58,6 +60,50 @@ const upsertUserDoc = async (firebaseUser, gisProfile) => {
   if (snap.exists) {
     await ref.set(volatile, { merge: true });
     return { id: snap.id, ...snap.data(), ...volatile };
+  }
+
+  const findPreparedUser = async () => {
+    const byLower = emailLower
+      ? await fbDb.collection("users").where("emailLower", "==", emailLower).limit(1).get()
+      : { empty: true, docs: [] };
+    const lowerDoc = byLower.docs.find(d => d.id !== firebaseUser.uid);
+    if (lowerDoc) return lowerDoc;
+    const byEmail = email
+      ? await fbDb.collection("users").where("email", "==", email).limit(1).get()
+      : { empty: true, docs: [] };
+    return byEmail.docs.find(d => d.id !== firebaseUser.uid) || null;
+  };
+
+  const preparedDoc = await findPreparedUser();
+  if (preparedDoc) {
+    const prepared = preparedDoc.data();
+    const merged = {
+      ...prepared,
+      ...volatile,
+      role: inheritsAdmin ? "Admin" : (prepared.role || "Learner"),
+      isAdmin: inheritsAdmin || prepared.role === "Admin" || prepared.isAdmin === true,
+      isManager: inheritsManager || prepared.role === "Manager" || prepared.role === "Admin" || prepared.isManager === true,
+      adminSource: inheritsAdmin ? "google" : (prepared.adminSource || null),
+      status: prepared.status || "active",
+      needsFirstLogin: false,
+      firebaseUid: firebaseUser.uid,
+    };
+    await ref.set(stripUndefinedFields(merged), { merge: true });
+
+    const migrateUserRefs = async (collectionName) => {
+      const s = await fbDb.collection(collectionName).where("userId", "==", preparedDoc.id).get();
+      if (s.empty) return 0;
+      const batch = fbDb.batch();
+      s.docs.forEach(d => batch.update(d.ref, { userId: firebaseUser.uid }));
+      await batch.commit();
+      return s.size;
+    };
+    await migrateUserRefs("enrollments");
+    await migrateUserRefs("attempts");
+    await migrateUserRefs("activity");
+    await preparedDoc.ref.delete();
+    recordAdminActivity("Merged pre-created user on first login", { targetUserId: firebaseUser.uid, previousUserId: preparedDoc.id, email }).catch(() => {});
+    return { id: firebaseUser.uid, ...merged };
   }
 
   const newDoc = {
@@ -261,6 +307,40 @@ const updateUser = async (uid, fields) => {
   if (window.CURRENT_USER?.isAdmin) {
     recordAdminActivity("Updated user", { targetUserId: uid, fields: Object.keys(fields || {}).join(", ") }).catch(() => {});
   }
+};
+
+const createDirectoryUser = async ({ name, email, role = "Learner", dept = "", status = "onboarding" }) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  const cleanEmail = (email || "").trim();
+  const emailLower = cleanEmail.toLowerCase();
+  if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) throw new Error("Enter a valid email address.");
+  const byLower = await fbDb.collection("users").where("emailLower", "==", emailLower).limit(1).get();
+  const byEmail = byLower.empty ? await fbDb.collection("users").where("email", "==", cleanEmail).limit(1).get() : null;
+  if (!byLower.empty || (byEmail && !byEmail.empty)) throw new Error("A user with that email already exists.");
+
+  const ref = fbDb.collection("users").doc(`pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  const displayName = (name || "").trim() || cleanEmail;
+  const data = {
+    name: displayName,
+    email: cleanEmail,
+    emailLower,
+    role,
+    dept,
+    status,
+    isAdmin: role === "Admin",
+    isManager: role !== "Learner",
+    adminSource: null,
+    provisioned: true,
+    needsFirstLogin: true,
+    assigned: 0,
+    completed: 0,
+    due: 0,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    createdBy: window.CURRENT_USER?.uid || null,
+  };
+  await ref.set(stripUndefinedFields(data));
+  recordAdminActivity("Created directory user", { targetUserId: ref.id, email: cleanEmail, role, dept }).catch(() => {});
+  return ref.id;
 };
 
 // ---- Activity log ---------------------------------------------------------
@@ -717,7 +797,7 @@ Object.assign(window, {
   saveRole, deleteRole,
   saveAssessment, archiveAssessment, deleteAssessment,
   saveCertificateTemplate,
-  assignTraining, daysUntilDue, updateUser, resetUserProgress, resetCourseProgress, unassignCourse,
+  assignTraining, daysUntilDue, updateUser, createDirectoryUser, resetUserProgress, resetCourseProgress, unassignCourse,
   enrollSelf, markLessonComplete, recordCompletion, recordActivity, recordAdminActivity,
   addLessonTime, recordAttempt, gradeAttempt,
   uploadImage,

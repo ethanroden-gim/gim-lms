@@ -227,6 +227,7 @@
         if (!window.fbReady) return;
         const unsub = fbAuth.onAuthStateChanged(async (fbUser) => {
           if (fbUser) {
+            await upsertUserDoc(fbUser, null);
             await hydrateUserFromFirebase(fbUser);
             setAuthState("signed-in");
           } else {
@@ -252,9 +253,8 @@
 
           if (window.fbReady) {
             try {
-              const fbUser = await signIntoFirebase(resp.credential);
-              await upsertUserDoc(fbUser, payload);
-              // onAuthStateChanged fires next → flips to "signed-in"
+              await signIntoFirebase(resp.credential);
+              // onAuthStateChanged will upsert/merge the user profile, then hydrate.
               return;
             } catch (err) {
               console.error("Firebase sign-in failed — running local-only:", err);

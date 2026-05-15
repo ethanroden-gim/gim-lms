@@ -618,6 +618,7 @@ const AdminUsersPage = () => {
   const [sort, setSort] = React.useState({ key: "name", dir: "asc" });
   const [assignFor, setAssignFor] = React.useState(null); // userId, "all" for top-bar, or null
   const [enrollmentsFor, setEnrollmentsFor] = React.useState(null); // user doc or null
+  const [addUserOpen, setAddUserOpen] = React.useState(false);
   const [selectedIds, setSelectedIds] = React.useState([]);
   const openAssign = (name) => setAssignFor(name);
 
@@ -678,10 +679,11 @@ const AdminUsersPage = () => {
         <div>
           <div className="page-head__eyebrow">Admin · People</div>
           <h1 className="page-head__title">People & enrollments</h1>
-          <div className="page-head__sub">Users sync from Google Workspace. Set roles & departments here.</div>
+          <div className="page-head__sub">Add new hires before first login, then set roles, departments, and assignments here.</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <ExportButton page="admin-users" label="Export CSV" />
+          <button className="btn btn-ghost" onClick={() => setAddUserOpen(true)}><Icon name="user" size={14}/> Add person</button>
           <button className="btn btn-primary" onClick={() => setAssignFor("all")}><Icon name="plus" size={14}/> Assign training</button>
         </div>
       </div>
@@ -766,7 +768,10 @@ const AdminUsersPage = () => {
                   <Avatar name={u.name} size={32} />
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{u.name}</div>
-                    <div style={{ fontSize: 11, color: "#5f635f" }}>{u.email || "—"}</div>
+                    <div style={{ fontSize: 11, color: "#5f635f" }}>
+                      {u.email || "—"}
+                      {u.needsFirstLogin && <span className="chip chip-amber" style={{ marginLeft: 6, fontSize: 10 }}>Pending first login</span>}
+                    </div>
                   </div>
                 </div>
               </td>
@@ -864,13 +869,21 @@ const AdminUsersPage = () => {
           <Icon name="users" size={20} />
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>People appear here when they sign in</div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Add people before they sign in</div>
           <div style={{ fontSize: 12, color: "#5f635f" }}>
-            Each user's record is created automatically the first time they sign in with their Google Workspace account.
-            Set roles and departments from this page; they persist across sign-ins.
+            Create a profile with their work email, then assign courses or set department and role before their first day.
+            When they sign in, their prepared profile and assignments will attach to their Google account.
           </div>
         </div>
       </div>
+      <AddDirectoryUserModal
+        open={addUserOpen}
+        onClose={() => setAddUserOpen(false)}
+        onCreated={(id) => {
+          setAddUserOpen(false);
+          setAssignFor(id);
+        }}
+      />
       <AssignTrainingModal
         open={!!assignFor}
         onClose={() => setAssignFor(null)}
@@ -882,6 +895,100 @@ const AdminUsersPage = () => {
         user={enrollmentsFor}
       />
     </div>
+  );
+};
+
+const AddDirectoryUserModal = ({ open, onClose, onCreated }) => {
+  const [name, setName] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [dept, setDept] = React.useState("");
+  const [role, setRole] = React.useState("Learner");
+  const [status, setStatus] = React.useState("onboarding");
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setName("");
+    setEmail("");
+    setDept("");
+    setRole("Learner");
+    setStatus("onboarding");
+    setSaving(false);
+  }, [open]);
+
+  if (!open) return null;
+  const departmentOptions = [...DEPARTMENT_DOCS].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const submit = async () => {
+    if (saving) return;
+    if (!email.trim()) { alert("Email is required."); return; }
+    setSaving(true);
+    try {
+      const id = await createDirectoryUser({ name, email, dept, role, status });
+      showToast?.("Person added. Choose courses to assign now.");
+      onCreated?.(id);
+    } catch (err) {
+      alert("Add person failed: " + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} width={560}>
+      <div style={{ padding: "20px 24px", borderBottom: "1px solid #ececec", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <div className="eyebrow-sm">Directory</div>
+          <div style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>Add person</div>
+          <div className="text-xs text-muted" style={{ marginTop: 4 }}>Create a learner profile before their first Google sign-in.</div>
+        </div>
+        <button className="btn-icon" onClick={onClose}><Icon name="close" size={18}/></button>
+      </div>
+      <div style={{ padding: 24, display: "grid", gap: 14 }}>
+        <div>
+          <FieldLabel>Name</FieldLabel>
+          <input className="cd-input" value={name} onChange={e => setName(e.target.value)} placeholder="Jane Smith" />
+        </div>
+        <div>
+          <FieldLabel required>Email</FieldLabel>
+          <input className="cd-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="jane@getgim.com" />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div>
+            <FieldLabel>Role</FieldLabel>
+            <select className="cd-input" value={role} onChange={e => setRole(e.target.value)}>
+              <option>Learner</option>
+              <option>Manager</option>
+              <option>Admin</option>
+            </select>
+          </div>
+          <div>
+            <FieldLabel>Status</FieldLabel>
+            <select className="cd-input" value={status} onChange={e => setStatus(e.target.value)}>
+              <option value="onboarding">Onboarding</option>
+              <option value="active">Active</option>
+              <option value="leave">On leave</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <FieldLabel>Department</FieldLabel>
+          <select className="cd-input" value={dept} onChange={e => setDept(e.target.value)}>
+            <option value="">Unassigned</option>
+            {departmentOptions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+          </select>
+        </div>
+        <div style={{ padding: 12, border: "1px solid #dfead4", background: "#f6fbf0", borderRadius: 10, fontSize: 12, color: "#3a3a3a", lineHeight: 1.5 }}>
+          After saving, you can assign courses immediately. On first login, this profile and its assignments will be linked to the employee's Google account.
+        </div>
+      </div>
+      <div style={{ padding: "14px 24px", borderTop: "1px solid #ececec", display: "flex", justifyContent: "flex-end", gap: 8, background: "#fafafa" }}>
+        <button className="btn btn-ghost btn-sm" onClick={onClose} disabled={saving}>Cancel</button>
+        <button className="btn btn-primary btn-sm" onClick={submit} disabled={saving}>
+          <Icon name="check" size={14}/> {saving ? "Saving..." : "Add person"}
+        </button>
+      </div>
+    </Modal>
   );
 };
 
