@@ -672,6 +672,35 @@ const AdminUsersPage = () => {
       _status: u.status || "active",
     };
   }), sort);
+  const usersByEmail = React.useMemo(() => {
+    const map = {};
+    (ALL_USERS || []).forEach(u => {
+      const key = (u.emailLower || u.email || "").toLowerCase();
+      if (!key) return;
+      (map[key] = map[key] || []).push(u);
+    });
+    return map;
+  }, [ALL_USERS.length]);
+  const mergePlanFor = (u) => {
+    const key = (u.emailLower || u.email || "").toLowerCase();
+    const matches = (usersByEmail[key] || []).filter(x => x.id !== u.id);
+    if (!matches.length) return null;
+    const pending = [u, ...matches].find(x => x.needsFirstLogin || String(x.id || "").startsWith("pending_"));
+    const real = [u, ...matches].find(x => x.id !== pending?.id && !x.needsFirstLogin && !String(x.id || "").startsWith("pending_"));
+    if (!pending || !real) return null;
+    return { source: pending, target: real };
+  };
+  const mergeDuplicate = async (plan) => {
+    if (!plan) return;
+    if (!confirm(`Merge duplicate profiles for ${plan.target.email || plan.source.email}?\n\nThis will move courses, attempts, and activity from the pending profile into the signed-in profile, then delete the pending profile.`)) return;
+    try {
+      const result = await mergeUserProfiles(plan.source.id, plan.target.id);
+      setSelectedIds(prev => prev.filter(id => id !== plan.source.id));
+      showToast?.(`Merged duplicate profile (${result.enrollments || 0} course record${result.enrollments === 1 ? "" : "s"}).`);
+    } catch (err) {
+      alert("Merge failed: " + err.message);
+    }
+  };
 
   return (
     <div className="page page--wide">
@@ -743,6 +772,7 @@ const AdminUsersPage = () => {
           {sortedUsers.map((u) => {
             const deptOptions = departmentOptions.map(d => d.name);
             const stats = userStats(u.id);
+            const duplicatePlan = mergePlanFor(u);
             const updateRole = async (e) => {
               const newRole = e.target.value;
               try {
@@ -755,6 +785,13 @@ const AdminUsersPage = () => {
                 await updateUser(u.id, { dept: e.target.value });
                 showToast?.(`${u.name} moved to ${e.target.value}`);
               } catch (err) { alert("Update failed: " + err.message); }
+            };
+            const updateStatus = async (e) => {
+              const newStatus = e.target.value;
+              try {
+                await updateUser(u.id, { status: newStatus });
+                showToast?.(`${u.name} status updated`);
+              } catch (err) { alert("Status update failed: " + err.message); }
             };
             return (
             <tr key={u.id}>
@@ -801,10 +838,18 @@ const AdminUsersPage = () => {
                 </select>
               </td>
               <td>
-                {u.status === "active" && <span className="chip chip-green">Active</span>}
-                {u.status === "onboarding" && <span className="chip chip-amber">Onboarding</span>}
-                {u.status === "leave" && <span className="chip chip-grey">On leave</span>}
-                {u.status === "inactive" && <span className="chip chip-grey">Inactive</span>}
+                <select value={u.status || "active"} onChange={updateStatus} style={{
+                  border: "1px solid #d8d9d8", background: "#fff", borderRadius: 999, padding: "4px 24px 4px 10px",
+                  fontSize: 12, fontWeight: 700, cursor: "pointer", appearance: "none",
+                  color: u.status === "inactive" || u.status === "leave" ? "#5f635f" : u.status === "onboarding" ? "#8a5a00" : "#2e5a12",
+                  backgroundImage: 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" stroke="%235f635f" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>\')',
+                  backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center",
+                }}>
+                  <option value="onboarding">Onboarding</option>
+                  <option value="active">Active</option>
+                  <option value="leave">On leave</option>
+                  <option value="inactive">Inactive</option>
+                </select>
               </td>
               <td style={{ fontVariantNumeric: "tabular-nums" }}>
                 <button
@@ -830,6 +875,7 @@ const AdminUsersPage = () => {
                   <RowMenu items={[
                     { label: "View assigned courses", icon: "book", onClick: () => setEnrollmentsFor(u) },
                     { label: "Assign training", icon: "plus",     onClick: () => openAssign(u.id) },
+                    ...(duplicatePlan ? [{ label: "Merge duplicate profiles", icon: "users", onClick: () => mergeDuplicate(duplicatePlan) }] : []),
                     { label: "Send reminder",   icon: "send",     onClick: async () => {
                         if (!u.email) { alert(`No email on file for ${u.name}`); return; }
                         try {

@@ -36,6 +36,104 @@ const signIntoFirebase = (googleIdToken) => {
   return fbAuth.signInWithCredential(cred).then(r => r.user);
 };
 
+const findUserByEmail = async (email, excludeId = null) => {
+  const cleanEmail = (email || "").trim();
+  const emailLower = cleanEmail.toLowerCase();
+  const byLower = emailLower
+    ? await fbDb.collection("users").where("emailLower", "==", emailLower).get()
+    : { docs: [] };
+  const lowerDoc = byLower.docs.find(d => d.id !== excludeId);
+  if (lowerDoc) return lowerDoc;
+  const byEmail = cleanEmail
+    ? await fbDb.collection("users").where("email", "==", cleanEmail).get()
+    : { docs: [] };
+  return byEmail.docs.find(d => d.id !== excludeId) || null;
+};
+
+const mergeEnrollmentData = (source, target, targetUserId) => {
+  const completedLessons = Array.from(new Set([...(source.completedLessons || []), ...(target.completedLessons || [])]));
+  const timeSpent = { ...(source.timeSpent || {}) };
+  Object.entries(target.timeSpent || {}).forEach(([lessonId, seconds]) => {
+    timeSpent[lessonId] = (timeSpent[lessonId] || 0) + (seconds || 0);
+  });
+  const sourceComplete = source.status === "completed" || source.progress >= 100;
+  const targetComplete = target.status === "completed" || target.progress >= 100;
+  return stripUndefinedFields({
+    ...source,
+    ...target,
+    userId: targetUserId,
+    courseId: target.courseId || source.courseId,
+    required: !!source.required || !!target.required,
+    status: sourceComplete || targetComplete ? "completed" : (target.status || source.status || "assigned"),
+    progress: Math.max(source.progress || 0, target.progress || 0),
+    completedLessons,
+    timeSpent,
+    score: Math.max(source.score || 0, target.score || 0) || source.score || target.score,
+    completedOn: target.completedOn || source.completedOn,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+};
+
+const mergeUserProfiles = async (sourceUserId, targetUserId, targetPatch = {}) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  if (!sourceUserId || !targetUserId || sourceUserId === targetUserId) return { enrollments: 0, attempts: 0, activity: 0 };
+
+  const sourceRef = fbDb.collection("users").doc(sourceUserId);
+  const targetRef = fbDb.collection("users").doc(targetUserId);
+  const [sourceSnap, targetSnap] = await Promise.all([sourceRef.get(), targetRef.get()]);
+  if (!sourceSnap.exists) return { enrollments: 0, attempts: 0, activity: 0 };
+
+  const source = sourceSnap.data() || {};
+  const target = targetSnap.exists ? targetSnap.data() || {} : {};
+  const mergedUser = stripUndefinedFields({
+    ...source,
+    ...target,
+    ...targetPatch,
+    name: targetPatch.name || target.name || source.name,
+    email: targetPatch.email || target.email || source.email,
+    emailLower: (targetPatch.emailLower || target.emailLower || source.emailLower || targetPatch.email || target.email || source.email || "").toLowerCase(),
+    dept: targetPatch.dept || target.dept || source.dept || "",
+    role: targetPatch.role || target.role || source.role || "Learner",
+    status: targetPatch.status || target.status || source.status || "active",
+    isAdmin: targetPatch.isAdmin ?? target.isAdmin ?? source.isAdmin ?? false,
+    isManager: targetPatch.isManager ?? target.isManager ?? source.isManager ?? false,
+    needsFirstLogin: false,
+    firebaseUid: targetUserId,
+    mergedFrom: Array.from(new Set([...(target.mergedFrom || []), ...(source.mergedFrom || []), sourceUserId])),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+  await targetRef.set(mergedUser, { merge: true });
+
+  let enrollmentCount = 0;
+  const sourceEnrollments = await fbDb.collection("enrollments").where("userId", "==", sourceUserId).get();
+  for (const doc of sourceEnrollments.docs) {
+    const sourceEnrollment = doc.data();
+    if (!sourceEnrollment.courseId) continue;
+    const targetEnrollmentRef = fbDb.collection("enrollments").doc(`${targetUserId}_${sourceEnrollment.courseId}`);
+    const targetEnrollmentSnap = await targetEnrollmentRef.get();
+    const mergedEnrollment = mergeEnrollmentData(sourceEnrollment, targetEnrollmentSnap.exists ? targetEnrollmentSnap.data() : {}, targetUserId);
+    const batch = fbDb.batch();
+    batch.set(targetEnrollmentRef, mergedEnrollment, { merge: true });
+    batch.delete(doc.ref);
+    await batch.commit();
+    enrollmentCount++;
+  }
+
+  const migrateUserRefs = async (collectionName) => {
+    const s = await fbDb.collection(collectionName).where("userId", "==", sourceUserId).get();
+    if (s.empty) return 0;
+    const batch = fbDb.batch();
+    s.docs.forEach(d => batch.update(d.ref, { userId: targetUserId }));
+    await batch.commit();
+    return s.size;
+  };
+  const attempts = await migrateUserRefs("attempts");
+  const activity = await migrateUserRefs("activity");
+  await sourceRef.delete();
+  recordAdminActivity("Merged duplicate user profiles", { sourceUserId, targetUserId, enrollments: enrollmentCount, attempts, activity }).catch(() => {});
+  return { enrollments: enrollmentCount, attempts, activity };
+};
+
 // Create or update /users/{uid} on every sign-in.
 const upsertUserDoc = async (firebaseUser, gisProfile) => {
   if (!fbReady) return null;
@@ -58,23 +156,24 @@ const upsertUserDoc = async (firebaseUser, gisProfile) => {
   };
 
   if (snap.exists) {
+    const duplicate = await findUserByEmail(email, firebaseUser.uid);
+    if (duplicate) {
+      let merged = null;
+      try {
+        merged = await mergeUserProfiles(duplicate.id, firebaseUser.uid, volatile);
+      } catch (err) {
+        if (err.code !== "permission-denied") throw err;
+        console.warn("Deferred duplicate profile merge until admin rules allow it:", err.message);
+      }
+      await ref.set(volatile, { merge: true });
+      const mergedSnap = await ref.get();
+      return { id: firebaseUser.uid, ...mergedSnap.data(), ...volatile, _merged: merged };
+    }
     await ref.set(volatile, { merge: true });
     return { id: snap.id, ...snap.data(), ...volatile };
   }
 
-  const findPreparedUser = async () => {
-    const byLower = emailLower
-      ? await fbDb.collection("users").where("emailLower", "==", emailLower).limit(1).get()
-      : { empty: true, docs: [] };
-    const lowerDoc = byLower.docs.find(d => d.id !== firebaseUser.uid);
-    if (lowerDoc) return lowerDoc;
-    const byEmail = email
-      ? await fbDb.collection("users").where("email", "==", email).limit(1).get()
-      : { empty: true, docs: [] };
-    return byEmail.docs.find(d => d.id !== firebaseUser.uid) || null;
-  };
-
-  const preparedDoc = await findPreparedUser();
+  const preparedDoc = await findUserByEmail(email, firebaseUser.uid);
   if (preparedDoc) {
     const prepared = preparedDoc.data();
     const merged = {
@@ -88,22 +187,15 @@ const upsertUserDoc = async (firebaseUser, gisProfile) => {
       needsFirstLogin: false,
       firebaseUid: firebaseUser.uid,
     };
-    await ref.set(stripUndefinedFields(merged), { merge: true });
-
-    const migrateUserRefs = async (collectionName) => {
-      const s = await fbDb.collection(collectionName).where("userId", "==", preparedDoc.id).get();
-      if (s.empty) return 0;
-      const batch = fbDb.batch();
-      s.docs.forEach(d => batch.update(d.ref, { userId: firebaseUser.uid }));
-      await batch.commit();
-      return s.size;
-    };
-    await migrateUserRefs("enrollments");
-    await migrateUserRefs("attempts");
-    await migrateUserRefs("activity");
-    await preparedDoc.ref.delete();
-    recordAdminActivity("Merged pre-created user on first login", { targetUserId: firebaseUser.uid, previousUserId: preparedDoc.id, email }).catch(() => {});
-    return { id: firebaseUser.uid, ...merged };
+    try {
+      await mergeUserProfiles(preparedDoc.id, firebaseUser.uid, merged);
+    } catch (err) {
+      if (err.code !== "permission-denied") throw err;
+      console.warn("Created signed-in profile but could not merge pending profile yet:", err.message);
+      await ref.set(stripUndefinedFields(merged), { merge: true });
+    }
+    const mergedSnap = await ref.get();
+    return { id: firebaseUser.uid, ...mergedSnap.data() };
   }
 
   const newDoc = {
@@ -296,6 +388,7 @@ const hydrateUserFromFirebase = async (fbUser) => {
     isAdmin: !!u.isAdmin,
     isManager: !!u.isManager || !!u.isAdmin,
     role: u.role || "Learner",
+    status: u.status || "active",
     dept: u.dept || "",
   });
 };
@@ -808,7 +901,7 @@ Object.assign(window, {
   saveRole, deleteRole,
   saveAssessment, archiveAssessment, deleteAssessment,
   saveCertificateTemplate,
-  assignTraining, daysUntilDue, updateUser, createDirectoryUser, resetUserProgress, resetCourseProgress, unassignCourse,
+  assignTraining, daysUntilDue, updateUser, createDirectoryUser, mergeUserProfiles, resetUserProgress, resetCourseProgress, unassignCourse,
   enrollSelf, markLessonComplete, recordCompletion, recordActivity, recordAdminActivity,
   addLessonTime, recordAttempt, gradeAttempt,
   uploadImage,

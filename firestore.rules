@@ -10,6 +10,10 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
+    function userDoc(userId) {
+      return get(/databases/$(database)/documents/users/$(userId));
+    }
+
     function isAdmin() {
       return isSignedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
@@ -20,6 +24,13 @@ service cloud.firestore {
       return isSignedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && currentUser().data.isManager == true;
+    }
+
+    function canClaimPendingUser(userId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(userId))
+        && userDoc(userId).data.needsFirstLogin == true
+        && userDoc(userId).data.email == request.auth.token.email;
     }
 
     // Users - anyone signed in can read. Admins can create/update any user,
@@ -39,7 +50,7 @@ service cloud.firestore {
             'emailLower'
           ])
         );
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || canClaimPendingUser(uid);
     }
 
     // Courses, assessments, departments, roles, settings - admins write, signed-in users read.
@@ -72,27 +83,36 @@ service cloud.firestore {
     // read all and can assign/update. Only admins can delete/unassign.
     match /enrollments/{id} {
       allow read: if isSignedIn()
-        && (resource.data.userId == request.auth.uid || isAdmin() || isManager());
+        && (resource.data.userId == request.auth.uid || canClaimPendingUser(resource.data.userId) || isAdmin() || isManager());
       allow create: if isAdmin()
         || isManager()
         || (isSignedIn() && request.resource.data.userId == request.auth.uid);
       allow update: if isAdmin()
         || isManager()
         || (
+          canClaimPendingUser(resource.data.userId)
+          && request.resource.data.userId == request.auth.uid
+        )
+        || (
           isSignedIn()
           && resource.data.userId == request.auth.uid
           && request.resource.data.userId == request.auth.uid
         );
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || canClaimPendingUser(resource.data.userId);
     }
 
     // Activity - learners write/read their own, admins read all.
     match /activity/{id} {
       allow read: if isSignedIn()
-        && (resource.data.userId == request.auth.uid || isAdmin());
+        && (resource.data.userId == request.auth.uid || canClaimPendingUser(resource.data.userId) || isAdmin());
       allow create: if isSignedIn()
         && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (
+          canClaimPendingUser(resource.data.userId)
+          && request.resource.data.userId == request.auth.uid
+        );
+      allow delete: if isAdmin();
     }
 
     // Admin audit log.
@@ -105,10 +125,14 @@ service cloud.firestore {
     // access for grading, including failed graded attempts.
     match /attempts/{id} {
       allow read: if isSignedIn()
-        && (resource.data.userId == request.auth.uid || isAdmin() || isManager());
+        && (resource.data.userId == request.auth.uid || canClaimPendingUser(resource.data.userId) || isAdmin() || isManager());
       allow create: if isSignedIn()
         && request.resource.data.userId == request.auth.uid;
-      allow update: if isAdmin();
+      allow update: if isAdmin()
+        || (
+          canClaimPendingUser(resource.data.userId)
+          && request.resource.data.userId == request.auth.uid
+        );
       allow delete: if isAdmin();
     }
   }

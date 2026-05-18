@@ -102,7 +102,7 @@ const DashboardPage = ({ goCourse, setRoute }) => {
                 <strong style={{ color: "#fff" }}>{inProgress.length} in progress</strong>.
               </>
             ) : (
-              <>An admin will assign training shortly. Browse the catalog any time.</>
+              <>{CURRENT_USER.status === "onboarding" ? "An admin will assign onboarding training shortly." : "An admin will assign training shortly. Browse the catalog any time."}</>
             )}
           </div>
         </div>
@@ -253,6 +253,7 @@ const CatalogPage = ({ goCourse, initialCategory }) => {
   const [cat, setCat] = React.useState(initialCategory || "All");
   const [reqOnly, setReqOnly] = React.useState(false);
   const cats = ["All", ...CATEGORIES];
+  const isOnboarding = CURRENT_USER.status === "onboarding";
 
   // If a Browse category was clicked while already on /catalog, apply the new filter
   React.useEffect(() => {
@@ -264,6 +265,7 @@ const CatalogPage = ({ goCourse, initialCategory }) => {
     // Learners only see published courses
     const status = c.status || "published";
     if (status !== "published") return false;
+    if (isOnboarding && !ENROLLMENTS[c.id]) return false;
     if (q && !c.title.toLowerCase().includes(q.toLowerCase())) return false;
     if (cat !== "All" && c.cat !== cat) return false;
     if (reqOnly && !c.required) return false;
@@ -276,7 +278,11 @@ const CatalogPage = ({ goCourse, initialCategory }) => {
         <div>
           <div className="page-head__eyebrow">Catalog</div>
           <h1 className="page-head__title">Course library</h1>
-          <div className="page-head__sub">{COURSES.filter(c => (c.status || "published") === "published").length} courses across compliance, operations, and growth.</div>
+          <div className="page-head__sub">
+            {isOnboarding
+              ? "During onboarding, only courses assigned to you are shown."
+              : `${COURSES.filter(c => (c.status || "published") === "published").length} courses across compliance, operations, and growth.`}
+          </div>
         </div>
       </div>
 

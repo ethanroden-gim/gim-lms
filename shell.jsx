@@ -3,6 +3,7 @@
 // =========================================================
 
 const Sidebar = ({ route, setRoute, mode, goCategory }) => {
+  const onboardingOnly = CURRENT_USER.status === "onboarding";
   const myLearningCount = COURSES.filter(c => {
     if (c.status === "archived") return false;
     const status = ENROLLMENTS[c.id]?.status;
@@ -47,7 +48,7 @@ const Sidebar = ({ route, setRoute, mode, goCategory }) => {
         </div>
       </div>
 
-      {mode === "learner" && (
+      {mode === "learner" && !onboardingOnly && (
         <div className="sidebar-section">
           <div className="sidebar-eyebrow">Browse</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -82,9 +83,13 @@ const Topbar = ({ mode, setMode, isAdmin, goCourse }) => {
 
   const results = q.trim().length >= 1
     ? COURSES.filter(c =>
+        (CURRENT_USER.status !== "onboarding" || ENROLLMENTS[c.id])
+        && (c.status || "published") === "published"
+        && (
         c.title.toLowerCase().includes(q.toLowerCase())
         || c.cat.toLowerCase().includes(q.toLowerCase())
         || (c.instructor || "").toLowerCase().includes(q.toLowerCase())
+        )
       ).slice(0, 8)
     : [];
 
