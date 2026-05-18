@@ -620,6 +620,7 @@ const AdminUsersPage = () => {
   const [enrollmentsFor, setEnrollmentsFor] = React.useState(null); // user doc or null
   const [addUserOpen, setAddUserOpen] = React.useState(false);
   const [selectedIds, setSelectedIds] = React.useState([]);
+  const [mergingIds, setMergingIds] = React.useState({});
   const openAssign = (name) => setAssignFor(name);
 
   const toggleSelect = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -692,13 +693,20 @@ const AdminUsersPage = () => {
   };
   const mergeDuplicate = async (plan) => {
     if (!plan) return;
-    if (!confirm(`Merge duplicate profiles for ${plan.target.email || plan.source.email}?\n\nThis will move courses, attempts, and activity from the pending profile into the signed-in profile, then delete the pending profile.`)) return;
+    if (typeof mergeUserProfiles !== "function") {
+      alert("Merge helper is not loaded yet. Refresh the page and try again.");
+      return;
+    }
+    if (!window.confirm(`Merge duplicate profiles for ${plan.target.email || plan.source.email}?\n\nThis will move courses, attempts, and activity from the pending profile into the signed-in profile, then delete the pending profile.`)) return;
+    setMergingIds(prev => ({ ...prev, [plan.source.id]: true, [plan.target.id]: true }));
     try {
       const result = await mergeUserProfiles(plan.source.id, plan.target.id);
       setSelectedIds(prev => prev.filter(id => id !== plan.source.id));
       showToast?.(`Merged duplicate profile (${result.enrollments || 0} course record${result.enrollments === 1 ? "" : "s"}).`);
     } catch (err) {
       alert("Merge failed: " + err.message);
+    } finally {
+      setMergingIds(prev => ({ ...prev, [plan.source.id]: false, [plan.target.id]: false }));
     }
   };
 
@@ -808,6 +816,16 @@ const AdminUsersPage = () => {
                     <div style={{ fontSize: 11, color: "#5f635f" }}>
                       {u.email || "—"}
                       {u.needsFirstLogin && <span className="chip chip-amber" style={{ marginLeft: 6, fontSize: 10 }}>Pending first login</span>}
+                      {duplicatePlan && (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          disabled={!!mergingIds[u.id]}
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); mergeDuplicate(duplicatePlan); }}
+                          style={{ height: 22, padding: "0 8px", marginLeft: 6, fontSize: 11 }}
+                        >
+                          {mergingIds[u.id] ? "Merging..." : "Merge duplicate"}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
