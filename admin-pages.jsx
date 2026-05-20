@@ -362,7 +362,8 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
   const [assignFor, setAssignFor] = React.useState(null); // courseId or null
   const [enrollmentsFor, setEnrollmentsFor] = React.useState(null); // course or null
   const openAssign = (id) => setAssignFor(id);
-  const cats = ["All", ...CATEGORIES];
+  const categoryNames = getCategoryNames();
+  const cats = ["All", ...categoryNames];
   const filtered = COURSES.filter(c => {
     if (q && !c.title.toLowerCase().includes(q.toLowerCase())) return false;
     if (cat !== "All" && c.cat !== cat) return false;
@@ -417,7 +418,7 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
         await saveCourse({
           title,
           description: first.description || "",
-          cat: first.category || first.cat || CATEGORIES[0] || "",
+          cat: first.category || first.cat || categoryNames[0] || "",
           duration,
           required: _adminBool(first.required),
           status: "draft",
@@ -1738,17 +1739,33 @@ const DEFAULT_ROLES = [
 
 const AdminSettingsPage = () => {
   const [deptModal, setDeptModal] = React.useState({ open: false, initial: null });
+  const [categoryModal, setCategoryModal] = React.useState({ open: false, initial: null });
   const [roleModal, setRoleModal] = React.useState({ open: false, initial: null });
+  const [seedingCategories, setSeedingCategories] = React.useState(false);
   const sortedDepartments = [...DEPARTMENT_DOCS].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const sortedCategories = getCategoryDocs();
   const sortedRoles = [...ROLE_DOCS].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const seedCategories = async () => {
+    if (seedingCategories) return;
+    if (!window.fbReady) { alert("Firebase isn't configured - can't save."); return; }
+    setSeedingCategories(true);
+    try {
+      const count = await seedDefaultCategories();
+      showToast?.(count ? `Created ${count} editable categories` : "Default categories already exist");
+    } catch (err) {
+      alert("Create defaults failed: " + err.message);
+    } finally {
+      setSeedingCategories(false);
+    }
+  };
 
   return (
     <div className="page" style={{ maxWidth: 980 }}>
       <div className="page-head">
         <div>
           <div className="page-head__eyebrow">Admin · Settings</div>
-          <h1 className="page-head__title">Roles & departments</h1>
-          <div className="page-head__sub">Custom user attributes that don't sync from Google. Used to assign training automatically.</div>
+          <h1 className="page-head__title">Roles, departments & categories</h1>
+          <div className="page-head__sub">Manage user attributes, LMS access, and learner catalog navigation.</div>
         </div>
       </div>
 
@@ -1784,6 +1801,68 @@ const AdminSettingsPage = () => {
               <button className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start", marginTop: 4 }} onClick={() => setDeptModal({ open: true, initial: null })}>
                 <Icon name="plus" size={14}/> Add department
               </button>
+            </div>
+          </div>
+
+          <div className="card card-pad-lg mt-4">
+            <div className="eyebrow-sm" style={{ marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>Categories</span>
+              <button className="btn btn-ghost btn-sm" style={{ padding: "4px 10px", fontSize: 11 }} onClick={() => {
+                if (CATEGORY_DOCS.length === 0) { alert("Click \"Make presets editable\" first, then add new categories."); return; }
+                setCategoryModal({ open: true, initial: null });
+              }}>
+                <Icon name="plus" size={12}/> New category
+              </button>
+            </div>
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Course categories</h3>
+            <p className="text-muted text-sm" style={{ marginBottom: 18 }}>
+              Used by course filters and optional Browse tabs on the learner sidebar.
+            </p>
+            {CATEGORY_DOCS.length === 0 && (
+              <div style={{ marginBottom: 12, padding: 12, border: "1px solid #f3d999", borderRadius: 10, background: "#fffaf0" }}>
+                <div className="text-sm" style={{ fontWeight: 700, marginBottom: 4 }}>Preset categories are still in use.</div>
+                <div className="text-xs text-muted" style={{ marginBottom: 10 }}>Create editable category records before deleting or changing the preset list.</div>
+                <button className="btn btn-ghost btn-sm" onClick={seedCategories} disabled={seedingCategories}>
+                  <Icon name="check" size={14}/> {seedingCategories ? "Creating..." : "Make presets editable"}
+                </button>
+              </div>
+            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {sortedCategories.map(c => {
+                const courseCount = COURSES.filter(course => course.cat === c.name).length;
+                return (
+                  <div key={c.id || c.name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", border: "1px solid #ececec", borderRadius: 10 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 8, background: "#f0f9e6", color: "#2e5a12", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Icon name={c.icon || "tag"} size={16} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{c.name}</div>
+                        {c.showInBrowse ? <span className="chip chip-green">Browse tab</span> : <span className="chip chip-grey">Catalog only</span>}
+                        {c.preset ? <span className="chip chip-grey">Preset</span> : null}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#5f635f" }}>{courseCount} {courseCount === 1 ? "course" : "courses"}</div>
+                    </div>
+                    <button
+                      className="btn-icon"
+                      title={c.preset ? "Make presets editable first" : "Edit category"}
+                      disabled={c.preset}
+                      style={c.preset ? { opacity: 0.4, cursor: "not-allowed" } : null}
+                      onClick={() => setCategoryModal({ open: true, initial: c })}
+                    >
+                      <Icon name="edit" size={14}/>
+                    </button>
+                    {!c.preset && (
+                      <button className="btn-icon" title="Delete category" style={{ color: "#a8232b" }} onClick={async () => {
+                        if (courseCount > 0) { alert(`Cannot delete: ${courseCount} ${courseCount === 1 ? "course uses" : "courses use"} this category. Move those courses first.`); return; }
+                        if (!confirm(`Delete category "${c.name}"?`)) return;
+                        try { await deleteCategory(c.id); showToast?.(`Category "${c.name}" deleted`); }
+                        catch (err) { alert("Delete failed: " + err.message); }
+                      }}><Icon name="trash" size={14}/></button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1872,6 +1951,11 @@ const AdminSettingsPage = () => {
         open={deptModal.open}
         onClose={() => setDeptModal({ open: false, initial: null })}
         initial={deptModal.initial}
+      />
+      <CategoryEditModal
+        open={categoryModal.open}
+        onClose={() => setCategoryModal({ open: false, initial: null })}
+        initial={categoryModal.initial}
       />
       <RoleEditModal
         open={roleModal.open}

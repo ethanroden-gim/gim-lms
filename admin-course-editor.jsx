@@ -2,10 +2,12 @@
 // GIM LMS — Admin: Course editor (new + edit)
 // =========================================================
 
+const courseEditorCategoryNames = () => window.getCategoryNames?.() || window.CATEGORIES || [];
+
 const blankCourse = () => ({
   id: "new",
   title: "",
-  cat: (window.CATEGORIES && window.CATEGORIES[0]) || "",
+  cat: courseEditorCategoryNames()[0] || "",
   dept: "",
   required: false,
   duration: 30,
@@ -278,7 +280,7 @@ const DetailsTab = ({ c, set }) => (
         <div className="cd-field">
           <label>Category</label>
           <select className="cd-input" value={c.cat} onChange={e => set({ cat: e.target.value })}>
-            {CATEGORIES.map(x => <option key={x}>{x}</option>)}
+            {Array.from(new Set([c.cat, ...courseEditorCategoryNames()].filter(Boolean))).map(x => <option key={x}>{x}</option>)}
           </select>
         </div>
         <div className="cd-field">

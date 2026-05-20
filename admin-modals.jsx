@@ -830,6 +830,139 @@ const DepartmentEditModal = ({ open, onClose, initial }) => {
 };
 
 // ============================================================
+// Category Editor modal
+// ============================================================
+const CategoryEditModal = ({ open, onClose, initial }) => {
+  const isNew = !initial;
+  const [name, setName] = React.useState("");
+  const [icon, setIcon] = React.useState("tag");
+  const [showInBrowse, setShowInBrowse] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setName(initial?.name || "");
+    setIcon(initial?.icon || "tag");
+    setShowInBrowse(initial?.showInBrowse !== false);
+  }, [open, initial]);
+
+  const courseCount = initial ? COURSES.filter(c => c.cat === initial.name).length : 0;
+  const valid = name.trim().length >= 2;
+
+  const save = async () => {
+    if (busy) return;
+    if (!window.fbReady) { alert("Firebase isn't configured - can't save."); return; }
+    setBusy(true);
+    try {
+      await saveCategory({
+        id: initial?.preset ? null : initial?.id,
+        name: name.trim(),
+        icon,
+        showInBrowse,
+      });
+      showToast?.(`${isNew ? "Created" : "Updated"} category "${name.trim()}"`);
+      onClose();
+    } catch (err) {
+      alert("Save failed: " + err.message);
+    } finally { setBusy(false); }
+  };
+
+  const remove = async () => {
+    if (busy || !initial?.id || initial?.preset) return;
+    if (courseCount > 0) {
+      alert(`Cannot delete: ${courseCount} ${courseCount === 1 ? "course uses" : "courses use"} this category. Move those courses first.`);
+      return;
+    }
+    if (!confirm(`Delete category "${initial.name}"?`)) return;
+    setBusy(true);
+    try {
+      await deleteCategory(initial.id);
+      showToast?.(`Category "${initial.name}" deleted`);
+      onClose();
+    } catch (err) {
+      alert("Delete failed: " + err.message);
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} width={560}>
+      <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #ececec", display: "flex", justifyContent: "space-between" }}>
+        <div>
+          <div className="eyebrow-sm">Settings Â· Categories</div>
+          <div style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>{isNew ? "New category" : "Edit category"}</div>
+        </div>
+        <button className="btn-icon" onClick={onClose}><Icon name="close" size={18}/></button>
+      </div>
+
+      <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
+        <div style={{ marginBottom: 18 }}>
+          <FieldLabel required>Category name</FieldLabel>
+          <TextInput
+            placeholder="e.g. Leasing"
+            value={name}
+            onChange={e => setName(e.target.value)}
+          />
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
+          <FieldLabel>Icon</FieldLabel>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 8 }}>
+            {(CATEGORY_ICON_CHOICES || []).map(p => (
+              <button key={p.icon} onClick={() => setIcon(p.icon)} title={p.label} style={{
+                aspectRatio: "1 / 1", borderRadius: 10, border: "2px solid",
+                borderColor: icon === p.icon ? "#7ac142" : "#ececec",
+                background: icon === p.icon ? "#f0f9e6" : "#fff",
+                color: icon === p.icon ? "#2e5a12" : "#111",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer",
+              }}>
+                <Icon name={p.icon} size={18}/>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 18, padding: 14, border: "1px solid #ececec", borderRadius: 10 }}>
+          <label style={{ display: "flex", gap: 12, cursor: "pointer" }}>
+            <input type="checkbox" checked={showInBrowse} onChange={e => setShowInBrowse(e.target.checked)} style={{ marginTop: 2 }}/>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Show as a Browse tab</div>
+              <div style={{ fontSize: 12, color: "#5f635f", marginTop: 2 }}>
+                Adds this category to the learner sidebar under Browse.
+              </div>
+            </div>
+          </label>
+        </div>
+
+        {!isNew && (
+          <div style={{ padding: 14, background: "#fafafa", borderRadius: 10, border: "1px solid #ececec" }}>
+            <div style={{ fontSize: 12, color: "#5f635f", marginBottom: 4 }}>Courses in this category</div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>{courseCount} {courseCount === 1 ? "course" : "courses"}</div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: "14px 24px", borderTop: "1px solid #ececec", display: "flex", justifyContent: "space-between", background: "#fafafa" }}>
+        <div>
+          {!isNew && !initial?.preset && (
+            <button className="btn btn-ghost btn-sm" onClick={remove} style={{ color: "#a8232b" }}>
+              <Icon name="trash" size={14}/> Delete
+            </button>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary btn-sm" onClick={save} disabled={!valid || busy}
+            style={{ opacity: valid && !busy ? 1 : 0.5, cursor: valid && !busy ? "pointer" : "not-allowed" }}>
+            {busy ? "Saving..." : (isNew ? "Create category" : "Save changes")}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+// ============================================================
 // Role Editor modal
 // ============================================================
 const ALL_PERMISSIONS = [
@@ -1002,4 +1135,4 @@ const RoleEditModal = ({ open, onClose, initial }) => {
   );
 };
 
-Object.assign(window, { NewAssessmentModal, DepartmentEditModal, RoleEditModal, DEPT_PRESETS });
+Object.assign(window, { NewAssessmentModal, DepartmentEditModal, CategoryEditModal, RoleEditModal, DEPT_PRESETS });

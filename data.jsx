@@ -91,6 +91,18 @@ const CATEGORIES = [
   "Accounting", "New Hire", "Leadership", "Compliance"
 ];
 
+const CATEGORY_ICON_CHOICES = [
+  { icon: "house", label: "Property" },
+  { icon: "wrench", label: "Maintenance" },
+  { icon: "phone", label: "Customer Service" },
+  { icon: "money", label: "Accounting" },
+  { icon: "shield", label: "Compliance" },
+  { icon: "book", label: "Learning" },
+  { icon: "award", label: "Certification" },
+  { icon: "tag", label: "General" },
+];
+const CATEGORY_BROWSE_DEFAULTS = ["Property Management", "Maintenance", "Customer Service", "Accounting", "Compliance"];
+
 const COURSES = [];
 
 const ENROLLMENTS = {};
@@ -102,6 +114,7 @@ const ALL_USERS = [];
 const ENROLLMENT_COUNTS = {}; // { courseId: number } — admin-wide counts
 const DEPARTMENT_DOCS = []; // Firestore-backed department records (id, name, ...)
 const ROLE_DOCS = [];       // Firestore-backed custom role records
+const CATEGORY_DOCS = [];   // Firestore-backed category records
 const ASSESSMENTS = [];     // Firestore-backed assessments
 const ALL_ENROLLMENTS = []; // every enrollment doc (admin-wide)
 const ATTEMPTS = [];        // every assessment attempt (admin-wide; learners filter to own)
@@ -110,6 +123,31 @@ const SAMPLE_QUIZ = { courseId: null, title: "", questions: [] };
 
 // ====== Tiny utilities =================================================
 function classNames(...xs) { return xs.filter(Boolean).join(" "); }
+
+const getCategoryDocs = () => {
+  const docs = (window.CATEGORY_DOCS || CATEGORY_DOCS || []).filter(c => c && c.name);
+  if (docs.length) {
+    return [...docs]
+      .map((c, idx) => ({
+        ...c,
+        icon: c.icon || "tag",
+        showInBrowse: c.showInBrowse !== false,
+        sortOrder: c.sortOrder ?? idx,
+      }))
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  }
+  return (window.CATEGORIES || CATEGORIES || []).map((name, idx) => ({
+    id: `preset-${name}`,
+    name,
+    icon: (CATEGORY_ICON_CHOICES[idx] || CATEGORY_ICON_CHOICES[CATEGORY_ICON_CHOICES.length - 1]).icon,
+    showInBrowse: CATEGORY_BROWSE_DEFAULTS.includes(name),
+    preset: true,
+    sortOrder: idx,
+  }));
+};
+
+const getCategoryNames = () => getCategoryDocs().map(c => c.name).filter(Boolean);
+const getBrowseCategories = () => getCategoryDocs().filter(c => c.showInBrowse !== false);
 
 const Avatar = ({ name, size = 32 }) => {
   const initials = name.split(" ").slice(0, 2).map(n => n[0]).join("").toUpperCase();
@@ -147,7 +185,8 @@ Object.assign(window, {
   Icon, Avatar,
   CURRENT_USER, DEPARTMENTS, CATEGORIES, COURSES, ENROLLMENTS, ASSIGNED, ACTIVITY,
   ALL_ACTIVITY, ADMIN_ACTIVITY,
-  ALL_USERS, SAMPLE_QUIZ, TEAM_MEMBERS, ENROLLMENT_COUNTS, DEPARTMENT_DOCS, ROLE_DOCS,
+  ALL_USERS, SAMPLE_QUIZ, TEAM_MEMBERS, ENROLLMENT_COUNTS, DEPARTMENT_DOCS, ROLE_DOCS, CATEGORY_DOCS,
+  CATEGORY_ICON_CHOICES, CATEGORY_BROWSE_DEFAULTS, getCategoryDocs, getCategoryNames, getBrowseCategories,
   ASSESSMENTS, ALL_ENROLLMENTS, ATTEMPTS,
   classNames, lessonIcon,
 });

@@ -24,7 +24,7 @@ const Sidebar = ({ route, setRoute, mode, goCategory }) => {
     { id: "admin-attempts", label: "Attempts", icon: "list", badge: (window.ATTEMPTS || []).filter(a => a.status === "pending_review").length || null },
     { id: "admin-activity", label: "Activity", icon: "clock" },
     { id: "admin-cert", label: "Certificate designer", icon: "award" },
-    { id: "admin-settings", label: "Roles & departments", icon: "settings" },
+    { id: "admin-settings", label: "Settings", icon: "settings" },
   ];
   const links = mode === "admin" ? adminLinks : learnerLinks;
   const sectionLabel = mode === "admin" ? "Administration" : "Learn";
@@ -52,15 +52,9 @@ const Sidebar = ({ route, setRoute, mode, goCategory }) => {
         <div className="sidebar-section">
           <div className="sidebar-eyebrow">Browse</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {[
-              { label: "Property Management", icon: "house" },
-              { label: "Maintenance", icon: "wrench" },
-              { label: "Customer Service", icon: "phone" },
-              { label: "Accounting", icon: "money" },
-              { label: "Compliance", icon: "shield" },
-            ].map(c => (
-              <button key={c.label} className="sidebar-link" onClick={() => goCategory ? goCategory(c.label) : setRoute("catalog")}>
-                <Icon name={c.icon} /><span>{c.label}</span>
+            {getBrowseCategories().map(c => (
+              <button key={c.id || c.name} className="sidebar-link" onClick={() => goCategory ? goCategory(c.name) : setRoute("catalog")}>
+                <Icon name={c.icon || "tag"} /><span>{c.name}</span>
               </button>
             ))}
           </div>

@@ -252,7 +252,7 @@ const CatalogPage = ({ goCourse, initialCategory }) => {
   const [q, setQ] = React.useState("");
   const [cat, setCat] = React.useState(initialCategory || "All");
   const [reqOnly, setReqOnly] = React.useState(false);
-  const cats = ["All", ...CATEGORIES];
+  const cats = ["All", ...getCategoryNames()];
   const isOnboarding = CURRENT_USER.status === "onboarding";
 
   // If a Browse category was clicked while already on /catalog, apply the new filter

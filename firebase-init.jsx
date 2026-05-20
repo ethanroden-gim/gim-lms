@@ -289,6 +289,15 @@ const subscribeToData = (onChange) => {
     if (err.code !== "permission-denied") console.error("roles listener:", err);
   }));
 
+  subs.push(fbDb.collection("categories").onSnapshot(s => {
+    const arr = s.docs.map(d => ({ id: d.id, ...d.data() }));
+    arr.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    setArr(CATEGORY_DOCS, arr);
+    onChange();
+  }, err => {
+    if (err.code !== "permission-denied") console.error("categories listener:", err);
+  }));
+
   subs.push(fbDb.collection("assessments").onSnapshot(s => {
     setArr(ASSESSMENTS, s.docs.map(d => ({ id: d.id, ...d.data() })));
     onChange();
@@ -632,6 +641,51 @@ const deleteRole = async (id) => {
   recordAdminActivity("Deleted role", { roleId: id }).catch(() => {});
 };
 
+// ---- Categories -----------------------------------------------------------
+const saveCategory = async (category) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  const { id, preset, ...data } = category;
+  const cleanData = stripUndefinedFields({
+    ...data,
+    name: (data.name || "").trim(),
+    icon: data.icon || "tag",
+    showInBrowse: data.showInBrowse !== false,
+  });
+  cleanData.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+  if (id) {
+    await fbDb.collection("categories").doc(id).set(cleanData, { merge: true });
+    recordAdminActivity("Updated category", { categoryId: id, name: cleanData.name || "" }).catch(() => {});
+    return id;
+  }
+  cleanData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+  const ref = await fbDb.collection("categories").add(cleanData);
+  recordAdminActivity("Created category", { categoryId: ref.id, name: cleanData.name || "" }).catch(() => {});
+  return ref.id;
+};
+
+const deleteCategory = async (id) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  await fbDb.collection("categories").doc(id).delete();
+  recordAdminActivity("Deleted category", { categoryId: id }).catch(() => {});
+};
+
+const seedDefaultCategories = async () => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  const existing = new Set((window.CATEGORY_DOCS || []).map(c => (c.name || "").toLowerCase()));
+  const defaults = (window.CATEGORIES || []).filter(name => !existing.has(String(name).toLowerCase()));
+  for (let i = 0; i < defaults.length; i++) {
+    const name = defaults[i];
+    const icon = (window.CATEGORY_ICON_CHOICES?.[i] || {}).icon || "tag";
+    await saveCategory({
+      name,
+      icon,
+      showInBrowse: (window.CATEGORY_BROWSE_DEFAULTS || []).includes(name),
+      sortOrder: i,
+    });
+  }
+  return defaults.length;
+};
+
 // ---- Assessments ----------------------------------------------------------
 const saveAssessment = async (a) => {
   if (!fbReady) throw new Error("Firebase not configured");
@@ -898,7 +952,7 @@ Object.assign(window, {
   hydrateUserFromFirebase,
   saveCourse, archiveCourse, deleteCourse, duplicateCourse,
   saveDepartment, deleteDepartment,
-  saveRole, deleteRole,
+  saveRole, deleteRole, saveCategory, deleteCategory, seedDefaultCategories,
   saveAssessment, archiveAssessment, deleteAssessment,
   saveCertificateTemplate,
   assignTraining, daysUntilDue, updateUser, createDirectoryUser, mergeUserProfiles, resetUserProgress, resetCourseProgress, unassignCourse,
