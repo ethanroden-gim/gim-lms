@@ -289,13 +289,13 @@ const subscribeToData = (onChange) => {
     if (err.code !== "permission-denied") console.error("roles listener:", err);
   }));
 
-  subs.push(fbDb.collection("categories").onSnapshot(s => {
-    const arr = s.docs.map(d => ({ id: d.id, ...d.data() }));
+  subs.push(fbDb.collection("settings").doc("categories").onSnapshot(d => {
+    const arr = d.exists ? ((d.data()?.items || []).filter(c => c && c.name)) : [];
     arr.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     setArr(CATEGORY_DOCS, arr);
     onChange();
   }, err => {
-    if (err.code !== "permission-denied") console.error("categories listener:", err);
+    if (err.code !== "permission-denied") console.error("category settings listener:", err);
   }));
 
   subs.push(fbDb.collection("assessments").onSnapshot(s => {
@@ -642,30 +642,56 @@ const deleteRole = async (id) => {
 };
 
 // ---- Categories -----------------------------------------------------------
+const categorySettingsRef = () => fbDb.collection("settings").doc("categories");
+
+const categoryDocId = (name) => {
+  const base = String(name || "category").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return `cat-${base || Math.random().toString(36).slice(2, 8)}`;
+};
+
+const persistCategoryItems = async (items) => {
+  const cleanItems = items
+    .filter(c => c && c.name)
+    .map((c, idx) => stripUndefinedFields({
+      id: c.id || categoryDocId(c.name),
+      name: String(c.name || "").trim(),
+      icon: c.icon || "tag",
+      showInBrowse: c.showInBrowse !== false,
+      sortOrder: c.sortOrder ?? idx,
+    }))
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  await categorySettingsRef().set({
+    items: cleanItems,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  setArr(CATEGORY_DOCS, cleanItems);
+  return cleanItems;
+};
+
 const saveCategory = async (category) => {
   if (!fbReady) throw new Error("Firebase not configured");
   const { id, preset, ...data } = category;
   const cleanData = stripUndefinedFields({
     ...data,
+    id: id || categoryDocId(data.name),
     name: (data.name || "").trim(),
     icon: data.icon || "tag",
     showInBrowse: data.showInBrowse !== false,
   });
-  cleanData.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+  const existing = [...(window.CATEGORY_DOCS || [])];
   if (id) {
-    await fbDb.collection("categories").doc(id).set(cleanData, { merge: true });
+    await persistCategoryItems(existing.map(c => c.id === id ? { ...c, ...cleanData } : c));
     recordAdminActivity("Updated category", { categoryId: id, name: cleanData.name || "" }).catch(() => {});
     return id;
   }
-  cleanData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-  const ref = await fbDb.collection("categories").add(cleanData);
-  recordAdminActivity("Created category", { categoryId: ref.id, name: cleanData.name || "" }).catch(() => {});
-  return ref.id;
+  await persistCategoryItems([...existing, cleanData]);
+  recordAdminActivity("Created category", { categoryId: cleanData.id, name: cleanData.name || "" }).catch(() => {});
+  return cleanData.id;
 };
 
 const deleteCategory = async (id) => {
   if (!fbReady) throw new Error("Firebase not configured");
-  await fbDb.collection("categories").doc(id).delete();
+  await persistCategoryItems((window.CATEGORY_DOCS || []).filter(c => c.id !== id));
   recordAdminActivity("Deleted category", { categoryId: id }).catch(() => {});
 };
 
@@ -673,16 +699,18 @@ const seedDefaultCategories = async () => {
   if (!fbReady) throw new Error("Firebase not configured");
   const existing = new Set((window.CATEGORY_DOCS || []).map(c => (c.name || "").toLowerCase()));
   const defaults = (window.CATEGORIES || []).filter(name => !existing.has(String(name).toLowerCase()));
-  for (let i = 0; i < defaults.length; i++) {
-    const name = defaults[i];
-    const icon = (window.CATEGORY_ICON_CHOICES?.[i] || {}).icon || "tag";
-    await saveCategory({
+  const next = [
+    ...(window.CATEGORY_DOCS || []),
+    ...defaults.map((name, i) => ({
+      id: categoryDocId(name),
       name,
-      icon,
+      icon: (window.CATEGORY_ICON_CHOICES?.[i] || {}).icon || "tag",
       showInBrowse: (window.CATEGORY_BROWSE_DEFAULTS || []).includes(name),
       sortOrder: i,
-    });
-  }
+    })),
+  ];
+  if (defaults.length) await persistCategoryItems(next);
+  recordAdminActivity("Created default categories", { count: defaults.length }).catch(() => {});
   return defaults.length;
 };
 
