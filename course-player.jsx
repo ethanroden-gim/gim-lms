@@ -317,10 +317,18 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
                   <div className="text-muted">This knowledge check does not have a linked quiz yet.</div>
                 )}
               </div>
-            ) : active.type === "article" && active.body ? (
-              <div style={{ fontSize: 14, lineHeight: 1.65, marginTop: 16, color: "#1f1f1f", whiteSpace: "pre-wrap" }}>
-                {active.body}
-              </div>
+            ) : active.type === "article" && (active.bodyHtml || active.body) ? (
+              active.bodyHtml ? (
+                <div
+                  className="article-content"
+                  style={{ fontSize: 14, lineHeight: 1.65, marginTop: 16, color: "#1f1f1f" }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(active.bodyHtml) }}
+                />
+              ) : (
+                <div style={{ fontSize: 14, lineHeight: 1.65, marginTop: 16, color: "#1f1f1f", whiteSpace: "pre-wrap" }}>
+                  {active.body}
+                </div>
+              )
             ) : (
               <p className="text-muted mt-3" style={{ fontSize: 14, lineHeight: 1.6, margin: 0 }}>
                 {course.description}

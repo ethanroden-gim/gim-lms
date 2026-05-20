@@ -149,6 +149,55 @@ const getCategoryDocs = () => {
 const getCategoryNames = () => getCategoryDocs().map(c => c.name).filter(Boolean);
 const getBrowseCategories = () => getCategoryDocs().filter(c => c.showInBrowse !== false);
 
+const escapeHtml = (value = "") => String(value)
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;");
+
+const plainTextToArticleHtml = (value = "") =>
+  String(value || "")
+    .split(/\n{2,}/)
+    .map(part => `<p>${escapeHtml(part).replace(/\n/g, "<br>")}</p>`)
+    .join("") || "<p></p>";
+
+const articleHtmlToText = (html = "") => {
+  const el = document.createElement("div");
+  el.innerHTML = html || "";
+  return (el.textContent || "").trim();
+};
+
+const sanitizeArticleHtml = (html = "") => {
+  const template = document.createElement("template");
+  template.innerHTML = html || "";
+  const allowed = new Set(["P", "DIV", "BR", "STRONG", "B", "EM", "I", "U", "UL", "OL", "LI", "A", "H2", "H3", "BLOCKQUOTE"]);
+  const cleanNode = (node) => {
+    [...node.childNodes].forEach(child => {
+      if (child.nodeType === Node.TEXT_NODE) return;
+      if (child.nodeType !== Node.ELEMENT_NODE) {
+        child.remove();
+        return;
+      }
+      if (!allowed.has(child.tagName)) {
+        cleanNode(child);
+        child.replaceWith(...child.childNodes);
+        return;
+      }
+      [...child.attributes].forEach(attr => {
+        const isSafeLink = child.tagName === "A" && attr.name === "href" && /^(https?:|mailto:|tel:|#|\/)/i.test(attr.value || "");
+        if (!isSafeLink) child.removeAttribute(attr.name);
+      });
+      if (child.tagName === "A") {
+        child.setAttribute("target", "_blank");
+        child.setAttribute("rel", "noopener noreferrer");
+      }
+      cleanNode(child);
+    });
+  };
+  cleanNode(template.content);
+  return template.innerHTML || "<p></p>";
+};
+
 const Avatar = ({ name, size = 32 }) => {
   const initials = name.split(" ").slice(0, 2).map(n => n[0]).join("").toUpperCase();
   // Deterministic pleasant green/dark color from name
@@ -187,6 +236,7 @@ Object.assign(window, {
   ALL_ACTIVITY, ADMIN_ACTIVITY,
   ALL_USERS, SAMPLE_QUIZ, TEAM_MEMBERS, ENROLLMENT_COUNTS, DEPARTMENT_DOCS, ROLE_DOCS, CATEGORY_DOCS,
   CATEGORY_ICON_CHOICES, CATEGORY_BROWSE_DEFAULTS, getCategoryDocs, getCategoryNames, getBrowseCategories,
+  plainTextToArticleHtml, articleHtmlToText, sanitizeArticleHtml,
   ASSESSMENTS, ALL_ENROLLMENTS, ATTEMPTS,
   classNames, lessonIcon,
 });

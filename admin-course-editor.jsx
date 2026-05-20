@@ -494,6 +494,71 @@ const ContentTab = ({ c, addModule, removeModule, updateModule, moveModule, addL
   );
 };
 
+const ArticleRichTextEditor = ({ value, onChange }) => {
+  const ref = React.useRef(null);
+  const safeValue = sanitizeArticleHtml(value || "<p></p>");
+
+  React.useEffect(() => {
+    if (!ref.current || document.activeElement === ref.current) return;
+    if (ref.current.innerHTML !== safeValue) ref.current.innerHTML = safeValue;
+  }, [safeValue]);
+
+  const emit = () => {
+    const html = sanitizeArticleHtml(ref.current?.innerHTML || "");
+    onChange(html);
+  };
+
+  const run = (command, arg = null) => {
+    ref.current?.focus();
+    document.execCommand(command, false, arg);
+    emit();
+  };
+
+  const addLink = () => {
+    const url = prompt("Paste the link URL");
+    if (!url) return;
+    run("createLink", url);
+  };
+
+  return (
+    <div className="article-editor">
+      <div className="article-editor__toolbar">
+        <button type="button" className="btn-icon" title="Bold" onClick={() => run("bold")}><strong>B</strong></button>
+        <button type="button" className="btn-icon" title="Italic" onClick={() => run("italic")}><em>I</em></button>
+        <button type="button" className="btn-icon" title="Underline" onClick={() => run("underline")}><span style={{ textDecoration: "underline" }}>U</span></button>
+        <button type="button" className="btn-icon" title="Bulleted list" onClick={() => run("insertUnorderedList")}><Icon name="list" size={14}/></button>
+        <button type="button" className="btn-icon" title="Numbered list" onClick={() => run("insertOrderedList")}><span style={{ fontSize: 11, fontWeight: 800 }}>1.</span></button>
+        <button type="button" className="btn-icon" title="Link" onClick={addLink}><Icon name="link" size={14}/></button>
+        <select className="cd-input article-editor__format" defaultValue="" onChange={e => {
+          if (!e.target.value) return;
+          run("formatBlock", e.target.value);
+          e.target.value = "";
+        }}>
+          <option value="">Format</option>
+          <option value="p">Paragraph</option>
+          <option value="h2">Heading</option>
+          <option value="h3">Subheading</option>
+          <option value="blockquote">Quote</option>
+        </select>
+      </div>
+      <div
+        ref={ref}
+        className="article-editor__surface"
+        contentEditable
+        suppressContentEditableWarning
+        onInput={emit}
+        onBlur={emit}
+        onPaste={e => {
+          e.preventDefault();
+          const text = e.clipboardData.getData("text/plain");
+          document.execCommand("insertText", false, text);
+          emit();
+        }}
+      />
+    </div>
+  );
+};
+
 const LessonRow = ({ l, course, moduleIndex, lessonIndex, onChange, onRemove, onUp, onDown, onDragStart, onDragOver, onDrop, dragging, onOpenAssessment }) => {
   const [bodyOpen, setBodyOpen] = React.useState(false);
 
@@ -602,13 +667,9 @@ const LessonRow = ({ l, course, moduleIndex, lessonIndex, onChange, onRemove, on
 
       {showBodyButton && bodyOpen && (
         <div style={{ padding: "8px 12px 12px 36px" }}>
-          <textarea
-            className="cd-input"
-            rows={6}
-            value={l.body || ""}
-            onChange={e => onChange({ body: e.target.value })}
-            placeholder="Article body — supports plain text and basic Markdown (# headings, **bold**, links)."
-            style={{ resize: "vertical", minHeight: 120 }}
+          <ArticleRichTextEditor
+            value={l.bodyHtml || plainTextToArticleHtml(l.body || "")}
+            onChange={html => onChange({ bodyHtml: html, body: articleHtmlToText(html) })}
           />
         </div>
       )}

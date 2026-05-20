@@ -16,6 +16,8 @@ if (fbReady && !firebase.apps.length) {
 const fbAuth = fbReady ? firebase.auth() : null;
 const fbDb   = fbReady ? firebase.firestore() : null;
 
+const replaceArray = (arr, items) => { arr.length = 0; arr.push(...items); };
+
 const stripUndefinedFields = (value) => {
   if (value === undefined) return undefined;
   if (Array.isArray(value)) return value.map(stripUndefinedFields).filter(v => v !== undefined);
@@ -219,7 +221,7 @@ const subscribeToData = (onChange) => {
   if (!fbReady || !fbAuth.currentUser) { onChange(); return () => {}; }
   const uid = fbAuth.currentUser.uid;
 
-  const setArr = (arr, items) => { arr.length = 0; arr.push(...items); };
+  const setArr = replaceArray;
   const setObj = (obj, src) => { for (const k of Object.keys(obj)) delete obj[k]; Object.assign(obj, src); };
 
   const subs = [];
@@ -664,7 +666,7 @@ const persistCategoryItems = async (items) => {
     items: cleanItems,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
   }, { merge: true });
-  setArr(CATEGORY_DOCS, cleanItems);
+  replaceArray(CATEGORY_DOCS, cleanItems);
   return cleanItems;
 };
 

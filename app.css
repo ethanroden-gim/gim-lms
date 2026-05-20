@@ -445,6 +445,25 @@ input, textarea, select { font-family: inherit; font-size: inherit; color: inher
 .ce-lesson-source { width: 130px; flex-shrink: 0; }
 .ce-lesson-url    { flex: 2; min-width: 160px; }
 .ce-lesson-spacer { flex: 2; }
+
+.article-editor { border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #fff; }
+.article-editor__toolbar { display: flex; align-items: center; gap: 4px; padding: 6px; border-bottom: 1px solid #ececec; background: #fafafa; }
+.article-editor__toolbar .btn-icon { width: 28px; height: 28px; border-radius: 6px; }
+.article-editor__format { width: 132px; height: 28px; padding: 4px 8px; margin-left: 4px; font-size: 12px; }
+.article-editor__surface { min-height: 180px; padding: 14px; font-size: 14px; line-height: 1.65; outline: none; }
+.article-editor__surface:focus { box-shadow: inset 0 0 0 2px #7ac14233; }
+.article-editor__surface p { margin: 0 0 10px; }
+.article-editor__surface h2,
+.article-editor__surface h3 { margin: 12px 0 8px; line-height: 1.25; }
+.article-editor__surface ul,
+.article-editor__surface ol { margin: 8px 0 12px 22px; padding: 0; }
+.article-editor__surface blockquote { margin: 10px 0; padding-left: 12px; border-left: 3px solid #7ac142; color: #4a4d4a; }
+.article-content p { margin: 0 0 12px; }
+.article-content h2,
+.article-content h3 { margin: 16px 0 8px; line-height: 1.25; }
+.article-content ul,
+.article-content ol { margin: 8px 0 14px 22px; padding: 0; }
+.article-content blockquote { margin: 12px 0; padding-left: 12px; border-left: 3px solid #7ac142; color: #4a4d4a; }
 .ce-resource { display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid #ececec; border-radius: 8px; background: #fafafa; }
 .ce-resource .cd-input { background: #fff; }
 
