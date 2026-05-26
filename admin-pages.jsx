@@ -501,21 +501,9 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{c.title}</div>
                     <div style={{ fontSize: 11, color: "#5f635f", display: "flex", gap: 8, alignItems: "center" }}>
                       <span>{adminCourseMinutes(c)} min</span>
-                      {c.required && <span className="chip chip-required" style={{ fontSize: 10, padding: "1px 6px" }}>Required</span>}
                     </div>
                     <div style={{ fontSize: 11, color: "#5f635f", display: "flex", gap: 6, alignItems: "center", marginTop: 2 }}>
                       <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace" }}>ID: {c.id}</span>
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigator.clipboard?.writeText(c.id);
-                          showToast?.("Course ID copied");
-                        }}
-                        style={{ height: 20, padding: "0 6px", fontSize: 10 }}
-                      >
-                        Copy
-                      </button>
                     </div>
                   </div>
                 </div>
