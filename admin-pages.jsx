@@ -825,7 +825,7 @@ const AdminUsersPage = () => {
                     border: "1px solid transparent", background: "transparent", borderRadius: 6, padding: "3px 22px 3px 8px",
                     fontSize: 12, fontWeight: 600, cursor: "pointer", appearance: "none",
                     color: "#111",
-                    backgroundImage: 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" stroke="%235f635f" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>\')',
+                    backgroundImage: 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" stroke="%235f635f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>\')',
                     backgroundRepeat: "no-repeat", backgroundPosition: "right 4px center",
                   }}>
                     <option>Learner</option><option>Manager</option><option>Admin</option>
@@ -837,7 +837,7 @@ const AdminUsersPage = () => {
                 <select value={u.dept || ""} onChange={updateDept} style={{
                   border: "1px solid transparent", background: "transparent", borderRadius: 6, padding: "3px 22px 3px 8px",
                   fontSize: 12, cursor: "pointer", appearance: "none",
-                  backgroundImage: 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" stroke="%235f635f" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>\')',
+                  backgroundImage: 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" stroke="%235f635f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>\')',
                   backgroundRepeat: "no-repeat", backgroundPosition: "right 4px center",
                 }}>
                   <option value="">Unassigned</option>
@@ -849,7 +849,7 @@ const AdminUsersPage = () => {
                   border: "1px solid #d8d9d8", background: "#fff", borderRadius: 999, padding: "4px 24px 4px 10px",
                   fontSize: 12, fontWeight: 700, cursor: "pointer", appearance: "none",
                   color: u.status === "inactive" || u.status === "leave" ? "#5f635f" : u.status === "onboarding" ? "#8a5a00" : "#2e5a12",
-                  backgroundImage: 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" stroke="%235f635f" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>\')',
+                  backgroundImage: 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" stroke="%235f635f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>\')',
                   backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center",
                 }}>
                   <option value="onboarding">Onboarding</option>

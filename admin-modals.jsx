@@ -34,7 +34,7 @@ const SelectInput = (props) => (
     width: "100%", padding: "9px 12px", border: "1px solid #d8d9d8",
     borderRadius: 8, fontSize: 13, fontFamily: "inherit",
     background: "#fff", appearance: "none",
-    backgroundImage: 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="%235f635f" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>\')',
+    backgroundImage: 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="%235f635f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>\')',
     backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
     ...(props.style || {}),
   }}>
