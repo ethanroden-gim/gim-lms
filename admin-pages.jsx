@@ -508,7 +508,7 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
                   </div>
                 </div>
               </td>
-              <td><span className="chip chip-grey">{c.cat}</span></td>
+              <td><span className="chip" style={getCategoryChipStyle(c.cat)}>{c.cat}</span></td>
               <td style={{ fontVariantNumeric: "tabular-nums", textAlign: "center" }}>{c.lessons}</td>
               <td style={{ fontVariantNumeric: "tabular-nums", textAlign: "center" }}>
                 <button
@@ -1820,13 +1820,13 @@ const AdminSettingsPage = () => {
                 const courseCount = COURSES.filter(course => course.cat === c.name).length;
                 return (
                   <div key={c.id || c.name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", border: "1px solid #ececec", borderRadius: 10 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 8, background: "#f0f9e6", color: "#2e5a12", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 8, ...getCategoryChipStyle(c), display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <Icon name={c.icon || "tag"} size={16} />
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                         <div style={{ fontWeight: 600, fontSize: 13 }}>{c.name}</div>
-                        {c.showInBrowse ? <span className="chip chip-green">Browse tab</span> : <span className="chip chip-grey">Catalog only</span>}
+                        {c.showInBrowse ? <span className="chip" style={getCategoryChipStyle(c)}>Browse tab</span> : <span className="chip chip-grey">Catalog only</span>}
                         {c.preset ? <span className="chip chip-grey">Preset</span> : null}
                       </div>
                       <div style={{ fontSize: 11, color: "#5f635f" }}>{courseCount} {courseCount === 1 ? "course" : "courses"}</div>

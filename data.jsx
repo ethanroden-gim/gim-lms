@@ -101,6 +101,16 @@ const CATEGORY_ICON_CHOICES = [
   { icon: "award", label: "Certification" },
   { icon: "tag", label: "General" },
 ];
+const CATEGORY_COLOR_CHOICES = [
+  { id: "green", label: "Green", bg: "#f0f9e6", color: "#2e5a12", borderColor: "#cfeab0" },
+  { id: "blue", label: "Blue", bg: "#eaf3ff", color: "#1f4e79", borderColor: "#bfd8f2" },
+  { id: "amber", label: "Amber", bg: "#fff5dc", color: "#8a5a00", borderColor: "#f3d999" },
+  { id: "teal", label: "Teal", bg: "#e7f7f3", color: "#0f5f51", borderColor: "#b8e2d8" },
+  { id: "rose", label: "Rose", bg: "#fff0f1", color: "#9f2430", borderColor: "#f1c2c8" },
+  { id: "indigo", label: "Indigo", bg: "#eef0ff", color: "#343a8a", borderColor: "#c9cdf7" },
+  { id: "slate", label: "Slate", bg: "#f1f5f9", color: "#334155", borderColor: "#cbd5e1" },
+  { id: "lime", label: "Lime", bg: "#f6fbdf", color: "#4a6505", borderColor: "#dbe99f" },
+];
 const CATEGORY_BROWSE_DEFAULTS = ["Property Management", "Maintenance", "Customer Service", "Accounting", "Compliance"];
 
 const COURSES = [];
@@ -124,6 +134,15 @@ const SAMPLE_QUIZ = { courseId: null, title: "", questions: [] };
 // ====== Tiny utilities =================================================
 function classNames(...xs) { return xs.filter(Boolean).join(" "); }
 
+const defaultCategoryColorId = (name, idx = 0) => {
+  const presetIdx = (window.CATEGORIES || CATEGORIES || []).indexOf(name);
+  const colorIdx = presetIdx >= 0 ? presetIdx : idx;
+  return CATEGORY_COLOR_CHOICES[colorIdx % CATEGORY_COLOR_CHOICES.length].id;
+};
+
+const getCategoryColor = (colorId) =>
+  CATEGORY_COLOR_CHOICES.find(c => c.id === colorId) || CATEGORY_COLOR_CHOICES[0];
+
 const getCategoryDocs = () => {
   const docs = (window.CATEGORY_DOCS || CATEGORY_DOCS || []).filter(c => c && c.name);
   if (docs.length) {
@@ -131,6 +150,7 @@ const getCategoryDocs = () => {
       .map((c, idx) => ({
         ...c,
         icon: c.icon || "tag",
+        colorId: c.colorId || defaultCategoryColorId(c.name, idx),
         showInBrowse: c.showInBrowse !== false,
         sortOrder: c.sortOrder ?? idx,
       }))
@@ -140,6 +160,7 @@ const getCategoryDocs = () => {
     id: `preset-${name}`,
     name,
     icon: (CATEGORY_ICON_CHOICES[idx] || CATEGORY_ICON_CHOICES[CATEGORY_ICON_CHOICES.length - 1]).icon,
+    colorId: defaultCategoryColorId(name, idx),
     showInBrowse: CATEGORY_BROWSE_DEFAULTS.includes(name),
     preset: true,
     sortOrder: idx,
@@ -148,6 +169,12 @@ const getCategoryDocs = () => {
 
 const getCategoryNames = () => getCategoryDocs().map(c => c.name).filter(Boolean);
 const getBrowseCategories = () => getCategoryDocs().filter(c => c.showInBrowse !== false);
+const getCategoryByName = (name) => getCategoryDocs().find(c => c.name === name);
+const getCategoryChipStyle = (nameOrDoc) => {
+  const doc = typeof nameOrDoc === "string" ? getCategoryByName(nameOrDoc) : nameOrDoc;
+  const palette = getCategoryColor(doc?.colorId || defaultCategoryColorId(doc?.name || ""));
+  return { background: palette.bg, color: palette.color, borderColor: palette.borderColor };
+};
 
 const escapeHtml = (value = "") => String(value)
   .replace(/&/g, "&amp;")
@@ -235,7 +262,8 @@ Object.assign(window, {
   CURRENT_USER, DEPARTMENTS, CATEGORIES, COURSES, ENROLLMENTS, ASSIGNED, ACTIVITY,
   ALL_ACTIVITY, ADMIN_ACTIVITY,
   ALL_USERS, SAMPLE_QUIZ, TEAM_MEMBERS, ENROLLMENT_COUNTS, DEPARTMENT_DOCS, ROLE_DOCS, CATEGORY_DOCS,
-  CATEGORY_ICON_CHOICES, CATEGORY_BROWSE_DEFAULTS, getCategoryDocs, getCategoryNames, getBrowseCategories,
+  CATEGORY_ICON_CHOICES, CATEGORY_COLOR_CHOICES, CATEGORY_BROWSE_DEFAULTS,
+  getCategoryDocs, getCategoryNames, getBrowseCategories, getCategoryByName, getCategoryChipStyle,
   plainTextToArticleHtml, articleHtmlToText, sanitizeArticleHtml,
   ASSESSMENTS, ALL_ENROLLMENTS, ATTEMPTS,
   classNames, lessonIcon,

@@ -658,6 +658,7 @@ const persistCategoryItems = async (items) => {
       id: c.id || categoryDocId(c.name),
       name: String(c.name || "").trim(),
       icon: c.icon || "tag",
+      colorId: c.colorId || window.getCategoryByName?.(c.name)?.colorId || "green",
       showInBrowse: c.showInBrowse !== false,
       sortOrder: c.sortOrder ?? idx,
     }))
@@ -678,6 +679,7 @@ const saveCategory = async (category) => {
     id: id || categoryDocId(data.name),
     name: (data.name || "").trim(),
     icon: data.icon || "tag",
+    colorId: data.colorId || window.getCategoryByName?.(data.name)?.colorId || "green",
     showInBrowse: data.showInBrowse !== false,
   });
   const existing = [...(window.CATEGORY_DOCS || [])];
@@ -707,6 +709,7 @@ const seedDefaultCategories = async () => {
       id: categoryDocId(name),
       name,
       icon: (window.CATEGORY_ICON_CHOICES?.[i] || {}).icon || "tag",
+      colorId: (window.CATEGORY_COLOR_CHOICES?.[i % (window.CATEGORY_COLOR_CHOICES?.length || 1)] || {}).id || "green",
       showInBrowse: (window.CATEGORY_BROWSE_DEFAULTS || []).includes(name),
       sortOrder: i,
     })),

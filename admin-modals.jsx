@@ -836,6 +836,7 @@ const CategoryEditModal = ({ open, onClose, initial }) => {
   const isNew = !initial;
   const [name, setName] = React.useState("");
   const [icon, setIcon] = React.useState("tag");
+  const [colorId, setColorId] = React.useState("green");
   const [showInBrowse, setShowInBrowse] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
 
@@ -843,6 +844,7 @@ const CategoryEditModal = ({ open, onClose, initial }) => {
     if (!open) return;
     setName(initial?.name || "");
     setIcon(initial?.icon || "tag");
+    setColorId(initial?.colorId || getCategoryByName(initial?.name || "")?.colorId || "green");
     setShowInBrowse(initial?.showInBrowse !== false);
   }, [open, initial]);
 
@@ -858,6 +860,7 @@ const CategoryEditModal = ({ open, onClose, initial }) => {
         id: initial?.preset ? null : initial?.id,
         name: name.trim(),
         icon,
+        colorId,
         showInBrowse,
       });
       showToast?.(`${isNew ? "Created" : "Updated"} category "${name.trim()}"`);
@@ -919,6 +922,28 @@ const CategoryEditModal = ({ open, onClose, initial }) => {
                 <Icon name={p.icon} size={18}/>
               </button>
             ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
+          <FieldLabel>Color</FieldLabel>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 8 }}>
+            {(CATEGORY_COLOR_CHOICES || []).map(p => (
+              <button key={p.id} onClick={() => setColorId(p.id)} title={p.label} style={{
+                aspectRatio: "1 / 1", borderRadius: 10, border: "2px solid",
+                borderColor: colorId === p.id ? "#111" : p.borderColor,
+                background: p.bg, color: p.color,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer",
+              }}>
+                {colorId === p.id ? <Icon name="check" size={18}/> : null}
+              </button>
+            ))}
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <span className="chip" style={getCategoryChipStyle({ name: name || "Category", colorId })}>
+              {name || "Category preview"}
+            </span>
           </div>
         </div>
 
