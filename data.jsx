@@ -51,60 +51,26 @@ const Icon = ({ name, className = "", size = 18 }) => {
     case "user":          return <svg {...props}><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>;
     case "arrow-right":   return <svg {...props}><path d="M5 12h14M13 5l7 7-7 7"/></svg>;
     case "arrow-left":    return <svg {...props}><path d="M19 12H5M11 5l-7 7 7 7"/></svg>;
-    case "tag":      return <svg {...props}><path d="M10 3H4v6l11 11 6-6L10 3z"/><circle cx="7.5" cy="7.5" r="1" fill="currentColor"/></svg>;
+    case "tag":      return <svg {...props}><path d="M10 3H4v6l10.8 10.8a2 2 0 0 0 2.8 0l2.2-2.2a2 2 0 0 0 0-2.8L10 3Z"/><circle cx="7.5" cy="7.5" r="1.4"/><path d="m13 8 4 4"/></svg>;
     case "flag":     return <svg {...props}><path d="M5 21V4h12l-2 4 2 4H5"/></svg>;
     case "more":     return <svg {...props}><circle cx="6" cy="12" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="18" cy="12" r="1.2" fill="currentColor"/></svg>;
     case "send":     return <svg {...props}><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>;
     case "award":    return <svg {...props}><circle cx="12" cy="9" r="6"/><path d="m8 14-2 7 6-3 6 3-2-7"/></svg>;
     case "list":     return <svg {...props}><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>;
     case "grid":     return <svg {...props}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>;
-    case "house":    return <svg {...props}><path d="M3 11 12 3l9 8"/><path d="M5 9v12h14V9"/><path d="M10 21v-7h4v7"/></svg>;
-    case "wrench":   return <svg {...props}><path d="M14 6a4 4 0 0 1 5.5 5.2L9 21.5a2 2 0 0 1-2.8 0l-1.7-1.7a2 2 0 0 1 0-2.8L15 6.5A4 4 0 0 1 14 6z"/></svg>;
-    case "money":    return <svg {...props}><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></svg>;
-    case "phone":    return <svg {...props}><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2H7a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.4 2.1L8 9.6a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.1-.4c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2z"/></svg>;
+    case "building":
+    case "house":    return <svg {...props}><path d="M4 21V8.5L12 3l8 5.5V21"/><path d="M8 21v-7h8v7"/><path d="M9 9.5h.01M15 9.5h.01"/><path d="M6 21h12"/></svg>;
+    case "wrench":
+    case "tools":    return <svg {...props}><path d="M14.7 5.3a4.2 4.2 0 0 0 4.9 5.7l-7.7 7.7a2.1 2.1 0 0 1-3 0l-1.6-1.6a2.1 2.1 0 0 1 0-3l7.7-7.7a4.2 4.2 0 0 0-.3-1.1Z"/><path d="m5 4 5 5"/><path d="m3.5 5.5 3-3 5 5-3 3"/><path d="m14 14 6 6"/></svg>;
+    case "calculator":
+    case "money":    return <svg {...props}><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8"/><path d="M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01"/><path d="M8 18h4"/></svg>;
+    case "headset":
+    case "phone":    return <svg {...props}><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><path d="M5 13h2.5v5H5a2 2 0 0 1-2-2v-1a2 2 0 0 1 2-2Z"/><path d="M16.5 13H19a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2h-2.5v-5Z"/><path d="M16 18c0 1.7-1.8 3-4 3h-1"/><path d="M9 21h2"/></svg>;
     case "mail":     return <svg {...props}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>;
     case "globe":    return <svg {...props}><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>;
-    case "monitor":  return <svg {...props}><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>;
-    case "tools":    return <svg {...props}><path d="M3 21h4l13-13a1.5 1.5 0 0 0-4-4l-13 13v4"/><path d="M14.5 5.5l4 4"/><path d="M12 8l-5-5-4 4 5 5"/><path d="M7 8l-1.5 1.5"/><path d="M16 12l5 5-4 4-5-5"/><path d="M16 17l-1.5 1.5"/></svg>;
+    case "monitor":  return <svg {...props}><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M7 8h6M7 11h10"/></svg>;
+    case "umbrella": return <svg {...props}><path d="M3 12a9 9 0 0 1 18 0Z"/><path d="M12 12v6a3 3 0 0 0 6 0"/><path d="M12 3v2"/><path d="M7 12c.4-3.8 2-6.4 5-9 3 2.6 4.6 5.2 5 9"/></svg>;
     default: return null;
-  }
-};
-
-const CategoryIcon = ({ name, className = "", size = 18 }) => {
-  const props = {
-    width: size, height: size, viewBox: "0 0 24 24",
-    fill: "none", stroke: "currentColor", strokeWidth: 2,
-    strokeLinecap: "round", strokeLinejoin: "round",
-    className,
-  };
-  switch (name) {
-    case "building":
-    case "house":
-      return <svg {...props}><path d="M4 21V8.5L12 3l8 5.5V21"/><path d="M8 21v-7h8v7"/><path d="M9 9.5h.01M15 9.5h.01"/><path d="M6 21h12"/></svg>;
-    case "tools":
-    case "wrench":
-      return <svg {...props}><path d="M14.7 5.3a4.2 4.2 0 0 0 4.9 5.7l-7.7 7.7a2.1 2.1 0 0 1-3 0l-1.6-1.6a2.1 2.1 0 0 1 0-3l7.7-7.7a4.2 4.2 0 0 0-.3-1.1Z"/><path d="m5 4 5 5"/><path d="m3.5 5.5 3-3 5 5-3 3"/><path d="m14 14 6 6"/></svg>;
-    case "headset":
-    case "phone":
-      return <svg {...props}><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><path d="M5 13h2.5v5H5a2 2 0 0 1-2-2v-1a2 2 0 0 1 2-2Z"/><path d="M16.5 13H19a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2h-2.5v-5Z"/><path d="M16 18c0 1.7-1.8 3-4 3h-1"/><path d="M9 21h2"/></svg>;
-    case "calculator":
-    case "money":
-      return <svg {...props}><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8"/><path d="M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01"/><path d="M8 18h4"/></svg>;
-    case "shield":
-      return <svg {...props}><path d="M12 3 5 6v5.5c0 4.1 2.9 7.9 7 9.5 4.1-1.6 7-5.4 7-9.5V6l-7-3Z"/><path d="m8.8 12.2 2 2 4.4-4.5"/><path d="M12 6.5v2"/></svg>;
-    case "book":
-      return <svg {...props}><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H7a3 3 0 0 0-3 3V5.5Z"/><path d="M4 5.5V22"/><path d="M8 7h8M8 11h7M8 15h5"/></svg>;
-    case "award":
-      return <svg {...props}><circle cx="12" cy="8.5" r="5.5"/><path d="m8.8 13-1.6 8 4.8-2.6 4.8 2.6-1.6-8"/><path d="m9.8 8.6 1.4 1.4 3-3"/></svg>;
-    case "monitor":
-      return <svg {...props}><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M7 8h6M7 11h10"/></svg>;
-    case "umbrella":
-      return <svg {...props}><path d="M3 12a9 9 0 0 1 18 0Z"/><path d="M12 12v6a3 3 0 0 0 6 0"/><path d="M12 3v2"/><path d="M7 12c.4-3.8 2-6.4 5-9 3 2.6 4.6 5.2 5 9"/></svg>;
-    case "users":
-      return <svg {...props}><circle cx="9" cy="8" r="3"/><path d="M3 20c.6-3.1 3.1-5 6-5s5.4 1.9 6 5"/><circle cx="17" cy="9" r="2"/><path d="M21 19c-.4-1.8-1.7-3.1-3.4-3.6"/></svg>;
-    case "tag":
-    default:
-      return <svg {...props}><path d="M10 3H4v6l10.8 10.8a2 2 0 0 0 2.8 0l2.2-2.2a2 2 0 0 0 0-2.8L10 3Z"/><circle cx="7.5" cy="7.5" r="1.4"/><path d="m13 8 4 4"/></svg>;
   }
 };
 
@@ -300,7 +266,6 @@ const lessonIcon = (t) => {
 // ====== Expose globally ================================================
 Object.assign(window, {
   Icon, Avatar,
-  CategoryIcon,
   CURRENT_USER, DEPARTMENTS, CATEGORIES, COURSES, ENROLLMENTS, ASSIGNED, ACTIVITY,
   ALL_ACTIVITY, ADMIN_ACTIVITY,
   ALL_USERS, SAMPLE_QUIZ, TEAM_MEMBERS, ENROLLMENT_COUNTS, DEPARTMENT_DOCS, ROLE_DOCS, CATEGORY_DOCS,

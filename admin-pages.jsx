@@ -1821,7 +1821,7 @@ const AdminSettingsPage = () => {
                 return (
                   <div key={c.id || c.name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", border: "1px solid #ececec", borderRadius: 10 }}>
                     <div style={{ width: 36, height: 36, borderRadius: 8, ...getCategoryChipStyle(c), display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <CategoryIcon name={c.icon || "tag"} size={17} />
+                      <Icon name={c.icon || "tag"} size={17} />
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>

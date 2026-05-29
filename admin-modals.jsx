@@ -919,7 +919,7 @@ const CategoryEditModal = ({ open, onClose, initial }) => {
                 display: "flex", alignItems: "center", justifyContent: "center",
                 cursor: "pointer",
               }}>
-                <CategoryIcon name={p.icon} size={19}/>
+                <Icon name={p.icon} size={19}/>
               </button>
             ))}
           </div>

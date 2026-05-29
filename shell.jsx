@@ -54,7 +54,7 @@ const Sidebar = ({ route, setRoute, mode, goCategory }) => {
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {getBrowseCategories().map(c => (
               <button key={c.id || c.name} className="sidebar-link" onClick={() => goCategory ? goCategory(c.name) : setRoute("catalog")}>
-                <CategoryIcon name={c.icon || "tag"} /><span>{c.name}</span>
+                <Icon name={c.icon || "tag"} /><span>{c.name}</span>
               </button>
             ))}
           </div>
