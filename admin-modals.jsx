@@ -72,6 +72,128 @@ const Stepper = ({ step, steps }) => (
 // ============================================================
 // New Assessment modal — 4 steps
 // ============================================================
+const _assessmentModalParseCsv = (text = "") => {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let quoted = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    const next = text[i + 1];
+    if (quoted) {
+      if (ch === '"' && next === '"') {
+        cell += '"';
+        i += 1;
+      } else if (ch === '"') {
+        quoted = false;
+      } else {
+        cell += ch;
+      }
+    } else if (ch === '"') {
+      quoted = true;
+    } else if (ch === ",") {
+      row.push(cell);
+      cell = "";
+    } else if (ch === "\n") {
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+    } else if (ch !== "\r") {
+      cell += ch;
+    }
+  }
+  row.push(cell);
+  rows.push(row);
+
+  const header = (rows.shift() || []).map((h) => String(h || "").trim().toLowerCase());
+  return rows
+    .filter((r) => r.some((v) => String(v || "").trim()))
+    .map((r) =>
+      Object.fromEntries(header.map((h, i) => [h, String(r[i] ?? "").trim()]))
+    );
+};
+
+const _assessmentModalReadCsvFile = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(_assessmentModalParseCsv(String(reader.result || "")));
+    reader.onerror = () => reject(reader.error || new Error("Unable to read CSV file."));
+    reader.readAsText(file);
+  });
+
+const _assessmentModalSplitList = (value = "") =>
+  String(value || "")
+    .split("|")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const _assessmentModalCorrectIndices = (correctValue, options = []) => {
+  const correctItems = _assessmentModalSplitList(correctValue);
+  if (!correctItems.length) return [];
+  const normalizedOptions = options.map((opt) => String(opt || "").trim().toLowerCase());
+  return correctItems
+    .map((item) => {
+      const raw = String(item || "").trim();
+      const numeric = Number(raw);
+      if (Number.isInteger(numeric) && numeric > 0 && numeric <= options.length) return numeric - 1;
+      return normalizedOptions.indexOf(raw.toLowerCase());
+    })
+    .filter((idx) => idx >= 0);
+};
+
+const _assessmentModalQuestionsFromRows = (rows = []) => {
+  const allowedTypes = new Set(["single", "multi", "tf", "short", "essay", "ranking", "matching"]);
+  return rows
+    .map((r, idx) => {
+      const text = String(r.question || r.question_text || r.prompt || "").trim();
+      if (!text) return null;
+
+      const rawType = String(r.question_type || r.type || "single").trim().toLowerCase();
+      const type = allowedTypes.has(rawType) ? rawType : "single";
+      const points = Math.max(1, Number(r.points || 1) || 1);
+      const options =
+        type === "tf"
+          ? ["True", "False"]
+          : type === "short" || type === "essay"
+            ? []
+            : _assessmentModalSplitList(r.options);
+      const question = {
+        type,
+        text,
+        options,
+        correct: [],
+        points,
+        explanation: String(r.explanation || "").trim(),
+      };
+
+      if (type === "matching") {
+        const matches = _assessmentModalSplitList(r.matches || r.match_options || r.matching_values);
+        if (options.length !== matches.length) {
+          throw new Error(`Row ${idx + 2}: matching questions need the same number of options and matches.`);
+        }
+        question.matchOptions = matches;
+        question.correct = options.map((_, i) => i);
+      } else if (type === "ranking") {
+        question.correct = options.map((_, i) => i);
+      } else if (type === "short" || type === "essay") {
+        question.correct = [];
+      } else {
+        question.correct = _assessmentModalCorrectIndices(r.correct, options);
+      }
+
+      if ((type === "single" || type === "multi" || type === "tf") && !question.correct.length) {
+        throw new Error(`Row ${idx + 2}: no valid correct answer was found.`);
+      }
+      if ((type === "single" || type === "multi" || type === "ranking" || type === "matching") && options.length < 2) {
+        throw new Error(`Row ${idx + 2}: ${type} questions need at least two options.`);
+      }
+
+      return question;
+    })
+    .filter(Boolean);
+};
+
 const NewAssessmentModal = ({ open, onClose, initial, onSaved }) => {
   // initial may be: null/{} (brand new) | { courseId, title, ... } (prefilled new) | { id, ... } (edit)
   const isEdit = !!(initial && initial.id);
@@ -86,6 +208,7 @@ const NewAssessmentModal = ({ open, onClose, initial, onSaved }) => {
   // Step 2: Questions
   const [questions, setQuestions] = React.useState([]);
   const [editingQ, setEditingQ] = React.useState(null); // index or "new"
+  const [importingQuestions, setImportingQuestions] = React.useState(false);
 
   // Step 3: Settings
   const [passMark, setPassMark] = React.useState(80);
@@ -171,6 +294,23 @@ const NewAssessmentModal = ({ open, onClose, initial, onSaved }) => {
     setEditingQ(null);
   };
   const removeQuestion = (i) => setQuestions(p => p.filter((_, idx) => idx !== i));
+  const importQuestions = async (file, mode = "append") => {
+    if (!file || importingQuestions) return;
+    setImportingQuestions(true);
+    try {
+      const rows = await _assessmentModalReadCsvFile(file);
+      const imported = _assessmentModalQuestionsFromRows(rows);
+      if (!imported.length) throw new Error("No question rows were found in the CSV.");
+      setQuestions(prev => mode === "replace" ? imported : [...prev, ...imported]);
+      setEditingQ(null);
+      setStep(2);
+      showToast?.(`${mode === "replace" ? "Replaced with" : "Imported"} ${imported.length} question${imported.length === 1 ? "" : "s"}`);
+    } catch (err) {
+      alert("Question import failed: " + (err?.message || err));
+    } finally {
+      setImportingQuestions(false);
+    }
+  };
 
   return (
     <Modal open={open} onClose={onClose} width={780}>
@@ -233,6 +373,8 @@ const NewAssessmentModal = ({ open, onClose, initial, onSaved }) => {
             editingQ={editingQ}
             setEditingQ={setEditingQ}
             upsertQuestion={upsertQuestion}
+            importQuestions={importQuestions}
+            importingQuestions={importingQuestions}
           />
         )}
 
@@ -375,7 +517,14 @@ const NewAssessmentModal = ({ open, onClose, initial, onSaved }) => {
 // ============================================================
 // QuestionsStep — list + inline editor
 // ============================================================
-const QuestionsStep = ({ questions, removeQuestion, editingQ, setEditingQ, upsertQuestion }) => {
+const QuestionsStep = ({ questions, removeQuestion, editingQ, setEditingQ, upsertQuestion, importQuestions, importingQuestions }) => {
+  const importInputRef = React.useRef(null);
+  const importModeRef = React.useRef("append");
+  const pickImportFile = (mode) => {
+    importModeRef.current = mode;
+    importInputRef.current?.click();
+  };
+
   if (editingQ !== null) {
     const initial = editingQ === "new" ? null : questions[editingQ];
     return <QuestionEditor initial={initial} onSave={upsertQuestion} onCancel={() => setEditingQ(null)} />;
@@ -385,11 +534,32 @@ const QuestionsStep = ({ questions, removeQuestion, editingQ, setEditingQ, upser
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div>
           <div style={{ fontSize: 14, fontWeight: 700 }}>Questions</div>
-          <div style={{ fontSize: 12, color: "#5f635f" }}>Add at least one question. Drag to reorder.</div>
+          <div style={{ fontSize: 12, color: "#5f635f" }}>Add questions manually or import them from the assessment CSV template.</div>
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={() => setEditingQ("new")}>
-          <Icon name="plus" size={14}/> Add question
-        </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <button className="btn btn-ghost btn-sm" disabled={importingQuestions} onClick={() => pickImportFile("append")}>
+            <Icon name="upload" size={14}/> {importingQuestions ? "Importing..." : "Import CSV"}
+          </button>
+          <button className="btn btn-ghost btn-sm" disabled={importingQuestions || questions.length === 0} onClick={() => {
+            if (!window.confirm("Replace all current questions with questions from this CSV?")) return;
+            pickImportFile("replace");
+          }}>
+            <Icon name="refresh" size={14}/> Replace CSV
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              importQuestions?.(e.target.files?.[0], importModeRef.current);
+              e.target.value = "";
+            }}
+          />
+          <button className="btn btn-ghost btn-sm" onClick={() => setEditingQ("new")}>
+            <Icon name="plus" size={14}/> Add question
+          </button>
+        </div>
       </div>
 
       {questions.length === 0 ? (
@@ -398,10 +568,15 @@ const QuestionsStep = ({ questions, removeQuestion, editingQ, setEditingQ, upser
             <Icon name="quiz" size={20} />
           </div>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>No questions yet</div>
-          <div style={{ fontSize: 12, color: "#5f635f", marginBottom: 14 }}>Add your first question to continue.</div>
-          <button className="btn btn-primary btn-sm" onClick={() => setEditingQ("new")}>
-            <Icon name="plus" size={14}/> Add first question
-          </button>
+          <div style={{ fontSize: 12, color: "#5f635f", marginBottom: 14 }}>Add your first question or import questions from a CSV.</div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+            <button className="btn btn-primary btn-sm" onClick={() => setEditingQ("new")}>
+              <Icon name="plus" size={14}/> Add first question
+            </button>
+            <button className="btn btn-ghost btn-sm" disabled={importingQuestions} onClick={() => pickImportFile("append")}>
+              <Icon name="upload" size={14}/> Import CSV
+            </button>
+          </div>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
