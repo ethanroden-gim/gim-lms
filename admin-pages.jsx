@@ -1906,20 +1906,30 @@ const AdminSettingsPage = () => {
   const removeIconDraft = (idx) => setIconDrafts(prev => prev.filter((_, i) => i !== idx));
   const uploadIconDraft = async (idx, file) => {
     if (!file) return;
-    if (!window.fbReady) { alert("Firebase isn't configured - can't upload."); return; }
+    const allowed = file.type === "image/svg+xml" || file.type === "image/png" || /\.svg$/i.test(file.name || "") || /\.png$/i.test(file.name || "");
+    if (!allowed) { alert("Use a PNG or SVG icon file."); return; }
+    if (file.size > 250 * 1024) {
+      alert("Icon file is too large. Use a PNG/SVG under 250 KB, or paste a hosted URL instead.");
+      return;
+    }
     const draft = iconDrafts[idx];
     const id = draft?.id || `ico-${Date.now()}`;
     setUploadingIconId(id);
     try {
-      const url = await uploadImage(file, "icons");
+      const url = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error("Could not read icon file."));
+        reader.readAsDataURL(file);
+      });
       updateIconDraft(idx, {
         id,
         url,
         label: draft?.label || (file.name || "Uploaded icon").replace(/\.[^.]+$/, ""),
       });
-      showToast?.("Icon uploaded");
+      showToast?.("Icon added. Save icon settings to keep it.");
     } catch (err) {
-      alert("Upload failed: " + err.message);
+      alert("Icon import failed: " + err.message);
     } finally {
       setUploadingIconId("");
     }
@@ -1944,7 +1954,7 @@ const AdminSettingsPage = () => {
     ...getIconChoices(),
     ...iconDrafts
       .filter(i => i.id && i.label && i.url && !getIconChoiceById(i.id))
-      .map(i => ({ id: i.id, icon: i.id, label: i.label, custom: true })),
+      .map(i => ({ id: i.id, icon: i.id, label: i.label, custom: true, url: i.url })),
   ];
   const seedCategories = async () => {
     if (seedingCategories) return;
@@ -2046,8 +2056,36 @@ const AdminSettingsPage = () => {
             </div>
             <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>System icons</h3>
             <p className="text-muted text-sm" style={{ marginBottom: 18 }}>
-              Upload or link PNG/SVG icons, then reuse them for categories, departments, and sidebar tabs.
+              Link a hosted icon or import a small PNG/SVG, then reuse it for categories, departments, and sidebar tabs.
             </p>
+            <div style={{ marginBottom: 18, padding: 12, border: "1px solid #ececec", borderRadius: 10, background: "#fafafa" }}>
+              <div className="eyebrow-sm" style={{ marginBottom: 10 }}>Icon gallery</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(76px, 1fr))", gap: 8 }}>
+                {iconSelectOptions.map(opt => (
+                  <div key={`gallery-${opt.id}`} title={opt.label} style={{
+                    minHeight: 70,
+                    padding: 8,
+                    border: "1px solid #e6e6e6",
+                    borderRadius: 8,
+                    background: "#fff",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                  }}>
+                    {opt.url ? (
+                      <img src={opt.url} alt="" style={{ width: 24, height: 24, objectFit: "contain" }} onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
+                    ) : (
+                      <Icon name={opt.icon || opt.id} size={22}/>
+                    )}
+                    <div style={{ fontSize: 10, color: "#5f635f", textAlign: "center", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {opt.label}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {iconDrafts.length === 0 && (
                 <div className="text-xs text-muted" style={{ padding: "10px 4px" }}>
@@ -2076,7 +2114,7 @@ const AdminSettingsPage = () => {
                     </div>
                     <div style={{ display: "flex", alignItems: "end", gap: 8 }}>
                       <label className="btn btn-ghost btn-sm" style={{ cursor: "pointer", margin: 0 }}>
-                        <Icon name="upload" size={14}/> {uploadingIconId === iconItem.id ? "Uploading..." : "Upload file"}
+                        <Icon name="upload" size={14}/> {uploadingIconId === iconItem.id ? "Importing..." : "Import file"}
                         <input
                           type="file"
                           accept=".png,.svg,image/png,image/svg+xml,image/*"

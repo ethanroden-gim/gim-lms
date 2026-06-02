@@ -91,6 +91,7 @@ input, textarea, select { font-family: inherit; font-size: inherit; color: inher
 .topbar-user {
   display: flex; align-items: center; gap: 10px;
   padding-left: 16px; border-left: 1px solid rgba(255,255,255,0.1);
+  color: #fff;
 }
 .topbar-user__avatar {
   width: 32px; height: 32px; border-radius: 999px;
@@ -99,7 +100,7 @@ input, textarea, select { font-family: inherit; font-size: inherit; color: inher
   font-weight: 700; font-size: 13px;
 }
 .topbar-user__meta { line-height: 1.15; }
-.topbar-user__name { font-size: 13px; font-weight: 600; }
+.topbar-user__name { font-size: 13px; font-weight: 600; color: #fff; }
 .topbar-user__role { font-size: 11px; color: rgba(255,255,255,0.55); }
 
 /* ===== Sidebar ============================================== */
