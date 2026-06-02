@@ -213,6 +213,23 @@ const companyDocId = (name = "") => {
   return `co-${base || Math.random().toString(36).slice(2, 8)}`;
 };
 
+const normalizeHexColor = (value = "", fallback = "#7ac142") => {
+  const raw = String(value || "").trim();
+  const withHash = raw.startsWith("#") ? raw : `#${raw}`;
+  if (/^#[0-9a-f]{6}$/i.test(withHash)) return withHash.toLowerCase();
+  if (/^#[0-9a-f]{3}$/i.test(withHash)) {
+    return `#${withHash[1]}${withHash[1]}${withHash[2]}${withHash[2]}${withHash[3]}${withHash[3]}`.toLowerCase();
+  }
+  return fallback;
+};
+const isLightHexColor = (value = "#ffffff") => {
+  const hex = normalizeHexColor(value, "#ffffff").slice(1);
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  return ((r * 299) + (g * 587) + (b * 114)) / 1000 > 150;
+};
+
 const normalizeCompany = (company = {}, idx = 0) => {
   const name = String(company.name || company.displayName || DEFAULT_COMPANY.name).trim();
   const domains = Array.isArray(company.domains)
@@ -227,8 +244,8 @@ const normalizeCompany = (company = {}, idx = 0) => {
     logoUrl: company.logoUrl || company.logo || DEFAULT_COMPANY.logoUrl,
     certificateLogoUrl: company.certificateLogoUrl || company.logoUrl || company.logo || DEFAULT_COMPANY.certificateLogoUrl,
     certificateName: company.certificateName || name,
-    accent: company.accent || DEFAULT_COMPANY.accent,
-    secondary: company.secondary || company.accent || DEFAULT_COMPANY.secondary,
+    accent: normalizeHexColor(company.accent || DEFAULT_COMPANY.accent, DEFAULT_COMPANY.accent),
+    secondary: normalizeHexColor(company.secondary || company.accent || DEFAULT_COMPANY.secondary, DEFAULT_COMPANY.secondary),
     active: company.active !== false,
     adminBrand: !!company.adminBrand || idx === 0 && (window.COMPANY_DOCS || COMPANY_DOCS || []).length === 0,
   };
@@ -251,13 +268,16 @@ const getCurrentUserCompany = () => getCompanyById((window.CURRENT_USER || CURRE
 const getBrandCompany = (mode = "learner") => mode === "admin" ? getAdminBrandCompany() : (getCurrentUserCompany() || getAdminBrandCompany());
 const getBrandStyle = (mode = "learner") => {
   const co = getBrandCompany(mode);
+  const accent = normalizeHexColor(co.accent || DEFAULT_COMPANY.accent, DEFAULT_COMPANY.accent);
+  const secondary = normalizeHexColor(co.secondary || co.accent || DEFAULT_COMPANY.secondary, DEFAULT_COMPANY.secondary);
   return {
-    "--t-accent": co.accent || DEFAULT_COMPANY.accent,
-    "--t-accent-hover": co.secondary || co.accent || DEFAULT_COMPANY.secondary,
-    "--t-accent-pale": `${co.accent || DEFAULT_COMPANY.accent}55`,
-    "--t-accent-soft": `${co.accent || DEFAULT_COMPANY.accent}18`,
-    "--t-accent-deep": co.secondary || co.accent || DEFAULT_COMPANY.secondary,
-    "--t-accent-fg": "#111",
+    "--t-accent": accent,
+    "--t-accent-hover": secondary,
+    "--t-accent-pale": `${accent}55`,
+    "--t-accent-soft": `${accent}18`,
+    "--t-accent-deep": secondary,
+    "--t-accent-fg": isLightHexColor(accent) ? "#111" : "#fff",
+    "--t-accent-hover-fg": isLightHexColor(secondary) ? "#111" : "#fff",
   };
 };
 const companyName = (id) => getCompanyById(id)?.name || "";
@@ -361,6 +381,7 @@ Object.assign(window, {
   CATEGORY_ICON_CHOICES, CATEGORY_COLOR_CHOICES, CATEGORY_BROWSE_DEFAULTS,
   getCategoryDocs, getCategoryNames, getBrowseCategories, getCategoryByName, getCategoryChipStyle,
   normalizeDomain, domainFromEmail, companyDocId, normalizeCompany, getCompanyDocs, getCompanyById, getCompanyForEmail,
+  normalizeHexColor, isLightHexColor,
   getAdminBrandCompany, getCurrentUserCompany, getBrandCompany, getBrandStyle, companyName, companyNames,
   courseVisibleToCompany, visibleLearnerCourses,
   plainTextToArticleHtml, articleHtmlToText, sanitizeArticleHtml,

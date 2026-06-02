@@ -1806,6 +1806,41 @@ const AdminSettingsPage = () => {
     if (next.length && !next.some(c => c.adminBrand)) next[0] = { ...next[0], adminBrand: true };
     return next;
   });
+  const companyLogoPreview = (url, label) => (
+    <div style={{ border: "1px solid #ececec", borderRadius: 8, padding: 10, background: "#111", minHeight: 54, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      {url ? (
+        <img src={url} alt={label || "Company logo"} style={{ maxWidth: "100%", maxHeight: 38, objectFit: "contain" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+      ) : (
+        <span className="text-xs" style={{ color: "rgba(255,255,255,.65)" }}>No logo</span>
+      )}
+    </div>
+  );
+  const companyColorField = (idx, co, key, label, fallback) => {
+    const value = normalizeHexColor(co[key] || fallback, fallback);
+    const textColor = isLightHexColor(value) ? "#111" : "#fff";
+    return (
+      <div className="cd-field" style={{ margin: 0 }}>
+        <label>{label}</label>
+        <div style={{ display: "grid", gridTemplateColumns: "44px 1fr", gap: 8, alignItems: "center" }}>
+          <input
+            type="color"
+            value={value}
+            onChange={e => updateCompanyDraft(idx, { [key]: normalizeHexColor(e.target.value, fallback) })}
+            title={`${label} color picker`}
+            style={{ width: 44, height: 38, border: "1px solid #d8d9d8", borderRadius: 8, padding: 2, background: "#fff", cursor: "pointer" }}
+          />
+          <input
+            className="cd-input"
+            value={value}
+            onChange={e => updateCompanyDraft(idx, { [key]: e.target.value.startsWith("#") ? e.target.value : `#${e.target.value}` })}
+            onBlur={e => updateCompanyDraft(idx, { [key]: normalizeHexColor(e.target.value, fallback) })}
+            placeholder="#7ac142"
+            style={{ fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace", background: value, color: textColor, fontWeight: 800 }}
+          />
+        </div>
+      </div>
+    );
+  };
   const saveCompanyDrafts = async () => {
     if (savingCompanies) return;
     if (!window.fbReady) { alert("Firebase isn't configured - can't save."); return; }
@@ -1884,18 +1919,20 @@ const AdminSettingsPage = () => {
                     <input className="cd-input" value={co.certificateLogoUrl || ""} onChange={e => updateCompanyDraft(idx, { certificateLogoUrl: e.target.value })} placeholder="Defaults to learner logo" />
                   </div>
                   <div className="cd-field" style={{ margin: 0 }}>
+                    <label>Learner logo preview</label>
+                    {companyLogoPreview(co.logoUrl, co.name)}
+                  </div>
+                  <div className="cd-field" style={{ margin: 0 }}>
+                    <label>Certificate logo preview</label>
+                    {companyLogoPreview(co.certificateLogoUrl || co.logoUrl, co.name)}
+                  </div>
+                  <div className="cd-field" style={{ margin: 0 }}>
                     <label>Certificate display name</label>
                     <input className="cd-input" value={co.certificateName || ""} onChange={e => updateCompanyDraft(idx, { certificateName: e.target.value })} placeholder="Defaults to company name" />
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    <div className="cd-field" style={{ margin: 0 }}>
-                      <label>Accent</label>
-                      <input className="cd-input" type="color" value={co.accent || "#7ac142"} onChange={e => updateCompanyDraft(idx, { accent: e.target.value })} />
-                    </div>
-                    <div className="cd-field" style={{ margin: 0 }}>
-                      <label>Secondary</label>
-                      <input className="cd-input" type="color" value={co.secondary || "#2e5a12"} onChange={e => updateCompanyDraft(idx, { secondary: e.target.value })} />
-                    </div>
+                    {companyColorField(idx, co, "accent", "Accent", "#7ac142")}
+                    {companyColorField(idx, co, "secondary", "Secondary", "#2e5a12")}
                   </div>
                   <div style={{ gridColumn: "1 / -1", display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>

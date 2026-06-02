@@ -181,7 +181,7 @@
 .app .btn { border-radius: var(--t-radius-button); padding: var(--t-btn-pad); }
 .app .btn-sm { padding: var(--t-btn-pad-sm); }
 .app .btn-primary { background: var(--t-accent); color: var(--t-accent-fg); }
-.app .btn-primary:hover { background: var(--t-accent-hover); color: #fff; }
+.app .btn-primary:hover { background: var(--t-accent-hover); color: var(--t-accent-hover-fg, #fff); }
 .app[data-mood="field"] .btn { text-transform: uppercase; letter-spacing: 0.06em; font-size: 12px; }
 
 /* Inputs */
