@@ -52,6 +52,17 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
     );
   }
 
+  if (!CURRENT_USER.isAdmin && !courseVisibleToCompany(course)) {
+    return (
+      <div className="page">
+        <button className="btn btn-ghost btn-sm" onClick={goBack} style={{ marginBottom: 12 }}>
+          <Icon name="arrow-left" size={12}/> Back
+        </button>
+        <div className="empty">This course is not available for your company.</div>
+      </div>
+    );
+  }
+
   // Build flat lesson list with section context.
   // Courses created via the editor save `modules`; legacy/seeded courses use `sections`.
   const courseSections = course.sections || course.modules || [];
@@ -554,6 +565,16 @@ const AssessmentPage = ({ courseId, target, goCert, goBack }) => {
       </div>
     );
   }
+  if (!CURRENT_USER.isAdmin && !courseVisibleToCompany(course)) {
+    return (
+      <div className="page">
+        <button className="btn btn-ghost btn-sm" onClick={goBack} style={{ marginBottom: 12 }}>
+          <Icon name="arrow-left" size={12}/> Back
+        </button>
+        <div className="empty">This assessment is not available for your company.</div>
+      </div>
+    );
+  }
   if (!quiz?.questions?.length) {
     return (
       <div className="page" style={{ maxWidth: 720 }}>
@@ -919,8 +940,26 @@ const CertificatePage = ({ courseId, goBack }) => {
       </div>
     );
   }
+  if (!CURRENT_USER.isAdmin && !courseVisibleToCompany(course)) {
+    return (
+      <div className="page">
+        <button className="btn btn-ghost btn-sm" onClick={goBack} style={{ marginBottom: 12 }}>
+          <Icon name="arrow-left" size={12}/> Back
+        </button>
+        <div className="empty">This certificate is not available for your company.</div>
+      </div>
+    );
+  }
   const certNo = "GIM-" + (course.id.toUpperCase().replace(/[^A-Z]/g, "")) + "-" + (1000 + Math.abs(course.id.length * 137) % 9000);
-  const template = window.CERTIFICATE_TEMPLATE || CERTIFICATE_DEFAULTS;
+  const certCompany = getCurrentUserCompany() || getBrandCompany("learner");
+  const companyInitials = (certCompany.name || "GIM").split(/\s+/).map(w => w[0]).join("").slice(0, 4);
+  const template = {
+    ...(window.CERTIFICATE_TEMPLATE || CERTIFICATE_DEFAULTS),
+    accent: certCompany.accent || (window.CERTIFICATE_TEMPLATE || CERTIFICATE_DEFAULTS).accent,
+    logoUrl: certCompany.certificateLogoUrl || certCompany.logoUrl || (window.CERTIFICATE_TEMPLATE || CERTIFICATE_DEFAULTS).logoUrl,
+    brandTag: certCompany.certificateName || certCompany.name || (window.CERTIFICATE_TEMPLATE || CERTIFICATE_DEFAULTS).brandTag,
+    sealText: companyInitials,
+  };
   const PREVIEW_W = 920;
   const scale = PREVIEW_W / 1056;
   const passedAttempt = [...(window.ATTEMPTS || [])]

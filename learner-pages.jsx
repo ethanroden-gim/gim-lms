@@ -71,15 +71,16 @@ const CourseCard = ({ course, onOpen, enrollment }) => {
 // Dashboard
 // ============================================================
 const DashboardPage = ({ goCourse, setRoute }) => {
-  const inProgress = COURSES.filter(c => ENROLLMENTS[c.id]?.status === "in_progress");
-  const completed  = COURSES.filter(c => ENROLLMENTS[c.id]?.status === "completed");
-  const assigned   = ASSIGNED.map(a => ({ ...a, course: COURSES.find(c => c.id === a.id) }));
-  const totalAssigned = ASSIGNED.length + inProgress.length;
+  const learnerCourses = visibleLearnerCourses();
+  const inProgress = learnerCourses.filter(c => ENROLLMENTS[c.id]?.status === "in_progress");
+  const completed  = learnerCourses.filter(c => ENROLLMENTS[c.id]?.status === "completed");
+  const assigned   = ASSIGNED.map(a => ({ ...a, course: learnerCourses.find(c => c.id === a.id) })).filter(a => a.course);
+  const totalAssigned = assigned.length + inProgress.length;
   const completedCount = completed.length;
   const totalForPct = completedCount + totalAssigned;
   const overallPct = totalForPct ? Math.round((completedCount / totalForPct) * 100) : 0;
-  const requiredDueSoon = ASSIGNED.filter(a => a.required && a.dueDays <= 30).length;
-  const earliestDue = ASSIGNED.length ? Math.min(...ASSIGNED.map(a => a.dueDays)) : null;
+  const requiredDueSoon = assigned.filter(a => a.required && a.dueDays <= 30).length;
+  const earliestDue = assigned.length ? Math.min(...assigned.map(a => a.dueDays)) : null;
   const scoredCourses = completed.filter(c => typeof ENROLLMENTS[c.id]?.score === "number");
   const avgScore = scoredCourses.length
     ? Math.round(scoredCourses.reduce((s, c) => s + ENROLLMENTS[c.id].score, 0) / scoredCourses.length)
@@ -261,7 +262,8 @@ const CatalogPage = ({ goCourse, initialCategory }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialCategory]);
 
-  const filtered = COURSES.filter(c => {
+  const learnerCourses = visibleLearnerCourses();
+  const filtered = learnerCourses.filter(c => {
     // Learners only see published courses
     const status = c.status || "published";
     if (status !== "published") return false;
@@ -281,7 +283,7 @@ const CatalogPage = ({ goCourse, initialCategory }) => {
           <div className="page-head__sub">
             {isOnboarding
               ? "During onboarding, only courses assigned to you are shown."
-              : `${COURSES.filter(c => (c.status || "published") === "published").length} courses across compliance, operations, and growth.`}
+              : `${learnerCourses.filter(c => (c.status || "published") === "published").length} courses across compliance, operations, and growth.`}
           </div>
         </div>
       </div>
@@ -298,7 +300,7 @@ const CatalogPage = ({ goCourse, initialCategory }) => {
           <Icon name="shield" size={14} /> Required only
         </button>
         <div className="fb-spacer" />
-        <span style={{ fontSize: 12, color: "#5f635f" }}>{filtered.length} of {COURSES.length}</span>
+        <span style={{ fontSize: 12, color: "#5f635f" }}>{filtered.length} of {learnerCourses.length}</span>
       </div>
 
       <div className="course-grid">
@@ -315,9 +317,9 @@ const CatalogPage = ({ goCourse, initialCategory }) => {
 // ============================================================
 const MyLearningPage = ({ goCourse }) => {
   const [tab, setTab] = React.useState("active");
-  const visibleCourses = COURSES.filter(c => c.status !== "archived");
+  const visibleCourses = visibleLearnerCourses().filter(c => c.status !== "archived");
   const inProgress = visibleCourses.filter(c => ENROLLMENTS[c.id]?.status === "in_progress");
-  const completed  = COURSES.filter(c => ENROLLMENTS[c.id]?.status === "completed");
+  const completed  = visibleLearnerCourses().filter(c => ENROLLMENTS[c.id]?.status === "completed");
   const assigned   = ASSIGNED.map(a => visibleCourses.find(c => c.id === a.id)).filter(Boolean);
 
   return (
@@ -392,7 +394,7 @@ const MyLearningPage = ({ goCourse }) => {
 // Certificates page
 // ============================================================
 const CertificatesPage = ({ goCert }) => {
-  const completed = COURSES.filter(c => ENROLLMENTS[c.id]?.status === "completed");
+  const completed = visibleLearnerCourses().filter(c => ENROLLMENTS[c.id]?.status === "completed");
   return (
     <div className="page">
       <div className="page-head">

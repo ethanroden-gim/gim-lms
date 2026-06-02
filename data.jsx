@@ -82,6 +82,7 @@ const CURRENT_USER = {
   role: "",
   isAdmin: false,
   isManager: false,
+  companyId: "",
 };
 
 const TEAM_MEMBERS = [];
@@ -119,6 +120,19 @@ const CATEGORY_COLOR_CHOICES = [
   { id: "lime", label: "Lime", bg: "#f6fbdf", color: "#4a6505", borderColor: "#dbe99f" },
 ];
 const CATEGORY_BROWSE_DEFAULTS = ["Property Management", "Maintenance", "Customer Service", "Accounting", "Compliance"];
+
+const COMPANY_DOCS = [];     // Firestore-backed company/entity records
+const DEFAULT_COMPANY = {
+  id: "gim",
+  name: "GIM Property Management",
+  domains: ["getgim.com"],
+  logoUrl: "assets/logo-landscape-onblack.png",
+  certificateLogoUrl: "assets/logo-landscape.png",
+  accent: "#7ac142",
+  secondary: "#2e5a12",
+  active: true,
+  adminBrand: true,
+};
 
 const COURSES = [];
 
@@ -182,6 +196,80 @@ const getCategoryChipStyle = (nameOrDoc) => {
   const palette = getCategoryColor(doc?.colorId || defaultCategoryColorId(doc?.name || ""));
   return { background: palette.bg, color: palette.color, borderColor: palette.borderColor };
 };
+
+const normalizeDomain = (value = "") => String(value || "")
+  .trim()
+  .toLowerCase()
+  .replace(/^@+/, "");
+
+const domainFromEmail = (email = "") => normalizeDomain(String(email || "").split("@")[1] || "");
+
+const companyDocId = (name = "") => {
+  const base = String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `co-${base || Math.random().toString(36).slice(2, 8)}`;
+};
+
+const normalizeCompany = (company = {}, idx = 0) => {
+  const name = String(company.name || company.displayName || DEFAULT_COMPANY.name).trim();
+  const domains = Array.isArray(company.domains)
+    ? company.domains
+    : String(company.domains || "").split(/[,\n|]/);
+  return {
+    ...DEFAULT_COMPANY,
+    ...company,
+    id: company.id || companyDocId(name),
+    name,
+    domains: domains.map(normalizeDomain).filter(Boolean),
+    logoUrl: company.logoUrl || company.logo || DEFAULT_COMPANY.logoUrl,
+    certificateLogoUrl: company.certificateLogoUrl || company.logoUrl || company.logo || DEFAULT_COMPANY.certificateLogoUrl,
+    certificateName: company.certificateName || name,
+    accent: company.accent || DEFAULT_COMPANY.accent,
+    secondary: company.secondary || company.accent || DEFAULT_COMPANY.secondary,
+    active: company.active !== false,
+    adminBrand: !!company.adminBrand || idx === 0 && (window.COMPANY_DOCS || COMPANY_DOCS || []).length === 0,
+  };
+};
+
+const getCompanyDocs = () => {
+  const docs = (window.COMPANY_DOCS || COMPANY_DOCS || []).filter(c => c && c.name);
+  const source = docs.length ? docs : [DEFAULT_COMPANY];
+  return source.map(normalizeCompany).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+};
+
+const getCompanyById = (id) => getCompanyDocs().find(c => c.id === id) || null;
+const getCompanyForEmail = (email) => {
+  const domain = domainFromEmail(email);
+  if (!domain) return null;
+  return getCompanyDocs().find(c => c.active !== false && (c.domains || []).map(normalizeDomain).includes(domain)) || null;
+};
+const getAdminBrandCompany = () => getCompanyDocs().find(c => c.adminBrand && c.active !== false) || getCompanyDocs()[0] || DEFAULT_COMPANY;
+const getCurrentUserCompany = () => getCompanyById((window.CURRENT_USER || CURRENT_USER).companyId) || getCompanyForEmail((window.CURRENT_USER || CURRENT_USER).email);
+const getBrandCompany = (mode = "learner") => mode === "admin" ? getAdminBrandCompany() : (getCurrentUserCompany() || getAdminBrandCompany());
+const getBrandStyle = (mode = "learner") => {
+  const co = getBrandCompany(mode);
+  return {
+    "--t-accent": co.accent || DEFAULT_COMPANY.accent,
+    "--t-accent-hover": co.secondary || co.accent || DEFAULT_COMPANY.secondary,
+    "--t-accent-pale": `${co.accent || DEFAULT_COMPANY.accent}55`,
+    "--t-accent-soft": `${co.accent || DEFAULT_COMPANY.accent}18`,
+    "--t-accent-deep": co.secondary || co.accent || DEFAULT_COMPANY.secondary,
+    "--t-accent-fg": "#111",
+  };
+};
+const companyName = (id) => getCompanyById(id)?.name || "";
+const companyNames = (ids = []) => (ids || []).map(companyName).filter(Boolean).join(", ");
+const courseVisibleToCompany = (course, companyId = (window.CURRENT_USER || CURRENT_USER).companyId) => {
+  if (!course) return false;
+  if ((course.companyVisibility || "all") === "all") return true;
+  const allowed = Array.isArray(course.allowedCompanyIds) ? course.allowedCompanyIds : [];
+  return !!companyId && allowed.includes(companyId);
+};
+const visibleLearnerCourses = (courses = (window.COURSES || COURSES)) =>
+  (courses || []).filter(c => courseVisibleToCompany(c, (window.CURRENT_USER || CURRENT_USER).companyId));
 
 const escapeHtml = (value = "") => String(value)
   .replace(/&/g, "&amp;")
@@ -269,8 +357,12 @@ Object.assign(window, {
   CURRENT_USER, DEPARTMENTS, CATEGORIES, COURSES, ENROLLMENTS, ASSIGNED, ACTIVITY,
   ALL_ACTIVITY, ADMIN_ACTIVITY,
   ALL_USERS, SAMPLE_QUIZ, TEAM_MEMBERS, ENROLLMENT_COUNTS, DEPARTMENT_DOCS, ROLE_DOCS, CATEGORY_DOCS,
+  COMPANY_DOCS, DEFAULT_COMPANY,
   CATEGORY_ICON_CHOICES, CATEGORY_COLOR_CHOICES, CATEGORY_BROWSE_DEFAULTS,
   getCategoryDocs, getCategoryNames, getBrowseCategories, getCategoryByName, getCategoryChipStyle,
+  normalizeDomain, domainFromEmail, companyDocId, normalizeCompany, getCompanyDocs, getCompanyById, getCompanyForEmail,
+  getAdminBrandCompany, getCurrentUserCompany, getBrandCompany, getBrandStyle, companyName, companyNames,
+  courseVisibleToCompany, visibleLearnerCourses,
   plainTextToArticleHtml, articleHtmlToText, sanitizeArticleHtml,
   ASSESSMENTS, ALL_ENROLLMENTS, ATTEMPTS,
   classNames, lessonIcon,

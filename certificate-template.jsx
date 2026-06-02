@@ -101,7 +101,7 @@ const CertificateRender = ({ template, course, learnerName, completedOn, score, 
             <SigBlock value={`${score}%`} label="Final assessment score" accent={t.accent} ink={t.ink} />
           )}
         </div>
-        {t.showSeal && <OfficialSeal accent={t.accent} ink={t.ink} />}
+        {t.showSeal && <OfficialSeal accent={t.accent} ink={t.ink} label={t.sealText || "GIM"} />}
       </div>
     </div>
   );
@@ -117,7 +117,7 @@ const SigBlock = ({ value, label, accent, ink }) => (
 
 // Branded "official" seal — no curved text, just decorative concentric rings,
 // rays, and ornamental marks around a central GIM monogram.
-const OfficialSeal = ({ accent, ink }) => {
+const OfficialSeal = ({ accent, ink, label = "GIM" }) => {
   const SIZE = 170;
   const cx = 85, cy = 85;
 
@@ -175,7 +175,7 @@ const OfficialSeal = ({ accent, ink }) => {
         <circle cx={cx} cy={cy} r="32" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="1" />
         <text x={cx} y={cy + 7} textAnchor="middle"
           fontFamily="var(--font-display)" fontSize="22" fontWeight="400"
-          fill="#fff" letterSpacing="1.5">GIM</text>
+          fill="#fff" letterSpacing="1.5">{String(label || "GIM").slice(0, 4).toUpperCase()}</text>
       </svg>
     </div>
   );

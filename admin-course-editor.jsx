@@ -14,6 +14,8 @@ const blankCourse = () => ({
   description: "",
   cover: "cv-1",
   status: "draft",
+  companyVisibility: "all",
+  allowedCompanyIds: [],
   modules: [
     { title: "Module 1", lessons: [
       { id: "l-" + Math.random().toString(36).slice(2, 7), title: "", type: "video", dur: "", source: "drive", url: "" },
@@ -38,6 +40,8 @@ const loadEditCourse = (id) => {
     cover: c.cover || "cv-1",
     coverUrl: c.coverUrl || "",
     status: c.status || "published",
+    companyVisibility: c.companyVisibility || "all",
+    allowedCompanyIds: c.allowedCompanyIds || [],
     modules: c.modules || c.sections || [],
     resources: c.resources || [],
     passingScore: c.passingScore || 80,
@@ -290,6 +294,35 @@ const DetailsTab = ({ c, set }) => (
             {DEPARTMENT_DOCS.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
             <option value="all">All departments</option>
           </select>
+        </div>
+        <div className="cd-field" style={{ gridColumn: "1 / -1" }}>
+          <label>Company visibility</label>
+          <select className="cd-input" value={c.companyVisibility || "all"} onChange={e => set({
+            companyVisibility: e.target.value,
+            allowedCompanyIds: e.target.value === "all" ? [] : (c.allowedCompanyIds || []),
+          })}>
+            <option value="all">All companies</option>
+            <option value="selected">Selected companies only</option>
+          </select>
+          {(c.companyVisibility || "all") === "selected" && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+              {getCompanyDocs().map(co => (
+                <label key={co.id} className="chip chip-grey" style={{ cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={(c.allowedCompanyIds || []).includes(co.id)}
+                    onChange={e => {
+                      const current = c.allowedCompanyIds || [];
+                      set({ allowedCompanyIds: e.target.checked ? [...current, co.id] : current.filter(id => id !== co.id) });
+                    }}
+                  /> {co.name}
+                </label>
+              ))}
+            </div>
+          )}
+          <div className="text-xs text-muted" style={{ marginTop: 4 }}>
+            Learners only see courses available to their email-domain company.
+          </div>
         </div>
         <div className="cd-field">
           <label>Duration (minutes)</label>

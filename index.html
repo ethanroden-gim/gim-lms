@@ -195,7 +195,7 @@
       if (!body) body = <div className="page"><div className="empty">Page not found.</div></div>;
 
       return (
-        <div className="app" data-mood={GIM_TWEAK_DEFAULTS.mood} data-accent={GIM_TWEAK_DEFAULTS.accent} data-density={GIM_TWEAK_DEFAULTS.density}>
+        <div className="app" data-mood={GIM_TWEAK_DEFAULTS.mood} data-accent={GIM_TWEAK_DEFAULTS.accent} data-density={GIM_TWEAK_DEFAULTS.density} style={getBrandStyle(mode)}>
           <Topbar mode={mode} setMode={switchMode} isAdmin={CURRENT_USER.isAdmin} goCourse={(id) => { setMode("learner"); goCourse(id); }} />
           <ToastHost />
           <Sidebar route={route} setRoute={setRoute} mode={mode} goCategory={goCategory} />

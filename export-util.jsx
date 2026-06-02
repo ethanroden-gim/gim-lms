@@ -128,6 +128,8 @@ const EXPORT_DATASETS = {
       { key: "id",         label: "Course ID" },
       { key: "title",      label: "Title" },
       { key: "cat",        label: "Category" },
+      { label: "Company visibility", get: r => (r.companyVisibility || "all") === "selected" ? "Selected companies" : "All companies" },
+      { label: "Allowed companies", get: r => (r.companyVisibility || "all") === "selected" ? companyNames(r.allowedCompanyIds || []) : "" },
       { key: "lessons",    label: "Lessons" },
       { label: "Duration (min)", get: r => exportCourseMinutes(r) },
       { label: "Required",   get: r => r.required ? "Yes" : "No" },
@@ -151,6 +153,7 @@ const EXPORT_DATASETS = {
         { key: "email",     label: "Email" },
         { key: "role",      label: "Role" },
         { key: "dept",      label: "Department" },
+        { label: "Company", get: r => companyName(r.companyId) || "" },
         { key: "status",    label: "Status" },
         { key: "assigned",  label: "Assigned" },
         { key: "completed", label: "Completed" },
@@ -386,6 +389,7 @@ const EnrollmentsModal = ({ open, onClose, course }) => {
       u,
       name: u.name || "",
       dept: u.dept || "",
+      company: companyName(u.companyId) || "",
       progress: e.progress || 0,
       status: e.status || "assigned",
     };
@@ -396,6 +400,7 @@ const EnrollmentsModal = ({ open, onClose, course }) => {
       name: u.name,
       email: u.email || "",
       dept: u.dept || "",
+      company: companyName(u.companyId) || "",
       status: e.status || "",
       progress: e.progress || 0,
     }));
@@ -403,6 +408,7 @@ const EnrollmentsModal = ({ open, onClose, course }) => {
       { key: "name",     label: "Name" },
       { key: "email",    label: "Email" },
       { key: "dept",     label: "Department" },
+      { key: "company",  label: "Company" },
       { key: "status",   label: "Status" },
       { key: "progress", label: "Progress %" },
     ];
@@ -410,7 +416,7 @@ const EnrollmentsModal = ({ open, onClose, course }) => {
   };
 
   return (
-    <Modal open={open} onClose={onClose} width={720}>
+    <Modal open={open} onClose={onClose} width={840}>
       <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #ececec", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
           <div className="eyebrow-sm">Course enrollments</div>
@@ -437,6 +443,7 @@ const EnrollmentsModal = ({ open, onClose, course }) => {
               <tr>
                 <EnrollmentSortHeader label="Learner" sortKey="name" sort={sort} onSort={setSort} />
                 <EnrollmentSortHeader label="Department" sortKey="dept" sort={sort} onSort={setSort} />
+                <th>Company</th>
                 <EnrollmentSortHeader label="Progress" sortKey="progress" sort={sort} onSort={setSort} />
                 <EnrollmentSortHeader label="Status" sortKey="status" sort={sort} onSort={setSort} />
               </tr>
@@ -457,6 +464,7 @@ const EnrollmentsModal = ({ open, onClose, course }) => {
                       </div>
                     </td>
                     <td>{u.dept ? <span className="chip chip-grey">{u.dept}</span> : <span className="text-muted text-xs">—</span>}</td>
+                    <td>{u.companyId ? <span className="chip chip-grey">{companyName(u.companyId) || u.companyId}</span> : <span className="text-muted text-xs">—</span>}</td>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <div className="bar bar-thin" style={{ width: 80 }}>

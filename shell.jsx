@@ -4,7 +4,8 @@
 
 const Sidebar = ({ route, setRoute, mode, goCategory }) => {
   const onboardingOnly = CURRENT_USER.status === "onboarding";
-  const myLearningCount = COURSES.filter(c => {
+  const learnerCourses = visibleLearnerCourses();
+  const myLearningCount = learnerCourses.filter(c => {
     if (c.status === "archived") return false;
     const status = ENROLLMENTS[c.id]?.status;
     return status === "assigned" || status === "in_progress";
@@ -52,7 +53,7 @@ const Sidebar = ({ route, setRoute, mode, goCategory }) => {
         <div className="sidebar-section">
           <div className="sidebar-eyebrow">Browse</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {getBrowseCategories().map(c => (
+            {getBrowseCategories().filter(c => learnerCourses.some(course => course.cat === c.name && (course.status || "published") === "published")).map(c => (
               <button key={c.id || c.name} className="sidebar-link" onClick={() => goCategory ? goCategory(c.name) : setRoute("catalog")}>
                 <Icon name={c.icon || "tag"} /><span>{c.name}</span>
               </button>
@@ -68,6 +69,7 @@ const Topbar = ({ mode, setMode, isAdmin, goCourse }) => {
   const [q, setQ] = React.useState("");
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef(null);
+  const brand = getBrandCompany(mode);
 
   React.useEffect(() => {
     const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
@@ -75,9 +77,10 @@ const Topbar = ({ mode, setMode, isAdmin, goCourse }) => {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
+  const searchCourses = mode === "admin" ? COURSES : visibleLearnerCourses();
   const results = q.trim().length >= 1
-    ? COURSES.filter(c =>
-        (CURRENT_USER.status !== "onboarding" || ENROLLMENTS[c.id])
+    ? searchCourses.filter(c =>
+        (mode === "admin" || CURRENT_USER.status !== "onboarding" || ENROLLMENTS[c.id])
         && (c.status || "published") === "published"
         && (
         c.title.toLowerCase().includes(q.toLowerCase())
@@ -96,9 +99,9 @@ const Topbar = ({ mode, setMode, isAdmin, goCourse }) => {
   return (
     <header className="app__topbar">
       <div className="app__brand">
-        <img src="assets/logo-landscape-onblack.png" alt="GIM" />
+        <img src={brand.logoUrl || "assets/logo-landscape-onblack.png"} alt={brand.name || "Learning"} onError={(e) => { e.currentTarget.src = "assets/logo-landscape-onblack.png"; }} />
         <div className="app__brand-divider" />
-        <span className="app__brand-tag">Learning</span>
+        <span className="app__brand-tag">{mode === "admin" ? "Admin" : "Learning"}</span>
       </div>
 
       <div className="app__topright">

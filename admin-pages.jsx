@@ -72,8 +72,8 @@ const _adminReadCsvFile = (file) => new Promise((resolve, reject) => {
 const _adminBool = (v) => /^(true|yes|y|1|required)$/i.test(String(v || "").trim());
 
 const _adminCourseImportTemplate = [
-  { title: "Example Draft Course", category: "Compliance", description: "Short course overview", duration: "30", required: "yes", module: "Module 1", lesson_title: "Welcome", lesson_type: "article", lesson_duration: "5", lesson_url: "", lesson_source: "" },
-  { title: "Example Draft Course", category: "Compliance", description: "Short course overview", duration: "30", required: "yes", module: "Module 1", lesson_title: "Policy video", lesson_type: "video", lesson_duration: "10", lesson_url: "https://example.com/video", lesson_source: "youtube" },
+  { title: "Example Draft Course", category: "Compliance", description: "Short course overview", duration: "30", required: "yes", company_visibility: "all", allowed_companies: "", module: "Module 1", lesson_title: "Welcome", lesson_type: "article", lesson_duration: "5", lesson_url: "", lesson_source: "" },
+  { title: "Example Draft Course", category: "Compliance", description: "Short course overview", duration: "30", required: "yes", company_visibility: "all", allowed_companies: "", module: "Module 1", lesson_title: "Policy video", lesson_type: "video", lesson_duration: "10", lesson_url: "https://example.com/video", lesson_source: "youtube" },
 ];
 
 const _adminAssessmentImportTemplate = [
@@ -90,6 +90,13 @@ const _adminDownloadCsvTemplate = (name, rows) => {
 };
 
 const _adminSplitList = (v) => String(v || "").split("|").map(x => x.trim()).filter(Boolean);
+const _adminCompanyIdsFromCsv = (value) => {
+  const companies = getCompanyDocs();
+  return _adminSplitList(String(value || "").replace(/,/g, "|")).map(v => {
+    const needle = v.toLowerCase();
+    return companies.find(c => c.id.toLowerCase() === needle || c.name.toLowerCase() === needle)?.id || "";
+  }).filter(Boolean);
+};
 const _adminCorrectIndicesFromCsv = (correct, options) => {
   const values = _adminSplitList(correct);
   return values.map(v => {
@@ -356,6 +363,7 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
   const [q, setQ] = React.useState("");
   const [cat, setCat] = React.useState("All");
   const [statusFilter, setStatusFilter] = React.useState("All");
+  const [companyFilter, setCompanyFilter] = React.useState("All");
   const [sort, setSort] = React.useState({ key: "title", dir: "asc" });
   const [importing, setImporting] = React.useState(false);
   const importInputRef = React.useRef(null);
@@ -370,6 +378,7 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
     const status = (c.status || "published").toLowerCase();
     if (statusFilter === "All" && status === "archived") return false;
     if (statusFilter !== "All" && status !== statusFilter.toLowerCase()) return false;
+    if (companyFilter !== "All" && !courseVisibleToCompany(c, companyFilter)) return false;
     return true;
   });
   const sortedCourses = _adminSortRows(filtered.map(c => ({
@@ -415,6 +424,8 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
         const duration = parseInt(first.duration || first.duration_minutes || "", 10) || modules.reduce((sum, m) => (
           sum + m.lessons.reduce((s, l) => s + (parseInt(l.dur, 10) || 0), 0)
         ), 0);
+        const allowedCompanyIds = _adminCompanyIdsFromCsv(first.allowed_companies || first.company_ids || first.companies);
+        const companyVisibility = (first.company_visibility || first.visibility || "").toLowerCase() === "selected" || allowedCompanyIds.length ? "selected" : "all";
         await saveCourse({
           title,
           description: first.description || "",
@@ -422,6 +433,8 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
           duration,
           required: _adminBool(first.required),
           status: "draft",
+          companyVisibility,
+          allowedCompanyIds,
           cover: first.cover || "cv-1",
           coverUrl: first.cover_url || "",
           modules,
@@ -470,6 +483,10 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="All">Status: All</option><option value="Published">Status: Published</option><option value="Draft">Status: Draft</option><option value="Archived">Status: Archived</option>
         </select>
+        <select value={companyFilter} onChange={e => setCompanyFilter(e.target.value)}>
+          <option value="All">Company: All</option>
+          {getCompanyDocs().map(co => <option key={co.id} value={co.id}>Company: {co.name}</option>)}
+        </select>
         <div className="fb-spacer" />
         <span className="text-xs text-muted">{sortedCourses.length} courses</span>
       </div>
@@ -504,6 +521,9 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
                     </div>
                     <div style={{ fontSize: 11, color: "#5f635f", display: "flex", gap: 6, alignItems: "center", marginTop: 2 }}>
                       <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace" }}>ID: {c.id}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#5f635f", marginTop: 2 }}>
+                      {(c.companyVisibility || "all") === "selected" ? companyNames(c.allowedCompanyIds || []) || "No companies selected" : "All companies"}
                     </div>
                   </div>
                 </div>
@@ -604,6 +624,7 @@ const AdminUsersPage = () => {
   const [dept, setDept] = React.useState("All");
   const [role, setRole] = React.useState("All");
   const [statusFilter, setStatusFilter] = React.useState("All");
+  const [companyFilter, setCompanyFilter] = React.useState("All");
   const [sort, setSort] = React.useState({ key: "name", dir: "asc" });
   const [assignFor, setAssignFor] = React.useState(null); // userId, "all" for top-bar, or null
   const [enrollmentsFor, setEnrollmentsFor] = React.useState(null); // user doc or null
@@ -650,6 +671,7 @@ const AdminUsersPage = () => {
     if (dept !== "All" && u.dept !== dept) return false;
     if (role !== "All" && u.role !== role) return false;
     if (statusFilter !== "All" && (u.status || "active") !== statusMap[statusFilter]) return false;
+    if (companyFilter !== "All" && u.companyId !== companyFilter) return false;
     return true;
   });
   const sortedUsers = _adminSortRows(filtered.map(u => {
@@ -660,6 +682,7 @@ const AdminUsersPage = () => {
       _completed: stats.completed,
       _overdue: stats.overdue,
       _status: u.status || "active",
+      _company: companyName(u.companyId) || "",
     };
   }), sort);
   const usersByEmail = React.useMemo(() => {
@@ -727,6 +750,10 @@ const AdminUsersPage = () => {
           <option value="All">Status: All</option>
           <option value="Active">Status: Active</option><option value="Onboarding">Status: Onboarding</option><option value="On leave">Status: On leave</option><option value="Inactive">Status: Inactive</option>
         </select>
+        <select value={companyFilter} onChange={e => setCompanyFilter(e.target.value)}>
+          <option value="All">Company: All</option>
+          {getCompanyDocs().map(co => <option key={co.id} value={co.id}>Company: {co.name}</option>)}
+        </select>
         <div className="fb-spacer" />
         <span className="text-xs text-muted">{sortedUsers.length} of {ALL_USERS.length}</span>
       </div>
@@ -758,6 +785,7 @@ const AdminUsersPage = () => {
             <AdminSortHeader label="Person" sortKey="name" sort={sort} onSort={setSort} style={{ width: "28%" }} />
             <AdminSortHeader label="Role" sortKey="role" sort={sort} onSort={setSort} />
             <AdminSortHeader label="Department" sortKey="dept" sort={sort} onSort={setSort} />
+            <AdminSortHeader label="Company" sortKey="_company" sort={sort} onSort={setSort} />
             <AdminSortHeader label="Status" sortKey="_status" sort={sort} onSort={setSort} />
             <AdminSortHeader label="Assigned" sortKey="_assigned" sort={sort} onSort={setSort} />
             <AdminSortHeader label="Completed" sortKey="_completed" sort={sort} onSort={setSort} />
@@ -844,6 +872,7 @@ const AdminUsersPage = () => {
                   {deptOptions.map(d => <option key={d}>{d}</option>)}
                 </select>
               </td>
+              <td>{u.companyId ? <span className="chip chip-grey">{companyName(u.companyId) || u.companyId}</span> : <span className="text-xs text-muted">Unmatched</span>}</td>
               <td>
                 <select value={u.status || "active"} onChange={updateStatus} style={{
                   border: "1px solid #d8d9d8", background: "#fff", borderRadius: 999, padding: "4px 24px 4px 10px",
@@ -1239,12 +1268,17 @@ const AdminAssessmentsPage = () => {
   const [sort, setSort] = React.useState({ key: "title", dir: "asc" });
   const [importing, setImporting] = React.useState(false);
   const [statusFilter, setStatusFilter] = React.useState("All");
+  const [companyFilter, setCompanyFilter] = React.useState("All");
   const importInputRef = React.useRef(null);
   const visible = _adminSortRows(ASSESSMENTS
     .filter(a => {
       const status = (a.status || "published").toLowerCase();
       if (statusFilter === "All" && status === "archived") return false;
       if (statusFilter !== "All" && status !== statusFilter.toLowerCase()) return false;
+      if (companyFilter !== "All") {
+        const linked = COURSES.find(c => c.id === a.courseId);
+        if (!courseVisibleToCompany(linked, companyFilter)) return false;
+      }
       return true;
     })
     .map(a => {
@@ -1357,6 +1391,10 @@ const AdminAssessmentsPage = () => {
       <div className="filterbar">
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="All">Status: All</option><option value="Published">Status: Published</option><option value="Draft">Status: Draft</option><option value="Archived">Status: Archived</option>
+        </select>
+        <select value={companyFilter} onChange={e => setCompanyFilter(e.target.value)}>
+          <option value="All">Company: All</option>
+          {getCompanyDocs().map(co => <option key={co.id} value={co.id}>Company: {co.name}</option>)}
         </select>
         <div className="fb-spacer" />
         <span className="text-xs text-muted">{visible.length} assessments</span>
@@ -1521,6 +1559,7 @@ const AdminActivityPage = () => {
   const [q, setQ] = React.useState("");
   const [courseId, setCourseId] = React.useState("All");
   const [personId, setPersonId] = React.useState("All");
+  const [companyId, setCompanyId] = React.useState("All");
   const [sort, setSort] = React.useState("newest");
 
   const usersById = Object.fromEntries((window.ALL_USERS || []).map(u => [u.id, u]));
@@ -1548,6 +1587,7 @@ const AdminActivityPage = () => {
     if (needle && !hay.includes(needle)) return false;
     if (courseId !== "All" && r.courseId !== courseId) return false;
     if (personId !== "All" && id !== personId) return false;
+    if (companyId !== "All" && u.companyId !== companyId) return false;
     return true;
   }).sort((a, b) => {
     const ta = _activityTime(a)?.getTime() || 0;
@@ -1584,6 +1624,7 @@ const AdminActivityPage = () => {
           time: _activityIso(r),
           actor: r.actorName || u.name || id || "",
           actorEmail: r.actorEmail || u.email || "",
+          company: companyName(u.companyId) || "",
           action: r.action || "",
           course: c.title || r.courseId || "",
           targetUserId: r.targetUserId || "",
@@ -1594,6 +1635,7 @@ const AdminActivityPage = () => {
         time: _activityIso(r),
         learner: u.name || r.userName || id || "",
         learnerEmail: u.email || r.userEmail || "",
+        company: companyName(u.companyId) || "",
         course: c.title || r.courseId || "",
         activity: r.text || "",
       };
@@ -1603,6 +1645,7 @@ const AdminActivityPage = () => {
           { key: "time", label: "Time" },
           { key: "actor", label: "Admin" },
           { key: "actorEmail", label: "Admin email" },
+          { key: "company", label: "Company" },
           { key: "action", label: "Action" },
           { key: "course", label: "Course" },
           { key: "targetUserId", label: "Target user ID" },
@@ -1612,6 +1655,7 @@ const AdminActivityPage = () => {
           { key: "time", label: "Time" },
           { key: "learner", label: "Learner" },
           { key: "learnerEmail", label: "Learner email" },
+          { key: "company", label: "Company" },
           { key: "course", label: "Course" },
           { key: "activity", label: "Activity" },
         ];
@@ -1641,7 +1685,7 @@ const AdminActivityPage = () => {
       </div>
 
       <div className="card card-pad" style={{ marginBottom: 14 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1.4fr) 1fr 1fr 180px", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1.4fr) 1fr 1fr 1fr 180px", gap: 10 }}>
           <input className="cd-input" type="search" placeholder="Search activity..." value={q} onChange={e => setQ(e.target.value)} />
           <select className="cd-input" value={personId} onChange={e => setPersonId(e.target.value)}>
             <option value="All">{view === "admin" ? "All admins" : "All learners"}</option>
@@ -1650,6 +1694,10 @@ const AdminActivityPage = () => {
           <select className="cd-input" value={courseId} onChange={e => setCourseId(e.target.value)} disabled={view === "admin"}>
             <option value="All">All courses</option>
             {[...COURSES].sort((a, b) => (a.title || "").localeCompare(b.title || "")).map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+          </select>
+          <select className="cd-input" value={companyId} onChange={e => setCompanyId(e.target.value)}>
+            <option value="All">All companies</option>
+            {getCompanyDocs().map(co => <option key={co.id} value={co.id}>{co.name}</option>)}
           </select>
           <select className="cd-input" value={sort} onChange={e => setSort(e.target.value)}>
             <option value="newest">Newest first</option>
@@ -1675,6 +1723,7 @@ const AdminActivityPage = () => {
             <tr>
               <ActivitySortHeader label="Time" sortKey="time" sort={sort} onSort={setSort} style={{ width: 170 }} />
               <ActivitySortHeader label={view === "admin" ? "Admin" : "Learner"} sortKey="person" sort={sort} onSort={setSort} />
+              <th>Company</th>
               <ActivitySortHeader label="Activity" sortKey="activity" sort={sort} onSort={setSort} />
               <ActivitySortHeader label="Course / target" sortKey="course" sort={sort} onSort={setSort} />
             </tr>
@@ -1693,6 +1742,7 @@ const AdminActivityPage = () => {
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{name}</div>
                     <div style={{ fontSize: 11, color: "#5f635f" }}>{email}</div>
                   </td>
+                  <td>{u.companyId ? <span className="chip chip-grey">{companyName(u.companyId) || u.companyId}</span> : <span className="text-xs text-muted">Unmatched</span>}</td>
                   <td>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{view === "admin" ? r.action : r.text}</div>
                     {view === "admin" && (
@@ -1730,9 +1780,53 @@ const AdminSettingsPage = () => {
   const [categoryModal, setCategoryModal] = React.useState({ open: false, initial: null });
   const [roleModal, setRoleModal] = React.useState({ open: false, initial: null });
   const [seedingCategories, setSeedingCategories] = React.useState(false);
+  const [companyDrafts, setCompanyDrafts] = React.useState(() => getCompanyDocs());
+  const [savingCompanies, setSavingCompanies] = React.useState(false);
   const sortedDepartments = [...DEPARTMENT_DOCS].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   const sortedCategories = getCategoryDocs();
   const sortedRoles = [...ROLE_DOCS].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  React.useEffect(() => {
+    setCompanyDrafts(getCompanyDocs());
+  }, [COMPANY_DOCS.length]);
+  const updateCompanyDraft = (idx, patch) => setCompanyDrafts(prev => prev.map((c, i) => i === idx ? { ...c, ...patch } : c));
+  const addCompanyDraft = () => setCompanyDrafts(prev => [...prev, {
+    id: `co-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    name: "",
+    domains: [],
+    logoUrl: "",
+    certificateLogoUrl: "",
+    certificateName: "",
+    accent: "#7ac142",
+    secondary: "#2e5a12",
+    active: true,
+    adminBrand: prev.length === 0,
+  }]);
+  const removeCompanyDraft = (idx) => setCompanyDrafts(prev => {
+    const next = prev.filter((_, i) => i !== idx);
+    if (next.length && !next.some(c => c.adminBrand)) next[0] = { ...next[0], adminBrand: true };
+    return next;
+  });
+  const saveCompanyDrafts = async () => {
+    if (savingCompanies) return;
+    if (!window.fbReady) { alert("Firebase isn't configured - can't save."); return; }
+    const cleaned = companyDrafts
+      .filter(c => c.name?.trim())
+      .map(c => ({
+        ...c,
+        domains: Array.isArray(c.domains) ? c.domains : String(c.domains || "").split(/[,\n|]/),
+      }));
+    if (!cleaned.length) { alert("Add at least one company."); return; }
+    if (!cleaned.some(c => c.adminBrand)) cleaned[0].adminBrand = true;
+    setSavingCompanies(true);
+    try {
+      await saveCompanies(cleaned);
+      showToast?.("Company settings saved");
+    } catch (err) {
+      alert("Save failed: " + err.message);
+    } finally {
+      setSavingCompanies(false);
+    }
+  };
   const seedCategories = async () => {
     if (seedingCategories) return;
     if (!window.fbReady) { alert("Firebase isn't configured - can't save."); return; }
@@ -1752,13 +1846,76 @@ const AdminSettingsPage = () => {
       <div className="page-head">
         <div>
           <div className="page-head__eyebrow">Admin · Settings</div>
-          <h1 className="page-head__title">Roles, departments & categories</h1>
-          <div className="page-head__sub">Manage user attributes, LMS access, and learner catalog navigation.</div>
+          <h1 className="page-head__title">Companies, roles, departments & categories</h1>
+          <div className="page-head__sub">Manage branding, LMS access, user attributes, and learner catalog navigation.</div>
         </div>
       </div>
 
       <div className="dash-2col">
         <div>
+          <div className="card card-pad-lg mt-4">
+            <div className="eyebrow-sm" style={{ marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>Companies</span>
+              <button className="btn btn-ghost btn-sm" style={{ padding: "4px 10px", fontSize: 11 }} onClick={addCompanyDraft}>
+                <Icon name="plus" size={12}/> New company
+              </button>
+            </div>
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Sister-company branding</h3>
+            <p className="text-muted text-sm" style={{ marginBottom: 18 }}>
+              Match learners by email domain, control learner branding, and choose the employment-entity brand for admin pages.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {companyDrafts.map((co, idx) => (
+                <div key={co.id || idx} style={{ border: "1px solid #ececec", borderRadius: 10, padding: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div className="cd-field" style={{ margin: 0 }}>
+                    <label>Name</label>
+                    <input className="cd-input" value={co.name || ""} onChange={e => updateCompanyDraft(idx, { name: e.target.value, id: co.id || companyDocId(e.target.value) })} placeholder="Company name" />
+                  </div>
+                  <div className="cd-field" style={{ margin: 0 }}>
+                    <label>Email domains</label>
+                    <input className="cd-input" value={(co.domains || []).join(", ")} onChange={e => updateCompanyDraft(idx, { domains: e.target.value.split(/[,\n|]/).map(normalizeDomain).filter(Boolean) })} placeholder="example.com, sisterco.com" />
+                  </div>
+                  <div className="cd-field" style={{ margin: 0 }}>
+                    <label>Learner logo URL</label>
+                    <input className="cd-input" value={co.logoUrl || ""} onChange={e => updateCompanyDraft(idx, { logoUrl: e.target.value })} placeholder="https://..." />
+                  </div>
+                  <div className="cd-field" style={{ margin: 0 }}>
+                    <label>Certificate logo URL</label>
+                    <input className="cd-input" value={co.certificateLogoUrl || ""} onChange={e => updateCompanyDraft(idx, { certificateLogoUrl: e.target.value })} placeholder="Defaults to learner logo" />
+                  </div>
+                  <div className="cd-field" style={{ margin: 0 }}>
+                    <label>Certificate display name</label>
+                    <input className="cd-input" value={co.certificateName || ""} onChange={e => updateCompanyDraft(idx, { certificateName: e.target.value })} placeholder="Defaults to company name" />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div className="cd-field" style={{ margin: 0 }}>
+                      <label>Accent</label>
+                      <input className="cd-input" type="color" value={co.accent || "#7ac142"} onChange={e => updateCompanyDraft(idx, { accent: e.target.value })} />
+                    </div>
+                    <div className="cd-field" style={{ margin: 0 }}>
+                      <label>Secondary</label>
+                      <input className="cd-input" type="color" value={co.secondary || "#2e5a12"} onChange={e => updateCompanyDraft(idx, { secondary: e.target.value })} />
+                    </div>
+                  </div>
+                  <div style={{ gridColumn: "1 / -1", display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      <label className="chip chip-grey" style={{ cursor: "pointer" }}>
+                        <input type="checkbox" checked={co.active !== false} onChange={e => updateCompanyDraft(idx, { active: e.target.checked })} /> Active
+                      </label>
+                      <label className="chip chip-green" style={{ cursor: "pointer" }}>
+                        <input type="radio" name="adminBrandCompany" checked={!!co.adminBrand} onChange={() => setCompanyDrafts(prev => prev.map((c, i) => ({ ...c, adminBrand: i === idx })))} /> Admin brand
+                      </label>
+                    </div>
+                    <button className="btn-icon" title="Remove company" disabled={companyDrafts.length <= 1} onClick={() => removeCompanyDraft(idx)}><Icon name="trash" size={14}/></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button className="btn btn-primary btn-sm" style={{ marginTop: 14 }} disabled={savingCompanies} onClick={saveCompanyDrafts}>
+              <Icon name="check" size={14}/> {savingCompanies ? "Saving..." : "Save company settings"}
+            </button>
+          </div>
+
           <div className="card card-pad-lg">
             <div className="eyebrow-sm" style={{ marginBottom: 6 }}>Departments</div>
             <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Organizational departments</h3>

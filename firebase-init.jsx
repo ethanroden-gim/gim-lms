@@ -136,6 +136,27 @@ const mergeUserProfiles = async (sourceUserId, targetUserId, targetPatch = {}) =
   return { enrollments: enrollmentCount, attempts, activity };
 };
 
+const companiesSettingsRef = () => fbDb.collection("settings").doc("companies");
+
+const loadCompanyDocsOnce = async () => {
+  if (!fbReady) return window.getCompanyDocs?.() || [];
+  try {
+    const snap = await companiesSettingsRef().get();
+    const items = snap.exists ? ((snap.data()?.items || []).filter(c => c && c.name)) : [];
+    return items.length ? items.map((c, i) => window.normalizeCompany?.(c, i) || c) : (window.getCompanyDocs?.() || []);
+  } catch {
+    return window.getCompanyDocs?.() || [];
+  }
+};
+
+const companyIdForEmail = async (email) => {
+  const domain = window.domainFromEmail?.(email) || String(email || "").split("@")[1]?.toLowerCase() || "";
+  if (!domain) return "";
+  const companies = await loadCompanyDocsOnce();
+  const normalize = window.normalizeDomain || (v => String(v || "").trim().toLowerCase());
+  return companies.find(c => c.active !== false && (c.domains || []).map(normalize).includes(normalize(domain)))?.id || "";
+};
+
 // Create or update /users/{uid} on every sign-in.
 const upsertUserDoc = async (firebaseUser, gisProfile) => {
   if (!fbReady) return null;
@@ -146,6 +167,7 @@ const upsertUserDoc = async (firebaseUser, gisProfile) => {
   const managerEmails = (window.GIM_CONFIG || {}).managerEmails || [];
   const email = firebaseUser.email || gisProfile?.email || "";
   const emailLower = email.toLowerCase();
+  const companyId = await companyIdForEmail(email);
   const inheritsAdmin = adminEmails.length === 0 || adminEmails.includes(email);
   const inheritsManager = managerEmails.length === 0 || managerEmails.includes(email) || inheritsAdmin;
 
@@ -153,6 +175,7 @@ const upsertUserDoc = async (firebaseUser, gisProfile) => {
     name: firebaseUser.displayName || gisProfile?.name || email,
     email,
     emailLower,
+    companyId,
     photoURL: firebaseUser.photoURL || gisProfile?.picture || null,
     lastSignInAt: firebase.firestore.FieldValue.serverTimestamp(),
   };
@@ -205,6 +228,7 @@ const upsertUserDoc = async (firebaseUser, gisProfile) => {
     role: inheritsAdmin ? "Admin" : "Learner",
     dept: "",
     status: "active",
+    companyId,
     isAdmin: inheritsAdmin,
     isManager: inheritsManager,
     adminSource: inheritsAdmin ? "google" : null,
@@ -298,6 +322,20 @@ const subscribeToData = (onChange) => {
     onChange();
   }, err => {
     if (err.code !== "permission-denied") console.error("category settings listener:", err);
+  }));
+
+  subs.push(fbDb.collection("settings").doc("companies").onSnapshot(d => {
+    const arr = d.exists ? ((d.data()?.items || []).filter(c => c && c.name)) : [];
+    arr.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    setArr(COMPANY_DOCS, arr);
+    const matched = window.getCompanyForEmail?.(window.CURRENT_USER?.email);
+    if (matched && window.CURRENT_USER.companyId !== matched.id) {
+      window.CURRENT_USER.companyId = matched.id;
+      fbDb.collection("users").doc(uid).set({ companyId: matched.id }, { merge: true }).catch(() => {});
+    }
+    onChange();
+  }, err => {
+    if (err.code !== "permission-denied") console.error("company settings listener:", err);
   }));
 
   subs.push(fbDb.collection("assessments").onSnapshot(s => {
@@ -401,6 +439,7 @@ const hydrateUserFromFirebase = async (fbUser) => {
     role: u.role || "Learner",
     status: u.status || "active",
     dept: u.dept || "",
+    companyId: u.companyId || "",
   });
 };
 
@@ -417,6 +456,7 @@ const createDirectoryUser = async ({ name, email, role = "Learner", dept = "", s
   if (!fbReady) throw new Error("Firebase not configured");
   const cleanEmail = (email || "").trim();
   const emailLower = cleanEmail.toLowerCase();
+  const companyId = await companyIdForEmail(cleanEmail);
   if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) throw new Error("Enter a valid email address.");
   const byLower = await fbDb.collection("users").where("emailLower", "==", emailLower).limit(1).get();
   const byEmail = byLower.empty ? await fbDb.collection("users").where("email", "==", cleanEmail).limit(1).get() : null;
@@ -428,6 +468,7 @@ const createDirectoryUser = async ({ name, email, role = "Learner", dept = "", s
     name: displayName,
     email: cleanEmail,
     emailLower,
+    companyId,
     role,
     dept,
     status,
@@ -641,6 +682,37 @@ const deleteRole = async (id) => {
   if (!fbReady) throw new Error("Firebase not configured");
   await fbDb.collection("roles").doc(id).delete();
   recordAdminActivity("Deleted role", { roleId: id }).catch(() => {});
+};
+
+// ---- Companies ------------------------------------------------------------
+const cleanCompany = (company = {}, idx = 0) => {
+  const normalized = window.normalizeCompany?.(company, idx) || company;
+  const normalize = window.normalizeDomain || (v => String(v || "").trim().toLowerCase());
+  return stripUndefinedFields({
+    id: normalized.id || window.companyDocId?.(normalized.name) || `co-${idx}`,
+    name: String(normalized.name || "").trim(),
+    domains: (normalized.domains || []).map(normalize).filter(Boolean),
+    logoUrl: normalized.logoUrl || "",
+    certificateLogoUrl: normalized.certificateLogoUrl || normalized.logoUrl || "",
+    certificateName: normalized.certificateName || normalized.name || "",
+    accent: normalized.accent || "#7ac142",
+    secondary: normalized.secondary || normalized.accent || "#2e5a12",
+    active: normalized.active !== false,
+    adminBrand: !!normalized.adminBrand,
+  });
+};
+
+const saveCompanies = async (items = []) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  const cleanItems = items.filter(c => c && c.name).map(cleanCompany);
+  if (cleanItems.length && !cleanItems.some(c => c.adminBrand)) cleanItems[0].adminBrand = true;
+  await companiesSettingsRef().set({
+    items: cleanItems,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  replaceArray(COMPANY_DOCS, cleanItems);
+  recordAdminActivity("Updated company settings", { count: cleanItems.length }).catch(() => {});
+  return cleanItems;
 };
 
 // ---- Categories -----------------------------------------------------------
@@ -985,7 +1057,7 @@ Object.assign(window, {
   hydrateUserFromFirebase,
   saveCourse, archiveCourse, deleteCourse, duplicateCourse,
   saveDepartment, deleteDepartment,
-  saveRole, deleteRole, saveCategory, deleteCategory, seedDefaultCategories,
+  saveRole, deleteRole, saveCompanies, saveCategory, deleteCategory, seedDefaultCategories,
   saveAssessment, archiveAssessment, deleteAssessment,
   saveCertificateTemplate,
   assignTraining, daysUntilDue, updateUser, createDirectoryUser, mergeUserProfiles, resetUserProgress, resetCourseProgress, unassignCourse,
