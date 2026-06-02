@@ -343,7 +343,7 @@ const subscribeToData = (onChange) => {
     const arr = (data.items || []).filter(i => i && i.url);
     arr.sort((a, b) => (a.label || "").localeCompare(b.label || ""));
     setArr(ICON_DOCS, arr);
-    setObj(ICON_SETTINGS, { navIcons: data.navIcons || {} });
+    setObj(ICON_SETTINGS, { navIcons: data.navIcons || {}, iconOverrides: data.iconOverrides || {} });
     onChange();
   }, err => {
     if (err.code !== "permission-denied") console.error("icon settings listener:", err);
@@ -741,7 +741,7 @@ const cleanIconItem = (icon = {}, idx = 0) => {
   });
 };
 
-const saveIconSettings = async ({ items = [], navIcons = {} } = {}) => {
+const saveIconSettings = async ({ items = [], navIcons = {}, iconOverrides = {} } = {}) => {
   if (!fbReady) throw new Error("Firebase not configured");
   const cleanItems = items
     .filter(i => i && i.label && i.url)
@@ -750,16 +750,20 @@ const saveIconSettings = async ({ items = [], navIcons = {} } = {}) => {
   const cleanNavIcons = Object.fromEntries(
     Object.entries(navIcons || {}).filter(([, value]) => value)
   );
+  const cleanIconOverrides = Object.fromEntries(
+    Object.entries(iconOverrides || {}).filter(([, value]) => value)
+  );
   await iconSettingsRef().set({
     items: cleanItems,
     navIcons: cleanNavIcons,
+    iconOverrides: cleanIconOverrides,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
   }, { merge: true });
   replaceArray(ICON_DOCS, cleanItems);
   Object.keys(ICON_SETTINGS).forEach(k => delete ICON_SETTINGS[k]);
-  Object.assign(ICON_SETTINGS, { navIcons: cleanNavIcons });
+  Object.assign(ICON_SETTINGS, { navIcons: cleanNavIcons, iconOverrides: cleanIconOverrides });
   recordAdminActivity("Updated icon settings", { count: cleanItems.length }).catch(() => {});
-  return { items: cleanItems, navIcons: cleanNavIcons };
+  return { items: cleanItems, navIcons: cleanNavIcons, iconOverrides: cleanIconOverrides };
 };
 
 // ---- Categories -----------------------------------------------------------

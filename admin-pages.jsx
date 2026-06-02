@@ -1806,6 +1806,7 @@ const AdminSettingsPage = () => {
   const [savingCompanies, setSavingCompanies] = React.useState(false);
   const [iconDrafts, setIconDrafts] = React.useState(() => getCustomIconDocs());
   const [navIconDrafts, setNavIconDrafts] = React.useState(() => ({ ...(ICON_SETTINGS.navIcons || {}) }));
+  const [systemIconDrafts, setSystemIconDrafts] = React.useState(() => ({ ...(ICON_SETTINGS.iconOverrides || {}) }));
   const [savingIcons, setSavingIcons] = React.useState(false);
   const [uploadingIconId, setUploadingIconId] = React.useState("");
   const [editingIconId, setEditingIconId] = React.useState("");
@@ -1821,7 +1822,8 @@ const AdminSettingsPage = () => {
   React.useEffect(() => {
     setIconDrafts(getCustomIconDocs());
     setNavIconDrafts({ ...(ICON_SETTINGS.navIcons || {}) });
-  }, [ICON_DOCS.length]);
+    setSystemIconDrafts({ ...(ICON_SETTINGS.iconOverrides || {}) });
+  }, [ICON_DOCS.length, JSON.stringify(ICON_SETTINGS.navIcons || {}), JSON.stringify(ICON_SETTINGS.iconOverrides || {})]);
   const updateCompanyDraft = (idx, patch) => setCompanyDrafts(prev => prev.map((c, i) => i === idx ? { ...c, ...patch } : c));
   const addCompanyDraft = () => setCompanyDrafts(prev => [...prev, {
     id: `co-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -1949,7 +1951,7 @@ const AdminSettingsPage = () => {
       .map((i, idx) => ({ ...i, id: i.id || iconDocId(i.label), sortOrder: idx }));
     setSavingIcons(true);
     try {
-      await saveIconSettings({ items: cleaned, navIcons: navIconDrafts });
+      await saveIconSettings({ items: cleaned, navIcons: navIconDrafts, iconOverrides: systemIconDrafts });
       showToast?.("Icon settings saved");
     } catch (err) {
       alert("Save failed: " + err.message);
@@ -1965,6 +1967,31 @@ const AdminSettingsPage = () => {
   ];
   const editingIconIdx = iconDrafts.findIndex(i => i.id === editingIconId);
   const editingIcon = editingIconIdx >= 0 ? iconDrafts[editingIconIdx] : null;
+  const editingSystemIcon = editingIconId.startsWith("system:") ? editingIconId.replace(/^system:/, "") : "";
+  const uploadSystemIconDraft = async (iconId, file) => {
+    if (!file) return;
+    const allowed = file.type === "image/svg+xml" || file.type === "image/png" || /\.svg$/i.test(file.name || "") || /\.png$/i.test(file.name || "");
+    if (!allowed) { alert("Use a PNG or SVG icon file."); return; }
+    if (file.size > 250 * 1024) {
+      alert("Icon file is too large. Use a PNG/SVG under 250 KB, or paste a hosted URL instead.");
+      return;
+    }
+    setUploadingIconId(`system:${iconId}`);
+    try {
+      const url = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error("Could not read icon file."));
+        reader.readAsDataURL(file);
+      });
+      setSystemIconDrafts(prev => ({ ...prev, [iconId]: url }));
+      showToast?.("System icon replaced. Save icon settings to keep it.");
+    } catch (err) {
+      alert("Icon import failed: " + err.message);
+    } finally {
+      setUploadingIconId("");
+    }
+  };
   const seedCategories = async () => {
     if (seedingCategories) return;
     if (!window.fbReady) { alert("Firebase isn't configured - can't save."); return; }
@@ -2073,11 +2100,13 @@ const AdminSettingsPage = () => {
                 {iconSelectOptions.map(opt => {
                   const draftIdx = iconDrafts.findIndex(i => i.id === opt.id);
                   const isCustom = draftIdx >= 0;
+                  const isSystem = !!opt.builtin;
+                  const hasSystemOverride = isSystem && !!systemIconDrafts[opt.id];
                   return (
                   <div key={`gallery-${opt.id}`} title={opt.label} style={{
-                    minHeight: isCustom ? 92 : 70,
+                    minHeight: isCustom || isSystem ? 92 : 70,
                     padding: 8,
-                    border: editingIconId === opt.id ? "2px solid #1d4ed8" : "1px solid #e6e6e6",
+                    border: editingIconId === opt.id || editingIconId === `system:${opt.id}` ? "2px solid #1d4ed8" : "1px solid #e6e6e6",
                     borderRadius: 8,
                     background: "#fff",
                     display: "flex",
@@ -2086,14 +2115,43 @@ const AdminSettingsPage = () => {
                     justifyContent: "center",
                     gap: 6,
                   }}>
-                    {opt.url ? (
-                      <img src={opt.url} alt="" style={{ width: 24, height: 24, objectFit: "contain" }} onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
+                    {(systemIconDrafts[opt.id] || opt.url) ? (
+                      <img src={systemIconDrafts[opt.id] || opt.url} alt="" style={{ width: 24, height: 24, objectFit: "contain" }} onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
                     ) : (
                       <Icon name={opt.icon || opt.id} size={22}/>
                     )}
                     <div style={{ fontSize: 10, color: "#5f635f", textAlign: "center", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {opt.label}
                     </div>
+                    {isSystem && (
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button
+                          className="btn-icon"
+                          title="Replace system icon"
+                          onClick={() => setEditingIconId(`system:${opt.id}`)}
+                          style={{ width: 24, height: 24, borderRadius: 6 }}
+                        >
+                          <Icon name="edit" size={12}/>
+                        </button>
+                        {hasSystemOverride && (
+                          <button
+                            className="btn-icon"
+                            title="Reset system icon"
+                            onClick={() => {
+                              setSystemIconDrafts(prev => {
+                                const next = { ...prev };
+                                delete next[opt.id];
+                                return next;
+                              });
+                              if (editingIconId === `system:${opt.id}`) setEditingIconId("");
+                            }}
+                            style={{ width: 24, height: 24, borderRadius: 6, color: "#a8232b" }}
+                          >
+                            <Icon name="refresh" size={12}/>
+                          </button>
+                        )}
+                      </div>
+                    )}
                     {isCustom && (
                       <div style={{ display: "flex", gap: 4 }}>
                         <button
@@ -2119,6 +2177,53 @@ const AdminSettingsPage = () => {
                   </div>
                 );})}
               </div>
+              {editingSystemIcon && (
+                <div style={{ marginTop: 12, padding: 12, border: "1px solid #dbeafe", borderRadius: 10, background: "#eff6ff" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 8, background: "#fff", border: "1px solid #dbeafe", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {systemIconDrafts[editingSystemIcon] ? (
+                        <img src={systemIconDrafts[editingSystemIcon]} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} />
+                      ) : (
+                        <Icon name={editingSystemIcon} size={18}/>
+                      )}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 800, fontSize: 13 }}>Replace system icon</div>
+                      <div className="text-xs text-muted">This replaces every use of the built-in "{editingSystemIcon}" icon across the app.</div>
+                    </div>
+                    <button className="btn-icon" title="Close editor" onClick={() => setEditingIconId("")}><Icon name="close" size={14}/></button>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1.4fr auto auto", gap: 10, alignItems: "end" }}>
+                    <div className="cd-field" style={{ margin: 0 }}>
+                      <label>Replacement PNG/SVG URL</label>
+                      <input className="cd-input" value={systemIconDrafts[editingSystemIcon] || ""} onChange={e => setSystemIconDrafts(prev => ({ ...prev, [editingSystemIcon]: e.target.value }))} placeholder="https://... or imported data URL" />
+                    </div>
+                    <label className="btn btn-ghost btn-sm" style={{ cursor: "pointer", margin: 0 }}>
+                      <Icon name="upload" size={14}/> {uploadingIconId === `system:${editingSystemIcon}` ? "Importing..." : "Import file"}
+                      <input
+                        type="file"
+                        accept=".png,.svg,image/png,image/svg+xml,image/*"
+                        style={{ display: "none" }}
+                        disabled={!!uploadingIconId}
+                        onChange={e => uploadSystemIconDraft(editingSystemIcon, e.target.files?.[0])}
+                      />
+                    </label>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      disabled={!systemIconDrafts[editingSystemIcon]}
+                      onClick={() => {
+                        setSystemIconDrafts(prev => {
+                          const next = { ...prev };
+                          delete next[editingSystemIcon];
+                          return next;
+                        });
+                      }}
+                    >
+                      <Icon name="refresh" size={14}/> Reset
+                    </button>
+                  </div>
+                </div>
+              )}
               {editingIcon && (
                 <div style={{ marginTop: 12, padding: 12, border: "1px solid #dbeafe", borderRadius: 10, background: "#eff6ff" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>

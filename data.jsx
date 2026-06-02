@@ -4,6 +4,18 @@
 // =========================================================
 
 const Icon = ({ name, className = "", size = 18, color, style }) => {
+  const overrideUrl = ((window.ICON_SETTINGS || ICON_SETTINGS || {}).iconOverrides || {})[name];
+  if (overrideUrl) {
+    return (
+      <img
+        src={overrideUrl}
+        alt=""
+        className={className}
+        style={{ width: size, height: size, objectFit: "contain", display: "inline-block", flexShrink: 0, ...style }}
+        onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
+      />
+    );
+  }
   const customIcon = (window.ICON_DOCS || []).find(i => i && i.id === name && i.url);
   if (customIcon) {
     return (
@@ -131,7 +143,7 @@ const CATEGORY_ICON_CHOICES = [
 ];
 
 const ICON_DOCS = [];       // Firestore-backed custom icon library
-const ICON_SETTINGS = { navIcons: {} };
+const ICON_SETTINGS = { navIcons: {}, iconOverrides: {} };
 const NAV_ICON_TARGETS = [
   { id: "home", label: "Learner dashboard", fallback: "home" },
   { id: "catalog", label: "Course catalog", fallback: "compass" },
@@ -264,6 +276,7 @@ const getIconChoices = () => [
     icon: p.icon,
     label: p.label,
     builtin: true,
+    url: ((window.ICON_SETTINGS || ICON_SETTINGS || {}).iconOverrides || {})[p.icon] || "",
   })),
   ...getCustomIconDocs().map(p => ({
     id: p.id,
