@@ -1,5 +1,5 @@
 // =========================================================
-// GIM LMS — Admin: Course editor (new + edit)
+// OneSource LMS — Admin: Course editor (new + edit)
 // =========================================================
 
 const courseEditorCategoryNames = () => window.getCategoryNames?.() || window.CATEGORIES || [];

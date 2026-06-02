@@ -1,5 +1,5 @@
 // =========================================================
-// GIM LMS — Sidebar + Topbar
+// OneSource LMS — Sidebar + Topbar
 // =========================================================
 
 const Sidebar = ({ route, setRoute, mode, goCategory }) => {
@@ -11,21 +11,21 @@ const Sidebar = ({ route, setRoute, mode, goCategory }) => {
     return status === "assigned" || status === "in_progress";
   }).length;
   const learnerLinks = [
-    { id: "home", label: "Dashboard", icon: "home" },
-    { id: "catalog", label: "Course catalog", icon: "compass" },
-    { id: "learning", label: "My learning", icon: "book", badge: myLearningCount || null },
-    { id: "certs", label: "Certificates", icon: "award" },
-    ...(CURRENT_USER.isManager ? [{ id: "team", label: "My team", icon: "users" }] : []),
+    { id: "home", label: "Dashboard", icon: getNavIcon("home", "home") },
+    { id: "catalog", label: "Course catalog", icon: getNavIcon("catalog", "compass") },
+    { id: "learning", label: "My learning", icon: getNavIcon("learning", "book"), badge: myLearningCount || null },
+    { id: "certs", label: "Certificates", icon: getNavIcon("certs", "award") },
+    ...(CURRENT_USER.isManager ? [{ id: "team", label: "My team", icon: getNavIcon("team", "users") }] : []),
   ];
   const adminLinks = [
-    { id: "admin-overview", label: "Overview", icon: "chart" },
-    { id: "admin-courses", label: "Courses", icon: "book" },
-    { id: "admin-users", label: "People & enrollments", icon: "users" },
-    { id: "admin-assess", label: "Assessments", icon: "quiz" },
-    { id: "admin-attempts", label: "Attempts", icon: "list", badge: (window.ATTEMPTS || []).filter(a => a.status === "pending_review").length || null },
-    { id: "admin-activity", label: "Activity", icon: "clock" },
-    { id: "admin-cert", label: "Certificate designer", icon: "award" },
-    { id: "admin-settings", label: "Settings", icon: "settings" },
+    { id: "admin-overview", label: "Overview", icon: getNavIcon("admin-overview", "chart") },
+    { id: "admin-courses", label: "Courses", icon: getNavIcon("admin-courses", "book") },
+    { id: "admin-users", label: "People & enrollments", icon: getNavIcon("admin-users", "users") },
+    { id: "admin-assess", label: "Assessments", icon: getNavIcon("admin-assess", "quiz") },
+    { id: "admin-attempts", label: "Attempts", icon: getNavIcon("admin-attempts", "list"), badge: (window.ATTEMPTS || []).filter(a => a.status === "pending_review").length || null },
+    { id: "admin-activity", label: "Activity", icon: getNavIcon("admin-activity", "clock") },
+    { id: "admin-cert", label: "Certificate designer", icon: getNavIcon("admin-cert", "award") },
+    { id: "admin-settings", label: "Settings", icon: getNavIcon("admin-settings", "settings") },
   ];
   const links = mode === "admin" ? adminLinks : learnerLinks;
   const sectionLabel = mode === "admin" ? "Administration" : "Learn";
@@ -99,7 +99,11 @@ const Topbar = ({ mode, setMode, isAdmin, goCourse }) => {
   return (
     <header className="app__topbar">
       <div className="app__brand">
-        <img src={brand.logoUrl || "assets/logo-landscape-onblack.png"} alt={brand.name || "Learning"} onError={(e) => { e.currentTarget.src = "assets/logo-landscape-onblack.png"; }} />
+        {brand.logoUrl ? (
+          <img src={brand.logoUrl} alt={brand.name || "OneSource"} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+        ) : (
+          <div className="app__brand-text">{brand.name || "OneSource"}</div>
+        )}
         <div className="app__brand-divider" />
         <span className="app__brand-tag">{mode === "admin" ? "Admin" : "Learning"}</span>
       </div>
@@ -183,7 +187,7 @@ const UserMenu = () => {
 
   const onSignOut = async () => {
     setOpen(false);
-    if (!confirm("Sign out of GIM Learning?")) return;
+    if (!confirm("Sign out of OneSource?")) return;
     try { if (window.signOutEverywhere) await signOutEverywhere(); }
     catch (err) { console.error("signOut:", err); }
     // The Firebase onAuthStateChanged listener will flip the app back to the sign-in screen

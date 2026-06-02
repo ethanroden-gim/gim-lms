@@ -1,11 +1,11 @@
 // =========================================================
-// GIM LMS — Certificate template + shared renderer
+// OneSource LMS — Certificate template + shared renderer
 // =========================================================
 // Single source of truth for certificate styling. Edited via
 // AdminCertificateDesignerPage; consumed by CertificatePage.
 
 const CERTIFICATE_DEFAULTS = {
-  accent: "#7ac142",          // GIM green
+  accent: "#1d4ed8",
   paper:  "#fdfbf6",
   ink:    "#111111",
   eyebrow: "Awarded with Excellence",
@@ -14,12 +14,12 @@ const CERTIFICATE_DEFAULTS = {
   signer1Name: "Ethan Roden",
   signer1Title: "Director of HR & Shared Services",
   signer2Name: "Brian Halverson",
-  signer2Title: "Head of Training · GIM",
+  signer2Title: "Head of Training",
   showSeal: true,
   showSecondSigner: false,
   showScore: true,
-  logoUrl: "assets/logo-landscape.png",
-  brandTag: "Learning",
+  logoUrl: "",
+  brandTag: "OneSource",
 };
 
 // Shared, fixed-size 11×8.5 in @ 96dpi → 1056×816 px certificate.
@@ -101,7 +101,7 @@ const CertificateRender = ({ template, course, learnerName, completedOn, score, 
             <SigBlock value={`${score}%`} label="Final assessment score" accent={t.accent} ink={t.ink} />
           )}
         </div>
-        {t.showSeal && <OfficialSeal accent={t.accent} ink={t.ink} label={t.sealText || "GIM"} />}
+        {t.showSeal && <OfficialSeal accent={t.accent} ink={t.ink} label={t.sealText || "OS"} />}
       </div>
     </div>
   );
@@ -116,8 +116,8 @@ const SigBlock = ({ value, label, accent, ink }) => (
 );
 
 // Branded "official" seal — no curved text, just decorative concentric rings,
-// rays, and ornamental marks around a central GIM monogram.
-const OfficialSeal = ({ accent, ink, label = "GIM" }) => {
+// rays, and ornamental marks around a central product/company monogram.
+const OfficialSeal = ({ accent, ink, label = "OS" }) => {
   const SIZE = 170;
   const cx = 85, cy = 85;
 
@@ -175,7 +175,7 @@ const OfficialSeal = ({ accent, ink, label = "GIM" }) => {
         <circle cx={cx} cy={cy} r="32" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="1" />
         <text x={cx} y={cy + 7} textAnchor="middle"
           fontFamily="var(--font-display)" fontSize="22" fontWeight="400"
-          fill="#fff" letterSpacing="1.5">{String(label || "GIM").slice(0, 4).toUpperCase()}</text>
+          fill="#fff" letterSpacing="1.5">{String(label || "OS").slice(0, 4).toUpperCase()}</text>
       </svg>
     </div>
   );

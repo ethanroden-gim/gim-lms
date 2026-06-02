@@ -1,12 +1,12 @@
 /* =========================================================================
-   GIM LMS — Tweak overrides
+   OneSource LMS — Tweak overrides
    Vars are set on the .app[data-mood][data-accent][data-density] root.
    These rules use those vars + higher specificity to override the
    hardcoded values in app.css without rewriting the whole stylesheet.
    ========================================================================= */
 
 .app {
-  /* ---- Defaults (Operator / GIM Green / Comfortable) ---- */
+  /* ---- Defaults (Operator / OneSource cobalt / Comfortable) ---- */
   --t-display-font:      var(--font-sans);
   --t-display-weight:    800;
   --t-display-tracking:  -0.02em;
@@ -21,12 +21,12 @@
   --t-card-shadow:       0 1px 2px rgba(10,10,10,0.03);
   --t-bg-page:           #f7f8f7;
 
-  --t-accent:            #7ac142;
-  --t-accent-hover:      #2e5a12;
-  --t-accent-pale:       #cfeab0;
-  --t-accent-soft:       #f0f9e6;
-  --t-accent-deep:       #2e5a12;
-  --t-accent-fg:         #111;        /* foreground on accent bg */
+  --t-accent:            #1d4ed8;
+  --t-accent-hover:      #0f2f6b;
+  --t-accent-pale:       #dbeafe;
+  --t-accent-soft:       #eff6ff;
+  --t-accent-deep:       #0f2f6b;
+  --t-accent-fg:         #fff;
 
   --t-pad-page-y:        32px;
   --t-pad-page-x:        40px;
@@ -69,6 +69,14 @@
 }
 
 /* ============== ACCENT PALETTE ============== */
+.app[data-accent="cobalt"] {
+  --t-accent:       #1d4ed8;
+  --t-accent-hover: #0f2f6b;
+  --t-accent-pale:  #dbeafe;
+  --t-accent-soft:  #eff6ff;
+  --t-accent-deep:  #0f2f6b;
+  --t-accent-fg:    #fff;
+}
 .app[data-accent="forest"] {
   --t-accent:       #2e5a12;
   --t-accent-hover: #1a3608;
@@ -254,6 +262,7 @@
 .app[data-accent="ink"]  .cv-1 { background: linear-gradient(135deg, #0a0e16 0%, #1f2937 60%, #4a6585 110%); }
 .app[data-accent="ink"]  .cv-2 { background: linear-gradient(135deg, #0e1a2c 0%, #486a92 110%); }
 .app[data-accent="forest"] .cv-1 { background: linear-gradient(135deg, #0a1a04 0%, #1a3608 60%, #2e5a12 110%); }
+.app[data-accent="cobalt"] .cv-1 { background: linear-gradient(135deg, #071833 0%, #0f2f6b 60%, #1d4ed8 110%); }
 
 /* Field mood — flatten card shadows except cert */
 .app[data-mood="field"] .course-card,

@@ -1,5 +1,5 @@
 // =========================================================
-// GIM LMS — Admin modals: New Assessment, Department editor,
+// OneSource LMS — Admin modals: New Assessment, Department editor,
 //          Role editor
 // =========================================================
 
@@ -703,17 +703,26 @@ const DepartmentEditModal = ({ open, onClose, initial }) => {
   const isNew = !initial;
   const [name, setName] = React.useState("");
   const [autoAssign, setAutoAssign] = React.useState(true);
-  const [iconIdx, setIconIdx] = React.useState(0);
+  const [icon, setIcon] = React.useState("house");
+  const [companyId, setCompanyId] = React.useState("");
 
   React.useEffect(() => {
     if (!open) return;
+    const fallbackCompany = initial?.companyId || getAdminBrandCompany()?.id || getCompanyDocs()[0]?.id || "";
+    const fallbackIcon = initial?.icon || (DEPT_PRESETS[initial?.iconIdx ?? 0] || DEPT_PRESETS[0]).icon || "house";
     setName(initial?.name || "");
     setAutoAssign(initial?.autoAssign ?? true);
-    setIconIdx(initial?.iconIdx ?? 0);
+    setIcon(fallbackIcon);
+    setCompanyId(fallbackCompany);
   }, [open, initial]);
 
-  const peopleCount = initial ? (ALL_USERS.filter(u => u.dept === initial.name).length) : 0;
-  const valid = name.trim().length >= 2;
+  const companies = getCompanyDocs();
+  const iconChoices = getIconChoices();
+  const selectedCompany = companyId ? getCompanyById(companyId) : null;
+  const peopleCount = initial ? (ALL_USERS.filter(u =>
+    u.dept === initial.name && (!initial.companyId || u.companyId === initial.companyId)
+  ).length) : 0;
+  const valid = name.trim().length >= 2 && !!companyId;
   const [busy, setBusy] = React.useState(false);
 
   const save = async () => {
@@ -724,8 +733,9 @@ const DepartmentEditModal = ({ open, onClose, initial }) => {
       await saveDepartment({
         id: initial?.id,
         name: name.trim(),
+        companyId,
         autoAssign,
-        iconIdx,
+        icon,
       });
       showToast?.(`${isNew ? "Created" : "Updated"} department "${name.trim()}"`);
       onClose();
@@ -772,17 +782,31 @@ const DepartmentEditModal = ({ open, onClose, initial }) => {
         </div>
 
         <div style={{ marginBottom: 18 }}>
+          <FieldLabel required>Company</FieldLabel>
+          <select className="cd-input" value={companyId} onChange={e => setCompanyId(e.target.value)}>
+            <option value="">Choose company...</option>
+            {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          {selectedCompany && (
+            <div className="text-xs text-muted" style={{ marginTop: 6 }}>
+              Department choices will only appear for people matched to {selectedCompany.name}.
+            </div>
+          )}
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
           <FieldLabel>Icon</FieldLabel>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8 }}>
-            {DEPT_PRESETS.map((p, i) => (
-              <button key={i} onClick={() => setIconIdx(i)} title={p.label} style={{
+            {iconChoices.map((p) => (
+              <button key={p.id} onClick={() => setIcon(p.id)} title={p.label} style={{
                 aspectRatio: "1 / 1", borderRadius: 10, border: "2px solid",
-                borderColor: iconIdx === i ? "#7ac142" : "#ececec",
-                background: p.bg, color: p.color,
+                borderColor: icon === p.id ? "#7ac142" : "#ececec",
+                background: icon === p.id ? "#f0f9e6" : "#fff",
+                color: icon === p.id ? "#2e5a12" : "#111",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 cursor: "pointer",
               }}>
-                <Icon name={p.icon} size={18}/>
+                <Icon name={p.icon || p.id} size={18}/>
               </button>
             ))}
           </div>
@@ -849,6 +873,7 @@ const CategoryEditModal = ({ open, onClose, initial }) => {
   }, [open, initial]);
 
   const courseCount = initial ? COURSES.filter(c => c.cat === initial.name).length : 0;
+  const iconChoices = getIconChoices();
   const valid = name.trim().length >= 2;
 
   const save = async () => {
@@ -910,16 +935,16 @@ const CategoryEditModal = ({ open, onClose, initial }) => {
         <div style={{ marginBottom: 18 }}>
           <FieldLabel>Icon</FieldLabel>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 8 }}>
-            {(CATEGORY_ICON_CHOICES || []).map(p => (
-              <button key={p.icon} onClick={() => setIcon(p.icon)} title={p.label} style={{
+            {iconChoices.map(p => (
+              <button key={p.id} onClick={() => setIcon(p.id)} title={p.label} style={{
                 aspectRatio: "1 / 1", borderRadius: 10, border: "2px solid",
-                borderColor: icon === p.icon ? "#7ac142" : "#ececec",
-                background: icon === p.icon ? "#f0f9e6" : "#fff",
-                color: icon === p.icon ? "#2e5a12" : "#111",
+                borderColor: icon === p.id ? "#7ac142" : "#ececec",
+                background: icon === p.id ? "#f0f9e6" : "#fff",
+                color: icon === p.id ? "#2e5a12" : "#111",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 cursor: "pointer",
               }}>
-                <Icon name={p.icon} size={19}/>
+                <Icon name={p.icon || p.id} size={19}/>
               </button>
             ))}
           </div>

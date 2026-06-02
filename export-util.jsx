@@ -1,5 +1,5 @@
 // =========================================================
-// GIM LMS — Export utility (CSV + Excel) + ExportButton
+// OneSource LMS — Export utility (CSV + Excel) + ExportButton
 // =========================================================
 
 const csvEscape = (v) => {
@@ -290,7 +290,7 @@ const ExportButton = ({ page, label = "Export", filename, variant = "ghost", siz
     setOpen(false);
     const ds = (EXPORT_DATASETS[page] || (() => null))();
     if (!ds) { alert(`No data to export from this page.`); return; }
-    const base = filename || `gim-${page}-${stamp()}`;
+    const base = filename || `onesource-${page}-${stamp()}`;
     if (format === "csv") {
       downloadBlob(`${base}.csv`, toCSV(ds.rows, ds.columns), "text/csv;charset=utf-8");
     } else {

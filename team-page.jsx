@@ -1,5 +1,5 @@
 // =========================================================
-// GIM LMS — My Team page (manager view)
+// OneSource LMS — My Team page (manager view)
 // =========================================================
 
 const MyTeamPage = () => {
@@ -46,8 +46,8 @@ const MyTeamPage = () => {
         recipients,
         subject: subject || "Training reminder",
         message: message || (overdueOnly
-          ? "This is a reminder that you have overdue training in GIM Learning. Please complete it as soon as possible."
-          : "This is a reminder to complete your outstanding training in GIM Learning."),
+          ? "This is a reminder that you have overdue training in OneSource. Please complete it as soon as possible."
+          : "This is a reminder to complete your outstanding training in OneSource."),
       });
       showToast?.(`Reminder sent to ${res.sent} ${res.sent === 1 ? "report" : "reports"}.`);
     } catch (err) {
@@ -60,7 +60,7 @@ const MyTeamPage = () => {
     try {
       const res = await sendEmailReminder({
         recipients: [{ email: m.email, name: m.name }],
-        message: "Just a friendly nudge to keep your training moving along in GIM Learning.",
+        message: "Just a friendly nudge to keep your training moving along in OneSource.",
       });
       showToast?.(res.sent ? `Nudge sent to ${m.name}` : `Failed: ${res.errors?.[0]?.error || "unknown error"}`);
     } catch (err) { alert("Nudge failed: " + err.message); }
@@ -258,7 +258,7 @@ const MyTeamPage = () => {
 const ReminderComposer = ({ team, memberStats, onClose, onSend }) => {
   const [scope, setScope] = React.useState("overdue");
   const [subject, setSubject] = React.useState("Training reminder");
-  const [body, setBody] = React.useState("This is a reminder to complete your outstanding training in GIM Learning.");
+  const [body, setBody] = React.useState("This is a reminder to complete your outstanding training in OneSource.");
   const [busy, setBusy] = React.useState(false);
 
   const overdueCount = team.filter(m => memberStats(m.id).overdue > 0).length;

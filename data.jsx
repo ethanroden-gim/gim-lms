@@ -1,9 +1,29 @@
 // =========================================================
-// GIM LMS — shared icons + data + small primitives
+// OneSource LMS — shared icons + data + small primitives
 // Exposed on window for sibling JSX scripts.
 // =========================================================
 
 const Icon = ({ name, className = "", size = 18, color, style }) => {
+  const customIcon = (window.ICON_DOCS || []).find(i => i && i.id === name && i.url);
+  if (customIcon) {
+    return (
+      <img
+        src={customIcon.url}
+        alt=""
+        title={customIcon.label || ""}
+        className={className}
+        style={{
+          width: size,
+          height: size,
+          objectFit: "contain",
+          display: "inline-block",
+          flexShrink: 0,
+          ...style,
+        }}
+        onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
+      />
+    );
+  }
   const props = {
     width: size, height: size, viewBox: "0 0 24 24",
     fill: "none", stroke: color || "currentColor", strokeWidth: 2,
@@ -109,6 +129,24 @@ const CATEGORY_ICON_CHOICES = [
   { icon: "users", label: "People" },
   { icon: "tag", label: "General" },
 ];
+
+const ICON_DOCS = [];       // Firestore-backed custom icon library
+const ICON_SETTINGS = { navIcons: {} };
+const NAV_ICON_TARGETS = [
+  { id: "home", label: "Learner dashboard", fallback: "home" },
+  { id: "catalog", label: "Course catalog", fallback: "compass" },
+  { id: "learning", label: "My learning", fallback: "book" },
+  { id: "certs", label: "Certificates", fallback: "award" },
+  { id: "team", label: "My team", fallback: "users" },
+  { id: "admin-overview", label: "Admin overview", fallback: "chart" },
+  { id: "admin-courses", label: "Admin courses", fallback: "book" },
+  { id: "admin-users", label: "People & enrollments", fallback: "users" },
+  { id: "admin-assess", label: "Assessments", fallback: "quiz" },
+  { id: "admin-attempts", label: "Attempts", fallback: "list" },
+  { id: "admin-activity", label: "Activity", fallback: "clock" },
+  { id: "admin-cert", label: "Certificate designer", fallback: "award" },
+  { id: "admin-settings", label: "Settings", fallback: "settings" },
+];
 const CATEGORY_COLOR_CHOICES = [
   { id: "green", label: "Green", bg: "#f0f9e6", color: "#2e5a12", borderColor: "#cfeab0" },
   { id: "blue", label: "Blue", bg: "#eaf3ff", color: "#1f4e79", borderColor: "#bfd8f2" },
@@ -123,13 +161,14 @@ const CATEGORY_BROWSE_DEFAULTS = ["Property Management", "Maintenance", "Custome
 
 const COMPANY_DOCS = [];     // Firestore-backed company/entity records
 const DEFAULT_COMPANY = {
-  id: "gim",
-  name: "GIM Property Management",
-  domains: ["getgim.com"],
-  logoUrl: "assets/logo-landscape-onblack.png",
-  certificateLogoUrl: "assets/logo-landscape.png",
-  accent: "#7ac142",
-  secondary: "#2e5a12",
+  id: "onesource",
+  name: "OneSource",
+  domains: [],
+  logoUrl: "",
+  certificateLogoUrl: "",
+  certificateName: "OneSource",
+  accent: "#1d4ed8",
+  secondary: "#0f2f6b",
   active: true,
   adminBrand: true,
 };
@@ -197,6 +236,51 @@ const getCategoryChipStyle = (nameOrDoc) => {
   return { background: palette.bg, color: palette.color, borderColor: palette.borderColor };
 };
 
+const iconDocId = (label = "") => {
+  const base = String(label || "icon").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return `ico-${base || Math.random().toString(36).slice(2, 8)}`;
+};
+
+const normalizeIconDoc = (icon = {}, idx = 0) => {
+  const label = String(icon.label || icon.name || `Custom icon ${idx + 1}`).trim();
+  return {
+    id: icon.id || iconDocId(label),
+    label,
+    url: String(icon.url || "").trim(),
+    tags: String(icon.tags || icon.scope || "").trim(),
+    active: icon.active !== false,
+    sortOrder: icon.sortOrder ?? idx,
+  };
+};
+
+const getCustomIconDocs = () => (window.ICON_DOCS || ICON_DOCS || [])
+  .filter(i => i && i.url && i.active !== false)
+  .map(normalizeIconDoc)
+  .sort((a, b) => (a.label || "").localeCompare(b.label || ""));
+
+const getIconChoices = () => [
+  ...(window.CATEGORY_ICON_CHOICES || CATEGORY_ICON_CHOICES || []).map(p => ({
+    id: p.icon,
+    icon: p.icon,
+    label: p.label,
+    builtin: true,
+  })),
+  ...getCustomIconDocs().map(p => ({
+    id: p.id,
+    icon: p.id,
+    label: p.label,
+    custom: true,
+    url: p.url,
+  })),
+];
+
+const getIconChoiceById = (id) => getIconChoices().find(p => p.id === id || p.icon === id);
+
+const getNavIcon = (id, fallback) => {
+  const map = (window.ICON_SETTINGS || ICON_SETTINGS || {}).navIcons || {};
+  return map[id] || fallback;
+};
+
 const normalizeDomain = (value = "") => String(value || "")
   .trim()
   .toLowerCase()
@@ -213,7 +297,7 @@ const companyDocId = (name = "") => {
   return `co-${base || Math.random().toString(36).slice(2, 8)}`;
 };
 
-const normalizeHexColor = (value = "", fallback = "#7ac142") => {
+const normalizeHexColor = (value = "", fallback = "#1d4ed8") => {
   const raw = String(value || "").trim();
   const withHash = raw.startsWith("#") ? raw : `#${raw}`;
   if (/^#[0-9a-f]{6}$/i.test(withHash)) return withHash.toLowerCase();
@@ -265,7 +349,7 @@ const getCompanyForEmail = (email) => {
 };
 const getAdminBrandCompany = () => getCompanyDocs().find(c => c.adminBrand && c.active !== false) || getCompanyDocs()[0] || DEFAULT_COMPANY;
 const getCurrentUserCompany = () => getCompanyById((window.CURRENT_USER || CURRENT_USER).companyId) || getCompanyForEmail((window.CURRENT_USER || CURRENT_USER).email);
-const getBrandCompany = (mode = "learner") => mode === "admin" ? getAdminBrandCompany() : (getCurrentUserCompany() || getAdminBrandCompany());
+const getBrandCompany = (mode = "learner") => mode === "admin" ? getAdminBrandCompany() : (getCurrentUserCompany() || DEFAULT_COMPANY);
 const getBrandStyle = (mode = "learner") => {
   const co = getBrandCompany(mode);
   const accent = normalizeHexColor(co.accent || DEFAULT_COMPANY.accent, DEFAULT_COMPANY.accent);
@@ -377,9 +461,10 @@ Object.assign(window, {
   CURRENT_USER, DEPARTMENTS, CATEGORIES, COURSES, ENROLLMENTS, ASSIGNED, ACTIVITY,
   ALL_ACTIVITY, ADMIN_ACTIVITY,
   ALL_USERS, SAMPLE_QUIZ, TEAM_MEMBERS, ENROLLMENT_COUNTS, DEPARTMENT_DOCS, ROLE_DOCS, CATEGORY_DOCS,
-  COMPANY_DOCS, DEFAULT_COMPANY,
+  COMPANY_DOCS, DEFAULT_COMPANY, ICON_DOCS, ICON_SETTINGS, NAV_ICON_TARGETS,
   CATEGORY_ICON_CHOICES, CATEGORY_COLOR_CHOICES, CATEGORY_BROWSE_DEFAULTS,
   getCategoryDocs, getCategoryNames, getBrowseCategories, getCategoryByName, getCategoryChipStyle,
+  iconDocId, normalizeIconDoc, getCustomIconDocs, getIconChoices, getIconChoiceById, getNavIcon,
   normalizeDomain, domainFromEmail, companyDocId, normalizeCompany, getCompanyDocs, getCompanyById, getCompanyForEmail,
   normalizeHexColor, isLightHexColor,
   getAdminBrandCompany, getCurrentUserCompany, getBrandCompany, getBrandStyle, companyName, companyNames,

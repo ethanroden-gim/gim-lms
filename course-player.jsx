@@ -1,5 +1,5 @@
 // =========================================================
-// GIM LMS — Course player + Assessment + Certificate
+// OneSource LMS — Course player + Assessment + Certificate
 // =========================================================
 
 // Normalise YouTube / Google Drive URLs to embed format so iframes work
@@ -950,9 +950,9 @@ const CertificatePage = ({ courseId, goBack }) => {
       </div>
     );
   }
-  const certNo = "GIM-" + (course.id.toUpperCase().replace(/[^A-Z]/g, "")) + "-" + (1000 + Math.abs(course.id.length * 137) % 9000);
+  const certNo = "OS-" + (course.id.toUpperCase().replace(/[^A-Z]/g, "")) + "-" + (1000 + Math.abs(course.id.length * 137) % 9000);
   const certCompany = getCurrentUserCompany() || getBrandCompany("learner");
-  const companyInitials = (certCompany.name || "GIM").split(/\s+/).map(w => w[0]).join("").slice(0, 4);
+  const companyInitials = (certCompany.name || "OneSource").split(/\s+/).map(w => w[0]).join("").slice(0, 4);
   const template = {
     ...(window.CERTIFICATE_TEMPLATE || CERTIFICATE_DEFAULTS),
     accent: certCompany.accent || (window.CERTIFICATE_TEMPLATE || CERTIFICATE_DEFAULTS).accent,
@@ -982,8 +982,8 @@ const CertificatePage = ({ courseId, goBack }) => {
             try {
               await sendEmailReminder({
                 recipients: [{ email: CURRENT_USER.email, name: CURRENT_USER.name }],
-                subject: `Your GIM Learning certificate — ${course.title}`,
-                message: `Congratulations on completing ${course.title}. Your certificate (number ${certNo}) is available in GIM Learning whenever you need it.`,
+                subject: `Your OneSource certificate — ${course.title}`,
+                message: `Congratulations on completing ${course.title}. Your certificate (number ${certNo}) is available in OneSource whenever you need it.`,
               });
               showToast?.("Email sent.");
             } catch (err) { alert("Email failed: " + err.message); }
@@ -1031,7 +1031,7 @@ const CertificatePage = ({ courseId, goBack }) => {
           <div style={{ display: "flex", gap: 32 }}>
             <div className="cert__sig-block">
               <div className="sig">Carlos Reyes</div>
-              <div>Director of Operations · GIM</div>
+              <div>Director of Operations</div>
             </div>
             <div className="cert__sig-block">
               <div className="sig">{e.completedOn || "Today"}</div>
@@ -1042,7 +1042,7 @@ const CertificatePage = ({ courseId, goBack }) => {
               <div>Final assessment score</div>
             </div>
           </div>
-          <div className="cert__seal">RENT · MANAGE · MAINTAIN</div>
+          <div className="cert__seal">ONESOURCE</div>
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 // =========================================================
-// GIM LMS — Assign Training Modal + Row Action Menu
+// OneSource LMS — Assign Training Modal + Row Action Menu
 // =========================================================
 
 // ---------- Modal shell ----------
@@ -64,17 +64,29 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
   const filteredPeople  = ALL_USERS
     .filter(u => !peopleQuery || u.name.toLowerCase().includes(peopleQuery.toLowerCase()))
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  const deptOptions = (DEPARTMENT_DOCS.length > 0 ? DEPARTMENT_DOCS.map(d => d.name) : DEPARTMENTS)
-    .sort((a, b) => (a || "").localeCompare(b || ""));
+  const deptRows = (DEPARTMENT_DOCS.length > 0
+    ? DEPARTMENT_DOCS
+    : DEPARTMENTS.map(name => ({ id: `preset-${name}`, name, companyId: "" })))
+    .sort((a, b) =>
+      (companyName(a.companyId) || "").localeCompare(companyName(b.companyId) || "") ||
+      (a.name || "").localeCompare(b.name || "")
+    );
+  const deptKey = (d) => `${d.companyId || "all"}::${d.name}`;
+  const deptLabel = (d) => `${d.name}${d.companyId ? ` (${companyName(d.companyId) || "Company"})` : ""}`;
+  const selectedDeptRows = deptRows.filter(d => depts.includes(deptKey(d)));
 
   // Resolve audience to actual user IDs
   const targetUserIds = React.useMemo(() => {
     if (audience === "all")            return ALL_USERS.filter(u => u.status !== "leave" && u.status !== "inactive").map(u => u.id);
-    if (audience === "department")     return ALL_USERS.filter(u => depts.includes(u.dept) && u.status !== "leave" && u.status !== "inactive").map(u => u.id);
+    if (audience === "department")     return ALL_USERS.filter(u =>
+      u.status !== "leave" &&
+      u.status !== "inactive" &&
+      selectedDeptRows.some(d => u.dept === d.name && (!d.companyId || u.companyId === d.companyId))
+    ).map(u => u.id);
     if (audience === "role-onboarding")return ALL_USERS.filter(u => u.status === "onboarding").map(u => u.id);
     if (audience === "people")         return people;
     return [];
-  }, [audience, depts, people]);
+  }, [audience, depts, people, DEPARTMENT_DOCS.length, ALL_USERS.length]);
 
   const affected = targetUserIds.length;
   const totalEnrollments = affected * courseIds.length;
@@ -131,7 +143,7 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
               subject: `New training assigned: ${titles}`,
               course: titles,
               dueDate: dueDays != null ? `In ${dueDays} day${dueDays === 1 ? "" : "s"}` : "",
-              message: `You've been assigned new training in GIM Learning:\n${titles}${dueLine}\n\nLog in to start.`,
+              message: `You've been assigned new training in OneSource:\n${titles}${dueLine}\n\nLog in to start.`,
             });
             emailNote = ` · emailed ${res.sent || 0} learner${res.sent === 1 ? "" : "s"}`;
           }
@@ -232,16 +244,19 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
               <div style={{ marginTop: 16 }}>
                 <div className="cd-section-title">Departments</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-                  {deptOptions.length === 0 ? (
+                  {deptRows.length === 0 ? (
                     <div className="text-xs text-muted">No departments yet — create one in Admin → Roles &amp; departments.</div>
-                  ) : deptOptions.map(d => (
-                    <button key={d} onClick={() => toggleDept(d)} style={{
+                  ) : deptRows.map(d => {
+                    const key = deptKey(d);
+                    const count = ALL_USERS.filter(u => u.dept === d.name && (!d.companyId || u.companyId === d.companyId)).length;
+                    return (
+                    <button key={key} onClick={() => toggleDept(key)} style={{
                       padding: "6px 12px", borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                      border: depts.includes(d) ? "1px solid #7ac142" : "1px solid #ddd",
-                      background: depts.includes(d) ? "#7ac142" : "#fff",
-                      color: depts.includes(d) ? "#fff" : "#111",
-                    }}>{d} <span style={{ opacity: 0.7 }}>({ALL_USERS.filter(u => u.dept === d).length})</span></button>
-                  ))}
+                      border: depts.includes(key) ? "1px solid #7ac142" : "1px solid #ddd",
+                      background: depts.includes(key) ? "#7ac142" : "#fff",
+                      color: depts.includes(key) ? "#fff" : "#111",
+                    }}>{deptLabel(d)} <span style={{ opacity: 0.7 }}>({count})</span></button>
+                  );})}
                 </div>
               </div>
             )}
@@ -334,7 +349,7 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
               <ReviewLine label="Courses"   value={`${courseIds.length} selected`} detail={courseIds.map(id => COURSES.find(c => c.id === id)?.title).filter(Boolean).join(", ")} />
               <ReviewLine label="Audience"  value={`${affected} learner${affected === 1 ? "" : "s"}`}
                 detail={
-                  audience === "department" ? depts.join(", ") || "—" :
+                  audience === "department" ? selectedDeptRows.map(deptLabel).join(", ") || "None selected" :
                   audience === "people" ? people.map(id => ALL_USERS.find(u => u.id === id)?.name || id).join(", ") || "—" :
                   audience === "role-onboarding" ? "All onboarding employees" :
                   "All active employees"

@@ -1,5 +1,5 @@
 // =========================================================================
-// GIM LMS — Tweaks panel
+// OneSource LMS — Tweaks panel
 // Three expressive controls that reshape the feel:
 //   1. Aesthetic mood   — display font + corner radius + card style + page bg
 //   2. Accent palette   — primary action color across buttons, chips, bars
@@ -8,7 +8,7 @@
 
 const GIM_TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "mood": "operator",
-  "accent": "green",
+  "accent": "cobalt",
   "density": "comfortable"
 }/*EDITMODE-END*/;
 
@@ -62,7 +62,7 @@ const MoodTile = ({ mood, label, active, onClick }) => {
           fontSize: 14, marginTop: 2, color: "#111", letterSpacing: mood === "field" ? "0.06em" : "-0.01em",
         }}>{s.title}</div>
         <div style={{ marginTop: 6, height: 3, background: "#ececec", borderRadius: s.radius > 4 ? 999 : 0, overflow: "hidden" }}>
-          <div style={{ width: "60%", height: "100%", background: "#7ac142" }}/>
+          <div style={{ width: "60%", height: "100%", background: "#1d4ed8" }}/>
         </div>
       </div>
       <div style={{ fontSize: 11, fontWeight: 700, color: "#111" }}>{label}</div>
@@ -118,8 +118,8 @@ const GimTweaks = () => {
       <TweakSection label="Accent palette"/>
       <TweakHelp>Recolors buttons, progress, active states & seals.</TweakHelp>
       <div style={{ display: "flex", gap: 4, padding: "0 4px 12px", justifyContent: "space-between" }}>
-        <PaletteSwatch label="GIM" active={t.accent === "green"}  onClick={() => setTweak("accent", "green")}
-          colors={["#7ac142", "#cfeab0", "#2e5a12", "#111"]}/>
+        <PaletteSwatch label="Cobalt" active={t.accent === "cobalt"}  onClick={() => setTweak("accent", "cobalt")}
+          colors={["#1d4ed8", "#dbeafe", "#0f2f6b", "#111"]}/>
         <PaletteSwatch label="Forest" active={t.accent === "forest"} onClick={() => setTweak("accent", "forest")}
           colors={["#2e5a12", "#9ed458", "#1a3608", "#111"]}/>
         <PaletteSwatch label="Clay" active={t.accent === "clay"}   onClick={() => setTweak("accent", "clay")}

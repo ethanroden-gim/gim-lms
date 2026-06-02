@@ -1,5 +1,5 @@
 // =========================================================
-// GIM LMS — Firebase wiring (auth + Firestore live data)
+// OneSource LMS — Firebase wiring (auth + Firestore live data)
 // =========================================================
 // Mirrors Firestore collections into the existing globals
 // (COURSES, ALL_USERS, ENROLLMENTS, ASSIGNED, ACTIVITY) so
@@ -336,6 +336,17 @@ const subscribeToData = (onChange) => {
     onChange();
   }, err => {
     if (err.code !== "permission-denied") console.error("company settings listener:", err);
+  }));
+
+  subs.push(fbDb.collection("settings").doc("icons").onSnapshot(d => {
+    const data = d.exists ? (d.data() || {}) : {};
+    const arr = (data.items || []).filter(i => i && i.url);
+    arr.sort((a, b) => (a.label || "").localeCompare(b.label || ""));
+    setArr(ICON_DOCS, arr);
+    setObj(ICON_SETTINGS, { navIcons: data.navIcons || {} });
+    onChange();
+  }, err => {
+    if (err.code !== "permission-denied") console.error("icon settings listener:", err);
   }));
 
   subs.push(fbDb.collection("assessments").onSnapshot(s => {
@@ -695,8 +706,8 @@ const cleanCompany = (company = {}, idx = 0) => {
     logoUrl: normalized.logoUrl || "",
     certificateLogoUrl: normalized.certificateLogoUrl || normalized.logoUrl || "",
     certificateName: normalized.certificateName || normalized.name || "",
-    accent: window.normalizeHexColor?.(normalized.accent || "#7ac142", "#7ac142") || "#7ac142",
-    secondary: window.normalizeHexColor?.(normalized.secondary || normalized.accent || "#2e5a12", "#2e5a12") || "#2e5a12",
+    accent: window.normalizeHexColor?.(normalized.accent || "#1d4ed8", "#1d4ed8") || "#1d4ed8",
+    secondary: window.normalizeHexColor?.(normalized.secondary || normalized.accent || "#0f2f6b", "#0f2f6b") || "#0f2f6b",
     active: normalized.active !== false,
     adminBrand: !!normalized.adminBrand,
   });
@@ -713,6 +724,42 @@ const saveCompanies = async (items = []) => {
   replaceArray(COMPANY_DOCS, cleanItems);
   recordAdminActivity("Updated company settings", { count: cleanItems.length }).catch(() => {});
   return cleanItems;
+};
+
+// ---- Icon library ---------------------------------------------------------
+const iconSettingsRef = () => fbDb.collection("settings").doc("icons");
+
+const cleanIconItem = (icon = {}, idx = 0) => {
+  const normalized = window.normalizeIconDoc?.(icon, idx) || icon;
+  return stripUndefinedFields({
+    id: normalized.id || window.iconDocId?.(normalized.label) || `ico-${idx}`,
+    label: String(normalized.label || "").trim(),
+    url: String(normalized.url || "").trim(),
+    tags: String(normalized.tags || "").trim(),
+    active: normalized.active !== false,
+    sortOrder: normalized.sortOrder ?? idx,
+  });
+};
+
+const saveIconSettings = async ({ items = [], navIcons = {} } = {}) => {
+  if (!fbReady) throw new Error("Firebase not configured");
+  const cleanItems = items
+    .filter(i => i && i.label && i.url)
+    .map(cleanIconItem)
+    .sort((a, b) => (a.label || "").localeCompare(b.label || ""));
+  const cleanNavIcons = Object.fromEntries(
+    Object.entries(navIcons || {}).filter(([, value]) => value)
+  );
+  await iconSettingsRef().set({
+    items: cleanItems,
+    navIcons: cleanNavIcons,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  replaceArray(ICON_DOCS, cleanItems);
+  Object.keys(ICON_SETTINGS).forEach(k => delete ICON_SETTINGS[k]);
+  Object.assign(ICON_SETTINGS, { navIcons: cleanNavIcons });
+  recordAdminActivity("Updated icon settings", { count: cleanItems.length }).catch(() => {});
+  return { items: cleanItems, navIcons: cleanNavIcons };
 };
 
 // ---- Categories -----------------------------------------------------------
@@ -1008,7 +1055,7 @@ const sendEmailReminder = async ({ recipients, subject, message, course, dueDate
 
   const payload = {
     recipients,
-    subject: subject || (course ? `Reminder: ${course}` : "GIM Learning reminder"),
+    subject: subject || (course ? `Reminder: ${course}` : "OneSource reminder"),
     message: message || "",
     course: course || "",
     dueDate: dueDate || "",
@@ -1057,7 +1104,7 @@ Object.assign(window, {
   hydrateUserFromFirebase,
   saveCourse, archiveCourse, deleteCourse, duplicateCourse,
   saveDepartment, deleteDepartment,
-  saveRole, deleteRole, saveCompanies, saveCategory, deleteCategory, seedDefaultCategories,
+  saveRole, deleteRole, saveCompanies, saveIconSettings, saveCategory, deleteCategory, seedDefaultCategories,
   saveAssessment, archiveAssessment, deleteAssessment,
   saveCertificateTemplate,
   assignTraining, daysUntilDue, updateUser, createDirectoryUser, mergeUserProfiles, resetUserProgress, resetCourseProgress, unassignCourse,

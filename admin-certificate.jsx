@@ -1,5 +1,5 @@
 // =========================================================
-// GIM LMS — Admin: Certificate Designer
+// OneSource LMS — Admin: Certificate Designer
 // =========================================================
 
 const AdminCertificateDesignerPage = () => {
@@ -41,7 +41,7 @@ const AdminCertificateDesignerPage = () => {
   const sampleLearner = CURRENT_USER.name || "Sample Learner";
   const sampleDate    = new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
   const sampleScore   = 95;
-  const sampleCertNo  = "GIM-PREVIEW-" + new Date().getFullYear();
+  const sampleCertNo  = "OS-PREVIEW-" + new Date().getFullYear();
 
   // Logo upload
   const fileRef = React.useRef(null);
@@ -116,7 +116,7 @@ const AdminCertificateDesignerPage = () => {
             <div className="cd-field">
               <label>Accent color</label>
               <div style={{ display: "flex", gap: 6, marginTop: 6, alignItems: "center" }}>
-                {["#7ac142", "#2e5a12", "#111111", "#a8232b", "#1a4f8b", "#b07b1f"].map(c => (
+                {["#1d4ed8", "#0f2f6b", "#111111", "#a8232b", "#7ac142", "#b07b1f"].map(c => (
                   <button key={c} onClick={() => update({ accent: c })} title={c} style={{
                     width: 26, height: 26, borderRadius: "50%", border: t.accent === c ? "2px solid #111" : "2px solid transparent",
                     background: c, cursor: "pointer", padding: 0,

@@ -1,5 +1,5 @@
 // =========================================================
-// GIM LMS — Learner pages
+// OneSource LMS — Learner pages
 // =========================================================
 
 // Format a Firestore Timestamp / Date / string into a friendly date label

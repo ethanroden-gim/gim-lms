@@ -1,5 +1,5 @@
 // =========================================================
-// GIM LMS — Admin pages (lightweight)
+// OneSource LMS — Admin pages (lightweight)
 // =========================================================
 
 const _adminSortText = (v) => String(v ?? "").toLowerCase();
@@ -187,13 +187,16 @@ const AdminOverviewPage = ({ goRoute }) => {
   const complianceRate = totals.assigned ? Math.round((totals.completed / totals.assigned) * 100) : null;
 
   // Department list — Firestore-backed only. No fallback to hardcoded names.
-  const departmentNames = DEPARTMENT_DOCS.map(d => d.name).sort((a, b) => a.localeCompare(b));
-  const deptCompliance = departmentNames.map(dept => {
-    const people = ALL_USERS.filter(u => u.dept === dept);
+  const departmentRows = [...DEPARTMENT_DOCS].sort((a, b) =>
+    (companyName(a.companyId) || "").localeCompare(companyName(b.companyId) || "") ||
+    (a.name || "").localeCompare(b.name || "")
+  );
+  const deptCompliance = departmentRows.map(dept => {
+    const people = ALL_USERS.filter(u => u.dept === dept.name && (!dept.companyId || u.companyId === dept.companyId));
     let a = 0, c = 0;
     people.forEach(u => { const s = userStats(u.id); a += s.assigned; c += s.completed; });
     const pct = a ? Math.round((c / a) * 100) : null;
-    return { dept, headcount: people.length, assigned: a, complete: pct, on_track: pct === null ? true : pct >= 85 };
+    return { dept: dept.name, company: companyName(dept.companyId), headcount: people.length, assigned: a, complete: pct, on_track: pct === null ? true : pct >= 85 };
   });
 
   return (
@@ -202,7 +205,7 @@ const AdminOverviewPage = ({ goRoute }) => {
         <div>
           <div className="page-head__eyebrow">Admin</div>
           <h1 className="page-head__title">Training overview</h1>
-          <div className="page-head__sub">Real-time view of compliance and training across GIM.</div>
+          <div className="page-head__sub">Real-time view of compliance and training across OneSource.</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <ExportButton page="admin-overview" label="Export report" />
@@ -214,7 +217,7 @@ const AdminOverviewPage = ({ goRoute }) => {
         <div className="stat">
           <div className="stat__label">Active learners</div>
           <div className="stat__value">{activeLearners}</div>
-          <div className="stat__sub">across {departmentNames.length} {departmentNames.length === 1 ? "department" : "departments"}</div>
+          <div className="stat__sub">across {departmentRows.length} {departmentRows.length === 1 ? "department" : "departments"}</div>
         </div>
         <div className="stat">
           <div className="stat__label">Compliance rate</div>
@@ -248,10 +251,11 @@ const AdminOverviewPage = ({ goRoute }) => {
                 </div>
               )}
               {deptCompliance.map(d => (
-                <div key={d.dept} style={{ padding: "14px 16px", borderBottom: "1px solid #f3f3f3" }}>
+                <div key={`${d.company || "all"}-${d.dept}`} style={{ padding: "14px 16px", borderBottom: "1px solid #f3f3f3" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 14 }}>{d.dept}</div>
+                      {d.company && <div style={{ fontSize: 11, color: "#5f635f" }}>{d.company}</div>}
                       <div style={{ fontSize: 12, color: "#5f635f" }}>{d.assigned} assigned · {d.headcount} {d.headcount === 1 ? "person" : "people"}</div>
                     </div>
                     <div style={{ textAlign: "right" }}>
@@ -666,9 +670,19 @@ const AdminUsersPage = () => {
 
   const statusMap = { "Active": "active", "Onboarding": "onboarding", "On leave": "leave", "Inactive": "inactive" };
   const departmentOptions = [...DEPARTMENT_DOCS].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const departmentLabel = (d) => `${d.name}${d.companyId ? ` (${companyName(d.companyId) || "Company"})` : ""}`;
+  const deptAppliesToUser = (d, u) => !d.companyId || !u.companyId || d.companyId === u.companyId;
+  const selectedUsers = selectedIds.map(id => ALL_USERS.find(u => u.id === id)).filter(Boolean);
+  const bulkDepartmentOptions = departmentOptions.filter(d =>
+    selectedUsers.length === 0 || selectedUsers.every(u => deptAppliesToUser(d, u))
+  );
   const filtered = ALL_USERS.filter(u => {
     if (q && !(u.name?.toLowerCase().includes(q.toLowerCase()) || u.email?.toLowerCase().includes(q.toLowerCase()))) return false;
-    if (dept !== "All" && u.dept !== dept) return false;
+    if (dept !== "All") {
+      const [deptCompanyId, deptName] = String(dept).split("::");
+      if (u.dept !== deptName) return false;
+      if (deptCompanyId !== "all" && u.companyId !== deptCompanyId) return false;
+    }
     if (role !== "All" && u.role !== role) return false;
     if (statusFilter !== "All" && (u.status || "active") !== statusMap[statusFilter]) return false;
     if (companyFilter !== "All" && u.companyId !== companyFilter) return false;
@@ -741,7 +755,7 @@ const AdminUsersPage = () => {
         <input type="search" placeholder="Search by name or email…" value={q} onChange={e => setQ(e.target.value)} />
         <select value={dept} onChange={e => setDept(e.target.value)}>
           <option value="All">Department: All</option>
-          {departmentOptions.map(d => <option key={d.id} value={d.name}>Department: {d.name}</option>)}
+          {departmentOptions.map(d => <option key={d.id} value={`${d.companyId || "all"}::${d.name}`}>Department: {departmentLabel(d)}</option>)}
         </select>
         <select value={role} onChange={e => setRole(e.target.value)}>
           <option value="All">Role: All</option><option value="Learner">Role: Learner</option><option value="Manager">Role: Manager</option><option value="Admin">Role: Admin</option>
@@ -766,7 +780,7 @@ const AdminUsersPage = () => {
           <select onChange={e => { if (e.target.value) { bulkMove(e.target.value); e.target.value = ""; } }}
             style={{ fontSize: 12, padding: "4px 10px", borderRadius: 6, border: "1px solid #cfeab0", background: "#fff" }}>
             <option value="">Pick department…</option>
-            {DEPARTMENT_DOCS.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+            {bulkDepartmentOptions.map(d => <option key={d.id} value={d.name}>{departmentLabel(d)}</option>)}
           </select>
           <div style={{ flex: 1 }} />
           <button className="btn btn-ghost btn-sm" onClick={clearSelection}>Clear selection</button>
@@ -795,7 +809,7 @@ const AdminUsersPage = () => {
         </thead>
         <tbody>
           {sortedUsers.map((u) => {
-            const deptOptions = departmentOptions.map(d => d.name);
+            const deptOptions = departmentOptions.filter(d => deptAppliesToUser(d, u));
             const stats = userStats(u.id);
             const duplicatePlan = mergePlanFor(u);
             const updateRole = async (e) => {
@@ -869,7 +883,7 @@ const AdminUsersPage = () => {
                   backgroundRepeat: "no-repeat", backgroundPosition: "right 4px center",
                 }}>
                   <option value="">Unassigned</option>
-                  {deptOptions.map(d => <option key={d}>{d}</option>)}
+                  {deptOptions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
                 </select>
               </td>
               <td>{u.companyId ? <span className="chip chip-grey">{companyName(u.companyId) || u.companyId}</span> : <span className="text-xs text-muted">Unmatched</span>}</td>
@@ -917,7 +931,7 @@ const AdminUsersPage = () => {
                         try {
                           const res = await sendEmailReminder({
                             recipients: [{ email: u.email, name: u.name }],
-                            message: `This is a reminder from GIM Learning to complete your outstanding training.`,
+                            message: `This is a reminder from OneSource to complete your outstanding training.`,
                           });
                           showToast?.(res.sent ? `Reminder sent to ${u.name}` : `Failed: ${res.errors?.[0]?.error || "unknown error"}`);
                         } catch (err) { alert("Reminder failed: " + err.message); }
@@ -999,7 +1013,10 @@ const AddDirectoryUserModal = ({ open, onClose, onCreated }) => {
   }, [open]);
 
   if (!open) return null;
-  const departmentOptions = [...DEPARTMENT_DOCS].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const matchedCompany = getCompanyForEmail(email);
+  const departmentOptions = [...DEPARTMENT_DOCS]
+    .filter(d => !matchedCompany || !d.companyId || d.companyId === matchedCompany.id)
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   const submit = async () => {
     if (saving) return;
     if (!email.trim()) { alert("Email is required."); return; }
@@ -1057,8 +1074,13 @@ const AddDirectoryUserModal = ({ open, onClose, onCreated }) => {
           <FieldLabel>Department</FieldLabel>
           <select className="cd-input" value={dept} onChange={e => setDept(e.target.value)}>
             <option value="">Unassigned</option>
-            {departmentOptions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+            {departmentOptions.map(d => <option key={d.id} value={d.name}>{d.name}{d.companyId ? ` (${companyName(d.companyId)})` : ""}</option>)}
           </select>
+          {matchedCompany && (
+            <div className="text-xs text-muted" style={{ marginTop: 6 }}>
+              Showing departments for {matchedCompany.name}.
+            </div>
+          )}
         </div>
         <div style={{ padding: 12, border: "1px solid #dfead4", background: "#f6fbf0", borderRadius: 10, fontSize: 12, color: "#3a3a3a", lineHeight: 1.5 }}>
           After saving, you can assign courses immediately. On first login, this profile and its assignments will be linked to the employee's Google account.
@@ -1659,7 +1681,7 @@ const AdminActivityPage = () => {
           { key: "course", label: "Course" },
           { key: "activity", label: "Activity" },
         ];
-    downloadBlob(`gim-${view}-activity-${stamp()}.csv`, toCSV(rows, columns), "text/csv;charset=utf-8");
+    downloadBlob(`onesource-${view}-activity-${stamp()}.csv`, toCSV(rows, columns), "text/csv;charset=utf-8");
   };
 
   return (
@@ -1782,12 +1804,23 @@ const AdminSettingsPage = () => {
   const [seedingCategories, setSeedingCategories] = React.useState(false);
   const [companyDrafts, setCompanyDrafts] = React.useState(() => getCompanyDocs());
   const [savingCompanies, setSavingCompanies] = React.useState(false);
-  const sortedDepartments = [...DEPARTMENT_DOCS].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const [iconDrafts, setIconDrafts] = React.useState(() => getCustomIconDocs());
+  const [navIconDrafts, setNavIconDrafts] = React.useState(() => ({ ...(ICON_SETTINGS.navIcons || {}) }));
+  const [savingIcons, setSavingIcons] = React.useState(false);
+  const [uploadingIconId, setUploadingIconId] = React.useState("");
+  const sortedDepartments = [...DEPARTMENT_DOCS].sort((a, b) =>
+    (companyName(a.companyId) || "").localeCompare(companyName(b.companyId) || "") ||
+    (a.name || "").localeCompare(b.name || "")
+  );
   const sortedCategories = getCategoryDocs();
   const sortedRoles = [...ROLE_DOCS].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   React.useEffect(() => {
     setCompanyDrafts(getCompanyDocs());
   }, [COMPANY_DOCS.length]);
+  React.useEffect(() => {
+    setIconDrafts(getCustomIconDocs());
+    setNavIconDrafts({ ...(ICON_SETTINGS.navIcons || {}) });
+  }, [ICON_DOCS.length]);
   const updateCompanyDraft = (idx, patch) => setCompanyDrafts(prev => prev.map((c, i) => i === idx ? { ...c, ...patch } : c));
   const addCompanyDraft = () => setCompanyDrafts(prev => [...prev, {
     id: `co-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -1796,8 +1829,8 @@ const AdminSettingsPage = () => {
     logoUrl: "",
     certificateLogoUrl: "",
     certificateName: "",
-    accent: "#7ac142",
-    secondary: "#2e5a12",
+    accent: "#1d4ed8",
+    secondary: "#0f2f6b",
     active: true,
     adminBrand: prev.length === 0,
   }]);
@@ -1834,7 +1867,7 @@ const AdminSettingsPage = () => {
             value={value}
             onChange={e => updateCompanyDraft(idx, { [key]: e.target.value.startsWith("#") ? e.target.value : `#${e.target.value}` })}
             onBlur={e => updateCompanyDraft(idx, { [key]: normalizeHexColor(e.target.value, fallback) })}
-            placeholder="#7ac142"
+            placeholder="#1d4ed8"
             style={{ fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace", background: value, color: textColor, fontWeight: 800 }}
           />
         </div>
@@ -1862,6 +1895,57 @@ const AdminSettingsPage = () => {
       setSavingCompanies(false);
     }
   };
+  const updateIconDraft = (idx, patch) => setIconDrafts(prev => prev.map((i, n) => n === idx ? { ...i, ...patch } : i));
+  const addIconDraft = () => setIconDrafts(prev => [...prev, {
+    id: `ico-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    label: "",
+    url: "",
+    tags: "",
+    active: true,
+  }]);
+  const removeIconDraft = (idx) => setIconDrafts(prev => prev.filter((_, i) => i !== idx));
+  const uploadIconDraft = async (idx, file) => {
+    if (!file) return;
+    if (!window.fbReady) { alert("Firebase isn't configured - can't upload."); return; }
+    const draft = iconDrafts[idx];
+    const id = draft?.id || `ico-${Date.now()}`;
+    setUploadingIconId(id);
+    try {
+      const url = await uploadImage(file, "icons");
+      updateIconDraft(idx, {
+        id,
+        url,
+        label: draft?.label || (file.name || "Uploaded icon").replace(/\.[^.]+$/, ""),
+      });
+      showToast?.("Icon uploaded");
+    } catch (err) {
+      alert("Upload failed: " + err.message);
+    } finally {
+      setUploadingIconId("");
+    }
+  };
+  const saveIconDrafts = async () => {
+    if (savingIcons) return;
+    if (!window.fbReady) { alert("Firebase isn't configured - can't save."); return; }
+    const cleaned = iconDrafts
+      .filter(i => i.label?.trim() && i.url?.trim())
+      .map((i, idx) => ({ ...i, id: i.id || iconDocId(i.label), sortOrder: idx }));
+    setSavingIcons(true);
+    try {
+      await saveIconSettings({ items: cleaned, navIcons: navIconDrafts });
+      showToast?.("Icon settings saved");
+    } catch (err) {
+      alert("Save failed: " + err.message);
+    } finally {
+      setSavingIcons(false);
+    }
+  };
+  const iconSelectOptions = [
+    ...getIconChoices(),
+    ...iconDrafts
+      .filter(i => i.id && i.label && i.url && !getIconChoiceById(i.id))
+      .map(i => ({ id: i.id, icon: i.id, label: i.label, custom: true })),
+  ];
   const seedCategories = async () => {
     if (seedingCategories) return;
     if (!window.fbReady) { alert("Firebase isn't configured - can't save."); return; }
@@ -1931,8 +2015,8 @@ const AdminSettingsPage = () => {
                     <input className="cd-input" value={co.certificateName || ""} onChange={e => updateCompanyDraft(idx, { certificateName: e.target.value })} placeholder="Defaults to company name" />
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    {companyColorField(idx, co, "accent", "Accent", "#7ac142")}
-                    {companyColorField(idx, co, "secondary", "Secondary", "#2e5a12")}
+                    {companyColorField(idx, co, "accent", "Accent", "#1d4ed8")}
+                    {companyColorField(idx, co, "secondary", "Secondary", "#0f2f6b")}
                   </div>
                   <div style={{ gridColumn: "1 / -1", display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -1953,11 +2037,93 @@ const AdminSettingsPage = () => {
             </button>
           </div>
 
+          <div className="card card-pad-lg mt-4">
+            <div className="eyebrow-sm" style={{ marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>Icon library</span>
+              <button className="btn btn-ghost btn-sm" style={{ padding: "4px 10px", fontSize: 11 }} onClick={addIconDraft}>
+                <Icon name="plus" size={12}/> New icon
+              </button>
+            </div>
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>System icons</h3>
+            <p className="text-muted text-sm" style={{ marginBottom: 18 }}>
+              Upload or link PNG/SVG icons, then reuse them for categories, departments, and sidebar tabs.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {iconDrafts.length === 0 && (
+                <div className="text-xs text-muted" style={{ padding: "10px 4px" }}>
+                  No custom icons yet. Built-in icons remain available everywhere.
+                </div>
+              )}
+              {iconDrafts.map((iconItem, idx) => (
+                <div key={iconItem.id || idx} style={{ border: "1px solid #ececec", borderRadius: 10, padding: 12, display: "grid", gridTemplateColumns: "44px 1fr", gap: 12, alignItems: "center" }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 10, background: "#f6f7f5", border: "1px solid #ececec", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {iconItem.url ? (
+                      <img src={iconItem.url} alt="" style={{ width: 26, height: 26, objectFit: "contain" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                    ) : <Icon name="upload" size={18} />}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 10 }}>
+                    <div className="cd-field" style={{ margin: 0 }}>
+                      <label>Name</label>
+                      <input className="cd-input" value={iconItem.label || ""} onChange={e => updateIconDraft(idx, { label: e.target.value, id: iconItem.id || iconDocId(e.target.value) })} placeholder="Maintenance detailed" />
+                    </div>
+                    <div className="cd-field" style={{ margin: 0 }}>
+                      <label>PNG/SVG URL</label>
+                      <input className="cd-input" value={iconItem.url || ""} onChange={e => updateIconDraft(idx, { url: e.target.value })} placeholder="https://drive.google.com/... or /assets/icon.svg" />
+                    </div>
+                    <div className="cd-field" style={{ margin: 0 }}>
+                      <label>Tags / use</label>
+                      <input className="cd-input" value={iconItem.tags || ""} onChange={e => updateIconDraft(idx, { tags: e.target.value })} placeholder="category, department, tab" />
+                    </div>
+                    <div style={{ display: "flex", alignItems: "end", gap: 8 }}>
+                      <label className="btn btn-ghost btn-sm" style={{ cursor: "pointer", margin: 0 }}>
+                        <Icon name="upload" size={14}/> {uploadingIconId === iconItem.id ? "Uploading..." : "Upload file"}
+                        <input
+                          type="file"
+                          accept=".png,.svg,image/png,image/svg+xml,image/*"
+                          style={{ display: "none" }}
+                          disabled={!!uploadingIconId}
+                          onChange={e => uploadIconDraft(idx, e.target.files?.[0])}
+                        />
+                      </label>
+                      <label className="chip chip-grey" style={{ cursor: "pointer" }}>
+                        <input type="checkbox" checked={iconItem.active !== false} onChange={e => updateIconDraft(idx, { active: e.target.checked })} /> Active
+                      </label>
+                      <button className="btn-icon" title="Remove icon" onClick={() => removeIconDraft(idx)}><Icon name="trash" size={14}/></button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid #ececec" }}>
+              <div className="eyebrow-sm" style={{ marginBottom: 10 }}>Sidebar tab icons</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                {NAV_ICON_TARGETS.map(target => (
+                  <div key={target.id} style={{ display: "grid", gridTemplateColumns: "24px 1fr", gap: 8, alignItems: "center" }}>
+                    <Icon name={navIconDrafts[target.id] || target.fallback} size={18}/>
+                    <select
+                      className="cd-input"
+                      value={navIconDrafts[target.id] || ""}
+                      onChange={e => setNavIconDrafts(prev => ({ ...prev, [target.id]: e.target.value }))}
+                    >
+                      <option value="">{target.label}: Default</option>
+                      {iconSelectOptions.map(opt => <option key={`${target.id}-${opt.id}`} value={opt.id}>{target.label}: {opt.label}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button className="btn btn-primary btn-sm" style={{ marginTop: 14 }} disabled={savingIcons} onClick={saveIconDrafts}>
+              <Icon name="check" size={14}/> {savingIcons ? "Saving..." : "Save icon settings"}
+            </button>
+          </div>
+
           <div className="card card-pad-lg">
             <div className="eyebrow-sm" style={{ marginBottom: 6 }}>Departments</div>
             <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Organizational departments</h3>
             <p className="text-muted text-sm" style={{ marginBottom: 18 }}>
-              Used in reporting, filtering, and auto-assignment rules.
+              Used in reporting, filtering, and assignment rules. Each department belongs to one company.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {DEPARTMENT_DOCS.length === 0 && (
@@ -1967,14 +2133,20 @@ const AdminSettingsPage = () => {
               )}
               {sortedDepartments.map(d => {
                 const preset = (window.DEPT_PRESETS || [])[d.iconIdx ?? 0] || { icon: "house", bg: "#f0f9e6", color: "#2e5a12" };
+                const departmentIcon = d.icon || preset.icon;
+                const departmentCompany = companyName(d.companyId) || "No company";
+                const peopleCount = ALL_USERS.filter(u => u.dept === d.name && (!d.companyId || u.companyId === d.companyId)).length;
                 return (
                   <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", border: "1px solid #ececec", borderRadius: 10 }}>
                     <div style={{ width: 36, height: 36, borderRadius: 8, background: preset.bg, color: preset.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <Icon name={preset.icon} size={16} />
+                      <Icon name={departmentIcon} size={16} />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{d.name}</div>
-                      <div style={{ fontSize: 11, color: "#5f635f" }}>{ALL_USERS.filter(u => u.dept === d.name).length} people</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{d.name}</div>
+                        <span className="chip chip-grey">{departmentCompany}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: "#5f635f" }}>{peopleCount} people</div>
                     </div>
                     <button className="btn-icon" title="Edit department" onClick={() => setDeptModal({ open: true, initial: d })}><Icon name="edit" size={14}/></button>
                   </div>
@@ -2334,7 +2506,7 @@ const GradeAttemptModal = ({ attempt, onClose }) => {
             recipients: [{ email: a.userEmail, name: a.userName }],
             subject: passed ? `You passed: ${course?.title || "your assessment"}` : `Assessment graded: ${course?.title || ""}`,
             message: passed
-              ? `Great news — you scored ${finalScore}% and passed. Your certificate is now available in GIM Learning.`
+              ? `Great news — you scored ${finalScore}% and passed. Your certificate is now available in OneSource.`
               : `Your assessment was graded. Final score: ${finalScore}%. ${a.passMark != null ? `Passing requires ${a.passMark}%. ` : ""}Please retake when you're ready.`,
           });
         } catch {}
