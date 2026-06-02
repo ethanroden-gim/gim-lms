@@ -1808,6 +1808,7 @@ const AdminSettingsPage = () => {
   const [navIconDrafts, setNavIconDrafts] = React.useState(() => ({ ...(ICON_SETTINGS.navIcons || {}) }));
   const [savingIcons, setSavingIcons] = React.useState(false);
   const [uploadingIconId, setUploadingIconId] = React.useState("");
+  const [editingIconId, setEditingIconId] = React.useState("");
   const sortedDepartments = [...DEPARTMENT_DOCS].sort((a, b) =>
     (companyName(a.companyId) || "").localeCompare(companyName(b.companyId) || "") ||
     (a.name || "").localeCompare(b.name || "")
@@ -1903,7 +1904,13 @@ const AdminSettingsPage = () => {
     tags: "",
     active: true,
   }]);
-  const removeIconDraft = (idx) => setIconDrafts(prev => prev.filter((_, i) => i !== idx));
+  const removeIconDraft = (idx) => {
+    const removed = iconDrafts[idx];
+    if (!removed) return;
+    setIconDrafts(prev => prev.filter((_, i) => i !== idx));
+    setNavIconDrafts(prev => Object.fromEntries(Object.entries(prev).filter(([, value]) => value !== removed.id)));
+    if (editingIconId === removed.id) setEditingIconId("");
+  };
   const uploadIconDraft = async (idx, file) => {
     if (!file) return;
     const allowed = file.type === "image/svg+xml" || file.type === "image/png" || /\.svg$/i.test(file.name || "") || /\.png$/i.test(file.name || "");
@@ -1956,6 +1963,8 @@ const AdminSettingsPage = () => {
       .filter(i => i.id && i.label && i.url && !getIconChoiceById(i.id))
       .map(i => ({ id: i.id, icon: i.id, label: i.label, custom: true, url: i.url })),
   ];
+  const editingIconIdx = iconDrafts.findIndex(i => i.id === editingIconId);
+  const editingIcon = editingIconIdx >= 0 ? iconDrafts[editingIconIdx] : null;
   const seedCategories = async () => {
     if (seedingCategories) return;
     if (!window.fbReady) { alert("Firebase isn't configured - can't save."); return; }
@@ -2061,11 +2070,14 @@ const AdminSettingsPage = () => {
             <div style={{ marginBottom: 18, padding: 12, border: "1px solid #ececec", borderRadius: 10, background: "#fafafa" }}>
               <div className="eyebrow-sm" style={{ marginBottom: 10 }}>Icon gallery</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(76px, 1fr))", gap: 8 }}>
-                {iconSelectOptions.map(opt => (
+                {iconSelectOptions.map(opt => {
+                  const draftIdx = iconDrafts.findIndex(i => i.id === opt.id);
+                  const isCustom = draftIdx >= 0;
+                  return (
                   <div key={`gallery-${opt.id}`} title={opt.label} style={{
-                    minHeight: 70,
+                    minHeight: isCustom ? 92 : 70,
                     padding: 8,
-                    border: "1px solid #e6e6e6",
+                    border: editingIconId === opt.id ? "2px solid #1d4ed8" : "1px solid #e6e6e6",
                     borderRadius: 8,
                     background: "#fff",
                     display: "flex",
@@ -2082,9 +2094,80 @@ const AdminSettingsPage = () => {
                     <div style={{ fontSize: 10, color: "#5f635f", textAlign: "center", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {opt.label}
                     </div>
+                    {isCustom && (
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button
+                          className="btn-icon"
+                          title="Edit icon"
+                          onClick={() => setEditingIconId(opt.id)}
+                          style={{ width: 24, height: 24, borderRadius: 6 }}
+                        >
+                          <Icon name="edit" size={12}/>
+                        </button>
+                        <button
+                          className="btn-icon"
+                          title="Remove icon"
+                          onClick={() => {
+                            if (confirm(`Remove icon "${opt.label}"? Remember to save icon settings after removing it.`)) removeIconDraft(draftIdx);
+                          }}
+                          style={{ width: 24, height: 24, borderRadius: 6, color: "#a8232b" }}
+                        >
+                          <Icon name="trash" size={12}/>
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ))}
+                );})}
               </div>
+              {editingIcon && (
+                <div style={{ marginTop: 12, padding: 12, border: "1px solid #dbeafe", borderRadius: 10, background: "#eff6ff" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 8, background: "#fff", border: "1px solid #dbeafe", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {editingIcon.url ? <img src={editingIcon.url} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} /> : <Icon name="upload" size={16}/>}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 800, fontSize: 13 }}>Edit icon</div>
+                      <div className="text-xs text-muted">Changes apply after you save icon settings.</div>
+                    </div>
+                    <button className="btn-icon" title="Close editor" onClick={() => setEditingIconId("")}><Icon name="close" size={14}/></button>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 10 }}>
+                    <div className="cd-field" style={{ margin: 0 }}>
+                      <label>Name</label>
+                      <input className="cd-input" value={editingIcon.label || ""} onChange={e => updateIconDraft(editingIconIdx, { label: e.target.value })} />
+                    </div>
+                    <div className="cd-field" style={{ margin: 0 }}>
+                      <label>PNG/SVG URL</label>
+                      <input className="cd-input" value={editingIcon.url || ""} onChange={e => updateIconDraft(editingIconIdx, { url: e.target.value })} />
+                    </div>
+                    <div className="cd-field" style={{ margin: 0 }}>
+                      <label>Tags / use</label>
+                      <input className="cd-input" value={editingIcon.tags || ""} onChange={e => updateIconDraft(editingIconIdx, { tags: e.target.value })} />
+                    </div>
+                    <div style={{ display: "flex", alignItems: "end", gap: 8 }}>
+                      <label className="btn btn-ghost btn-sm" style={{ cursor: "pointer", margin: 0 }}>
+                        <Icon name="upload" size={14}/> {uploadingIconId === editingIcon.id ? "Importing..." : "Replace file"}
+                        <input
+                          type="file"
+                          accept=".png,.svg,image/png,image/svg+xml,image/*"
+                          style={{ display: "none" }}
+                          disabled={!!uploadingIconId}
+                          onChange={e => uploadIconDraft(editingIconIdx, e.target.files?.[0])}
+                        />
+                      </label>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ color: "#a8232b" }}
+                        onClick={() => {
+                          if (confirm(`Remove icon "${editingIcon.label || "Untitled icon"}"? Remember to save icon settings after removing it.`)) removeIconDraft(editingIconIdx);
+                        }}
+                      >
+                        <Icon name="trash" size={14}/> Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {iconDrafts.length === 0 && (
