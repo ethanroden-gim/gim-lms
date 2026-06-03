@@ -176,11 +176,11 @@ const DEFAULT_COMPANY = {
   id: "onesource",
   name: "OneSource",
   domains: [],
-  logoUrl: "",
-  certificateLogoUrl: "",
+  logoUrl: "assets/onesource-logo.png",
+  certificateLogoUrl: "assets/onesource-logo.png",
   certificateName: "OneSource",
-  accent: "#1d4ed8",
-  secondary: "#0f2f6b",
+  accent: "#2D7FF9",
+  secondary: "#00A6A6",
   active: true,
   adminBrand: true,
 };
@@ -310,7 +310,7 @@ const companyDocId = (name = "") => {
   return `co-${base || Math.random().toString(36).slice(2, 8)}`;
 };
 
-const normalizeHexColor = (value = "", fallback = "#1d4ed8") => {
+const normalizeHexColor = (value = "", fallback = "#2D7FF9") => {
   const raw = String(value || "").trim();
   const withHash = raw.startsWith("#") ? raw : `#${raw}`;
   if (/^#[0-9a-f]{6}$/i.test(withHash)) return withHash.toLowerCase();

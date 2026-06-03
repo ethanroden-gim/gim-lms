@@ -706,8 +706,8 @@ const cleanCompany = (company = {}, idx = 0) => {
     logoUrl: normalized.logoUrl || "",
     certificateLogoUrl: normalized.certificateLogoUrl || normalized.logoUrl || "",
     certificateName: normalized.certificateName || normalized.name || "",
-    accent: window.normalizeHexColor?.(normalized.accent || "#1d4ed8", "#1d4ed8") || "#1d4ed8",
-    secondary: window.normalizeHexColor?.(normalized.secondary || normalized.accent || "#0f2f6b", "#0f2f6b") || "#0f2f6b",
+    accent: window.normalizeHexColor?.(normalized.accent || "#2D7FF9", "#2D7FF9") || "#2D7FF9",
+    secondary: window.normalizeHexColor?.(normalized.secondary || normalized.accent || "#00A6A6", "#00A6A6") || "#00A6A6",
     active: normalized.active !== false,
     adminBrand: !!normalized.adminBrand,
   });

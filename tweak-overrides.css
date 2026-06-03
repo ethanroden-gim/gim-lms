@@ -21,11 +21,12 @@
   --t-card-shadow:       0 1px 2px rgba(10,10,10,0.03);
   --t-bg-page:           #f7f8f7;
 
-  --t-accent:            #1d4ed8;
-  --t-accent-hover:      #0f2f6b;
-  --t-accent-pale:       #dbeafe;
-  --t-accent-soft:       #eff6ff;
-  --t-accent-deep:       #0f2f6b;
+  --t-accent:            #2D7FF9;
+  --t-accent-hover:      #163A5F;
+  --t-accent-pale:       #bfe0ff;
+  --t-accent-soft:       #eaf4ff;
+  --t-accent-deep:       #163A5F;
+  --t-secondary:         #00A6A6;
   --t-accent-fg:         #fff;
 
   --t-pad-page-y:        32px;
@@ -70,11 +71,12 @@
 
 /* ============== ACCENT PALETTE ============== */
 .app[data-accent="cobalt"] {
-  --t-accent:       #1d4ed8;
-  --t-accent-hover: #0f2f6b;
-  --t-accent-pale:  #dbeafe;
-  --t-accent-soft:  #eff6ff;
-  --t-accent-deep:  #0f2f6b;
+  --t-accent:       #2D7FF9;
+  --t-accent-hover: #163A5F;
+  --t-accent-pale:  #bfe0ff;
+  --t-accent-soft:  #eaf4ff;
+  --t-accent-deep:  #163A5F;
+  --t-secondary:    #00A6A6;
   --t-accent-fg:    #fff;
 }
 .app[data-accent="forest"] {
@@ -262,7 +264,7 @@
 .app[data-accent="ink"]  .cv-1 { background: linear-gradient(135deg, #0a0e16 0%, #1f2937 60%, #4a6585 110%); }
 .app[data-accent="ink"]  .cv-2 { background: linear-gradient(135deg, #0e1a2c 0%, #486a92 110%); }
 .app[data-accent="forest"] .cv-1 { background: linear-gradient(135deg, #0a1a04 0%, #1a3608 60%, #2e5a12 110%); }
-.app[data-accent="cobalt"] .cv-1 { background: linear-gradient(135deg, #071833 0%, #0f2f6b 60%, #1d4ed8 110%); }
+.app[data-accent="cobalt"] .cv-1 { background: linear-gradient(135deg, #071833 0%, #163A5F 58%, #2D7FF9 110%); }
 
 /* Field mood — flatten card shadows except cert */
 .app[data-mood="field"] .course-card,
