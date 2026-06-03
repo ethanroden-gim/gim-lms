@@ -216,8 +216,8 @@ const AdminOverviewPage = ({ goRoute }) => {
     pendingAttempts.length && { label: "Assessment attempts need grading", count: pendingAttempts.length, route: "admin-attempts", tone: "amber" },
     totals.overdue && { label: "Learners have overdue assignments", count: totals.learnersOverdue, route: "admin-users", tone: "red" },
     duplicateProfiles.length && { label: "Duplicate user profiles detected", count: duplicateProfiles.length, route: "admin-users", tone: "amber" },
-    COURSES.filter(c => (c.status || "published") === "draft").length && { label: "Draft courses waiting to publish", count: COURSES.filter(c => (c.status || "published") === "draft").length, route: "admin-courses", tone: "blue" },
-    contentHealthRows.length && { label: "Course content issues to review", count: contentHealthRows.length, route: "admin-courses", tone: "amber" },
+    COURSES.filter(c => (c.status || "published") === "draft").length && { label: "Draft courses waiting to publish", count: COURSES.filter(c => (c.status || "published") === "draft").length, route: "admin-courses", tone: "blue", courseIntent: { filter: "draft" } },
+    contentHealthRows.length && { label: "Course content issues to review", count: contentHealthRows.length, route: "admin-courses", tone: "amber", courseIntent: { filter: "health" } },
   ].filter(Boolean);
 
   return (
@@ -270,7 +270,7 @@ const AdminOverviewPage = ({ goRoute }) => {
           ) : (
             <div className="action-list">
               {actionItems.map(item => (
-                <button key={item.label} className="action-row" onClick={() => goRoute && goRoute(item.route)}>
+                <button key={item.label} className="action-row" onClick={() => goRoute && goRoute({ route: item.route, courseIntent: item.courseIntent })}>
                   <span className={`status-dot status-dot--${item.tone}`} />
                   <span>{item.label}</span>
                   <strong>{item.count}</strong>
@@ -283,20 +283,20 @@ const AdminOverviewPage = ({ goRoute }) => {
         <div className="card card-pad-lg">
           <div className="section-head" style={{ marginBottom: 12 }}>
             <h3>Content health</h3>
-            {goRoute && <a onClick={() => goRoute("admin-courses")}>Open courses</a>}
+            {goRoute && <a onClick={() => goRoute({ route: "admin-courses", courseIntent: { filter: "health" } })}>Open courses</a>}
           </div>
           {contentHealthRows.length === 0 ? (
             <div className="empty" style={{ padding: 24 }}>Published and draft courses look connected.</div>
           ) : (
             <div style={{ display: "grid", gap: 10 }}>
               {contentHealthRows.map(({ course, issues }) => (
-                <div key={course.id} className="health-row">
+                <button key={course.id} className="health-row health-row--button" onClick={() => goRoute && goRoute({ route: "admin-courses", courseIntent: { filter: "health", openCourseId: course.id } })}>
                   <div>
                     <div style={{ fontWeight: 800, fontSize: 13 }}>{course.title}</div>
                     <div className="text-xs text-muted">{issues.slice(0, 2).map(i => i.label).join(" | ")}</div>
                   </div>
                   <span className="chip chip-amber">{issues.length}</span>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -428,11 +428,12 @@ const adminCourseMinutes = (course) => {
   return Math.round(computed || course?.duration || 0);
 };
 
-const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
+const AdminCoursesPage = ({ onNew, onEdit, onPreview, intent, onIntentConsumed }) => {
   const [q, setQ] = React.useState("");
   const [cat, setCat] = React.useState("All");
   const [statusFilter, setStatusFilter] = React.useState("All");
   const [companyFilter, setCompanyFilter] = React.useState("All");
+  const [healthOnly, setHealthOnly] = React.useState(false);
   const [sort, setSort] = React.useState({ key: "title", dir: "asc" });
   const [importing, setImporting] = React.useState(false);
   const importInputRef = React.useRef(null);
@@ -442,6 +443,28 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
   const openAssign = (id) => setAssignFor(id);
   const categoryNames = getCategoryNames();
   const cats = ["All", ...categoryNames];
+  React.useEffect(() => {
+    if (!intent) return;
+    if (intent.filter === "draft") {
+      setStatusFilter("Draft");
+      setHealthOnly(false);
+      setQ("");
+      setCat("All");
+      setCompanyFilter("All");
+    }
+    if (intent.filter === "health") {
+      setStatusFilter("All");
+      setHealthOnly(true);
+      setQ("");
+      setCat("All");
+      setCompanyFilter("All");
+    }
+    if (intent.openCourseId) {
+      const course = COURSES.find(c => c.id === intent.openCourseId);
+      if (course) setDetailsFor(course);
+    }
+    onIntentConsumed?.();
+  }, [intent?.nonce]);
   const filtered = COURSES.filter(c => {
     if (q && !c.title.toLowerCase().includes(q.toLowerCase())) return false;
     if (cat !== "All" && c.cat !== cat) return false;
@@ -449,6 +472,7 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
     if (statusFilter === "All" && status === "archived") return false;
     if (statusFilter !== "All" && status !== statusFilter.toLowerCase()) return false;
     if (companyFilter !== "All" && !courseVisibleToCompany(c, companyFilter)) return false;
+    if (healthOnly && !(typeof courseHealthIssues === "function" && courseHealthIssues(c).length)) return false;
     return true;
   });
   const sortedCourses = _adminSortRows(filtered.map(c => ({
@@ -582,9 +606,23 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
           <option value="All">Company: All</option>
           {getCompanyDocs().map(co => <option key={co.id} value={co.id}>Company: {co.name}</option>)}
         </select>
+        <button
+          className={classNames("btn btn-sm", healthOnly ? "btn-primary" : "btn-ghost")}
+          onClick={() => setHealthOnly(v => !v)}
+        >
+          <Icon name="flag" size={14}/> Content issues
+        </button>
         <div className="fb-spacer" />
         <span className="text-xs text-muted">{sortedCourses.length} courses</span>
       </div>
+
+      {healthOnly && (
+        <div className="intent-banner">
+          <Icon name="flag" size={15}/>
+          Showing courses with content-health issues. Open a course detail row to see exactly what needs attention.
+          <button className="btn btn-ghost btn-sm" onClick={() => setHealthOnly(false)}>Clear</button>
+        </div>
+      )}
 
       <table className="tbl">
         <thead>

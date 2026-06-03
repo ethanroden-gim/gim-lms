@@ -713,6 +713,30 @@ input, textarea, select { font-family: inherit; font-size: inherit; color: inher
   border-radius: 10px;
   background: #fff;
 }
+.health-row--button {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+.health-row--button:hover {
+  border-color: #2D7FF9;
+  background: #f8fbff;
+}
+.intent-banner {
+  margin: -8px 0 16px;
+  padding: 10px 12px;
+  border: 1px solid #bfe0ff;
+  border-radius: 10px;
+  background: #eaf4ff;
+  color: #163A5F;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.intent-banner .btn { margin-left: auto; background: #fff; }
 .next-action-card {
   display: grid;
   grid-template-columns: auto 1fr auto;

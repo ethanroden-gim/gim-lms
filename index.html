@@ -164,6 +164,7 @@
       const [route, setRoute] = React.useState(saved.route || (mode === "admin" ? "admin-overview" : "home"));
       const [courseId, setCourseId] = React.useState(saved.courseId || null);
       const [assessmentTarget, setAssessmentTarget] = React.useState(saved.assessmentTarget || null);
+      const [adminCourseIntent, setAdminCourseIntent] = React.useState(null);
       const [catalogCategory, setCatalogCategory] = React.useState("All");
       const goCategory = (cat) => { setCatalogCategory(cat); setRoute("catalog"); };
 
@@ -182,6 +183,16 @@
       const goCourse     = (id) => { setCourseId(id); setRoute("course"); };
       const goAssessment = (id, target = null) => { setCourseId(id); setAssessmentTarget(target); setRoute("assessment"); };
       const goCert       = (id) => { setCourseId(id); setRoute("certificate"); };
+      const goAdminRoute = (next) => {
+        if (typeof next === "object" && next?.route) {
+          if (next.route === "admin-courses") setAdminCourseIntent({ ...(next.courseIntent || {}), nonce: Date.now() });
+          else setAdminCourseIntent(null);
+          setRoute(next.route);
+          return;
+        }
+        if (next !== "admin-courses") setAdminCourseIntent(null);
+        setRoute(next);
+      };
 
       React.useEffect(() => {
         const main = document.querySelector(".app__main");
@@ -199,8 +210,10 @@
         if (route === "assessment")  body = <AssessmentPage   courseId={courseId} target={assessmentTarget} goCert={goCert} goBack={() => setRoute("course")} />;
         if (route === "certificate") body = <CertificatePage  courseId={courseId} goBack={() => setRoute("certs")} />;
       } else {
-        if (route === "admin-overview")    body = <AdminOverviewPage goRoute={setRoute} />;
+        if (route === "admin-overview")    body = <AdminOverviewPage goRoute={goAdminRoute} />;
         if (route === "admin-courses")     body = <AdminCoursesPage
+          intent={adminCourseIntent}
+          onIntentConsumed={() => setAdminCourseIntent(null)}
           onNew={() => { setCourseId(null); setRoute("admin-course-new"); }}
           onEdit={(id) => { setCourseId(id); setRoute("admin-course-edit"); }}
           onPreview={(id) => { setMode("learner"); setCourseId(id); setRoute("course"); }} />;
