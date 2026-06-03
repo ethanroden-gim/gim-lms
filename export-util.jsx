@@ -276,7 +276,7 @@ const EXPORT_DATASETS = {
 };
 
 // ---------- ExportButton ----------
-const ExportButton = ({ page, label = "Export", filename, variant = "ghost", size = "sm" }) => {
+const ExportButton = ({ page, label = "Export", filename, variant = "ghost", size = "sm", dataset }) => {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef(null);
 
@@ -288,7 +288,9 @@ const ExportButton = ({ page, label = "Export", filename, variant = "ghost", siz
 
   const doExport = (format) => {
     setOpen(false);
-    const ds = (EXPORT_DATASETS[page] || (() => null))();
+    const ds = typeof dataset === "function"
+      ? dataset()
+      : (dataset || (EXPORT_DATASETS[page] || (() => null))());
     if (!ds) { alert(`No data to export from this page.`); return; }
     const base = filename || `onesource-${page}-${stamp()}`;
     if (format === "csv") {

@@ -90,6 +90,16 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
 
   const affected = targetUserIds.length;
   const totalEnrollments = affected * courseIds.length;
+  const selectedCourses = courseIds.map(id => COURSES.find(c => c.id === id)).filter(Boolean);
+  const selectedLearners = targetUserIds.map(id => ALL_USERS.find(u => u.id === id)).filter(Boolean);
+  const visibilityConflicts = selectedCourses.flatMap(course => {
+    if ((course.companyVisibility || "all") !== "selected") return [];
+    const allowed = new Set(course.allowedCompanyIds || []);
+    return selectedLearners
+      .filter(u => !u.companyId || !allowed.has(u.companyId))
+      .map(user => ({ course, user }));
+  });
+  const hasVisibilityConflicts = visibilityConflicts.length > 0;
 
   const dueDays = (() => {
     if (dueOption === "none") return null;
@@ -121,9 +131,13 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
     if (submitting) return;
     if (!window.fbReady) { alert("Firebase isn't configured — can't assign."); return; }
     if (targetUserIds.length === 0) { alert("No learners selected."); return; }
+    if (hasVisibilityConflicts) {
+      alert("Some selected learners cannot see one or more selected courses because of company visibility settings. Adjust the course visibility or choose a different audience first.");
+      return;
+    }
     setSubmitting(true);
     try {
-      const n = await assignTraining({ userIds: targetUserIds, courseIds, dueDays, required });
+      const n = await assignTraining({ userIds: targetUserIds, courseIds, dueDays, required, reminderCadence, notify });
 
       // Send email notifications if requested and Apps Script URL is configured
       let emailNote = "";
@@ -358,6 +372,18 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
               <ReviewLine label="Required"  value={required ? "Yes" : "No"} />
               <ReviewLine label="Notify"    value={notify ? "Email + " + reminderCadence : "Silent"} last />
             </div>
+            {hasVisibilityConflicts && (
+              <div style={{ marginTop: 12, padding: 12, borderRadius: 10, border: "1px solid #f5c1c2", background: "#fdecec", color: "#7f1d1d", fontSize: 12, lineHeight: 1.45 }}>
+                <div style={{ fontWeight: 800, marginBottom: 4 }}>Company visibility conflict</div>
+                <div>{visibilityConflicts.length} planned assignment{visibilityConflicts.length === 1 ? "" : "s"} would not be visible to the learner.</div>
+                {visibilityConflicts.slice(0, 4).map(({ course, user }) => (
+                  <div key={`${course.id}-${user.id}`} style={{ marginTop: 3 }}>
+                    {user.name || user.email || user.id} cannot access {course.title}.
+                  </div>
+                ))}
+                {visibilityConflicts.length > 4 && <div style={{ marginTop: 3 }}>And {visibilityConflicts.length - 4} more.</div>}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -368,7 +394,7 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
         <div style={{ display: "flex", gap: 8 }}>
           {step > 1 && <button className="btn btn-ghost btn-sm" onClick={() => setStep(s => s - 1)}>← Back</button>}
           {step < 3 && <button className="btn btn-primary btn-sm" disabled={!canProceed()} onClick={() => setStep(s => s + 1)} style={{ opacity: canProceed() ? 1 : 0.5 }}>Continue →</button>}
-          {step === 3 && <button className="btn btn-primary btn-sm" onClick={submit} disabled={submitting}>
+          {step === 3 && <button className="btn btn-primary btn-sm" onClick={submit} disabled={submitting || hasVisibilityConflicts}>
             <Icon name="check" size={14}/> {submitting ? "Assigning…" : "Assign training"}
           </button>}
         </div>

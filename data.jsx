@@ -66,6 +66,7 @@ const Icon = ({ name, className = "", size = 18, color, style }) => {
     case "trash": return <svg {...props}><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="m6 7 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/><path d="M10 11v6M14 11v6"/></svg>;
     case "download": return <svg {...props}><path d="M12 4v11"/><path d="m8 11 4 4 4-4"/><path d="M4 20h16"/></svg>;
     case "upload": return <svg {...props}><path d="M12 16V5"/><path d="m8 9 4-4 4 4"/><path d="M4 20h16"/></svg>;
+    case "code": return <svg {...props}><path d="m8 9-4 3 4 3"/><path d="m16 9 4 3-4 3"/><path d="m14 5-4 14"/></svg>;
     case "external": return <svg {...props}><path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M20 14v6H4V4h6"/></svg>;
     case "video": return <svg {...props}><rect x="3" y="6" width="14" height="12" rx="2"/><path d="m17 10 4-2v8l-4-2v-4Z"/></svg>;
     case "doc": return <svg {...props}><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6"/><path d="M8 13h8M8 17h5"/></svg>;
@@ -388,6 +389,66 @@ const courseVisibleToCompany = (course, companyId = (window.CURRENT_USER || CURR
 const visibleLearnerCourses = (courses = (window.COURSES || COURSES)) =>
   (courses || []).filter(c => courseVisibleToCompany(c, (window.CURRENT_USER || CURRENT_USER).companyId));
 
+const courseLessons = (course) =>
+  (course?.modules || course?.sections || []).flatMap(sec => sec.lessons || []);
+
+const courseFinalAssessment = (course) =>
+  (window.ASSESSMENTS || ASSESSMENTS || []).find(a =>
+    a.courseId === course?.id && a.status !== "archived" && a.type !== "quiz"
+  ) || null;
+
+const courseHealthIssues = (course) => {
+  const lessons = courseLessons(course);
+  const finalAssessment = courseFinalAssessment(course);
+  const issues = [];
+  if (!course?.coverUrl) issues.push({ level: "info", label: "Missing cover image" });
+  if (!lessons.length) issues.push({ level: "critical", label: "No lessons" });
+  if ((course?.status || "published") === "published" && !finalAssessment) issues.push({ level: "warning", label: "No final assessment" });
+  lessons.forEach(l => {
+    if (l.type === "quiz") {
+      const linked = l.assessmentId && (window.ASSESSMENTS || ASSESSMENTS || []).find(a => a.id === l.assessmentId && a.status !== "archived");
+      if (!linked) issues.push({ level: "critical", label: `Knowledge check not linked: ${l.title || "Untitled lesson"}` });
+      else if ((linked.status || "published") !== "published") issues.push({ level: "warning", label: `Knowledge check is not published: ${l.title || linked.title}` });
+    }
+    if ((l.type === "video" || l.type === "pdf" || l.type === "link" || l.type === "gform") && !l.url) {
+      issues.push({ level: "warning", label: `Missing URL: ${l.title || "Untitled lesson"}` });
+    }
+    if (l.type === "html") {
+      const mode = l.htmlMode || "url";
+      if (mode === "inline" && !l.htmlContent) issues.push({ level: "warning", label: `Missing HTML content: ${l.title || "Untitled lesson"}` });
+      if (mode === "zip" && !l.packageUrl) issues.push({ level: "warning", label: `Missing HTML ZIP package: ${l.title || "Untitled lesson"}` });
+      if (mode === "url" && !l.url) issues.push({ level: "warning", label: `Missing HTML URL: ${l.title || "Untitled lesson"}` });
+    }
+  });
+  (course?.resources || []).forEach(r => {
+    if (!r.url) issues.push({ level: "info", label: `Resource missing URL: ${r.name || "Untitled resource"}` });
+  });
+  return issues;
+};
+
+const assessmentAnalytics = (assessment) => {
+  const attempts = (window.ATTEMPTS || ATTEMPTS || []).filter(a => a.assessmentId === assessment?.id);
+  const graded = attempts.filter(a => a.status === "graded");
+  const passed = graded.filter(a => a.passed === true);
+  const failed = graded.filter(a => a.passed === false);
+  const last30 = attempts.filter(a => {
+    const d = a.submittedAt?.toDate ? a.submittedAt.toDate() : a.submittedAt?.seconds ? new Date(a.submittedAt.seconds * 1000) : null;
+    return d && (Date.now() - d.getTime()) <= 30 * 86400000;
+  });
+  const avgScore = graded.length
+    ? Math.round(graded.reduce((sum, a) => sum + Number(a.finalScore ?? a.autoScore ?? 0), 0) / graded.length)
+    : null;
+  return {
+    attempts,
+    graded,
+    last30,
+    passed,
+    failed,
+    passRate: graded.length ? Math.round((passed.length / graded.length) * 100) : null,
+    avgScore,
+  };
+};
+
 const escapeHtml = (value = "") => String(value)
   .replace(/&/g, "&amp;")
   .replace(/</g, "&lt;")
@@ -463,6 +524,7 @@ const lessonIcon = (t) => {
   if (t === "video") return "play-o";
   if (t === "article") return "doc";
   if (t === "pdf") return "pdf";
+  if (t === "html") return "code";
   if (t === "quiz") return "quiz";
   if (t === "link") return "link";
   return "doc";
@@ -482,6 +544,7 @@ Object.assign(window, {
   normalizeHexColor, isLightHexColor,
   getAdminBrandCompany, getCurrentUserCompany, getBrandCompany, getBrandStyle, companyName, companyNames,
   courseVisibleToCompany, visibleLearnerCourses,
+  courseLessons, courseFinalAssessment, courseHealthIssues, assessmentAnalytics,
   plainTextToArticleHtml, articleHtmlToText, sanitizeArticleHtml,
   ASSESSMENTS, ALL_ENROLLMENTS, ATTEMPTS,
   classNames, lessonIcon,

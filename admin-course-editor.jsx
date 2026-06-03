@@ -54,6 +54,7 @@ const LESSON_TYPES = [
   { id: "video",   label: "Video",       icon: "play-o" },
   { id: "article", label: "Article",     icon: "doc" },
   { id: "pdf",     label: "PDF",         icon: "doc" },
+  { id: "html",    label: "HTML content", icon: "code" },
   { id: "quiz",    label: "Knowledge check", icon: "quiz" },
   { id: "link",    label: "External link",   icon: "link" },
   { id: "gform",   label: "Google Form", icon: "doc" },
@@ -601,6 +602,7 @@ const LessonRow = ({ l, course, moduleIndex, lessonIndex, onChange, onRemove, on
       case "link":    return "https://...";
       case "pdf":     return "Paste Google Drive PDF link";
       case "gform":   return "Paste Google Forms link";
+      case "html":    return "Paste hosted HTML URL";
       case "quiz":    return "(configured under the Assessment tab)";
       default:        return "";
     }
@@ -608,6 +610,7 @@ const LessonRow = ({ l, course, moduleIndex, lessonIndex, onChange, onRemove, on
 
   const showUrlField = l.type === "video" || l.type === "link" || l.type === "pdf" || l.type === "gform";
   const showBodyButton = l.type === "article";
+  const showHtmlButton = l.type === "html";
   const courseAssessments = (window.ASSESSMENTS || [])
     .filter(a => a.courseId === course?.id && a.status !== "archived");
   const selectedAssessment = courseAssessments.find(a => a.id === l.assessmentId);
@@ -640,6 +643,50 @@ const LessonRow = ({ l, course, moduleIndex, lessonIndex, onChange, onRemove, on
       onChange({ dur: cleaned });
     }
   };
+  const importHtmlFile = async (file) => {
+    if (!file) return;
+    if (!/\.html?$/i.test(file.name || "") && !/html/i.test(file.type || "")) {
+      alert("Choose a .html file.");
+      return;
+    }
+    if (file.size > 700 * 1024) {
+      alert("This HTML file is large enough that it may exceed Firestore's course document limit. Use a hosted HTML URL or ZIP package instead.");
+      return;
+    }
+    const text = await file.text();
+    onChange({
+      htmlMode: "inline",
+      htmlContent: text,
+      htmlFileName: file.name || "lesson.html",
+      url: "",
+      packageUrl: "",
+    });
+  };
+  const uploadZipPackage = async (file) => {
+    if (!file) return;
+    if (!/\.zip$/i.test(file.name || "") && !/zip/i.test(file.type || "")) {
+      alert("Choose a .zip package.");
+      return;
+    }
+    if (!window.fbReady || typeof uploadImage !== "function") {
+      alert("Firebase Storage is not configured. Paste a hosted ZIP URL instead.");
+      return;
+    }
+    try {
+      const url = await uploadImage(file, "html-packages");
+      onChange({
+        htmlMode: "zip",
+        packageUrl: url,
+        packageFileName: file.name || "package.zip",
+        entryFile: l.entryFile || "index.html",
+        url: "",
+        htmlContent: "",
+      });
+      showToast?.("HTML package uploaded.");
+    } catch (err) {
+      alert("ZIP upload failed: " + err.message + "\n\nYou can paste a hosted ZIP URL instead.");
+    }
+  };
 
   return (
     <>
@@ -652,7 +699,11 @@ const LessonRow = ({ l, course, moduleIndex, lessonIndex, onChange, onRemove, on
         style={{ opacity: dragging ? 0.4 : 1, cursor: "grab" }}
       >
         <Icon name="grip" size={14} />
-        <select className="cd-input ce-lesson-type" value={l.type} onChange={e => onChange({ type: e.target.value, ...(e.target.value === "quiz" ? { dur: "", url: "" } : {}) })}>
+        <select className="cd-input ce-lesson-type" value={l.type} onChange={e => onChange({
+          type: e.target.value,
+          ...(e.target.value === "quiz" ? { dur: "", url: "" } : {}),
+          ...(e.target.value === "html" ? { htmlMode: l.htmlMode || "url", source: "" } : {}),
+        })}>
           {LESSON_TYPES.map(x => <option key={x.id} value={x.id}>{x.label}</option>)}
         </select>
         <input className="cd-input ce-lesson-title" value={l.title} onChange={e => onChange({ title: e.target.value })} placeholder="Lesson title" />
@@ -689,6 +740,11 @@ const LessonRow = ({ l, course, moduleIndex, lessonIndex, onChange, onRemove, on
             style={{ height: 32, padding: "0 12px", whiteSpace: "nowrap" }}>
             <Icon name="edit" size={12}/> {l.body ? `Edit (${l.body.length} chars)` : "Add content"}
           </button>
+        ) : showHtmlButton ? (
+          <button className="btn btn-ghost btn-sm" onClick={() => setBodyOpen(o => !o)}
+            style={{ height: 32, padding: "0 12px", whiteSpace: "nowrap" }}>
+            <Icon name="code" size={12}/> {l.htmlMode === "zip" ? "Configure package" : l.htmlMode === "inline" ? "Edit HTML" : "Configure HTML"}
+          </button>
         ) : (
           <div className="ce-lesson-spacer" />
         )}
@@ -704,6 +760,70 @@ const LessonRow = ({ l, course, moduleIndex, lessonIndex, onChange, onRemove, on
             value={l.bodyHtml || plainTextToArticleHtml(l.body || "")}
             onChange={html => onChange({ bodyHtml: html, body: articleHtmlToText(html) })}
           />
+        </div>
+      )}
+      {showHtmlButton && bodyOpen && (
+        <div style={{ padding: "8px 12px 12px 36px" }}>
+          <div className="html-lesson-editor">
+            <div className="cd-field" style={{ margin: 0 }}>
+              <label>HTML source</label>
+              <select className="cd-input" value={l.htmlMode || "url"} onChange={e => onChange({ htmlMode: e.target.value })}>
+                <option value="url">Hosted HTML URL</option>
+                <option value="inline">Self-contained HTML file</option>
+                <option value="zip">ZIP package with assets</option>
+              </select>
+            </div>
+
+            {(l.htmlMode || "url") === "url" && (
+              <div className="cd-field" style={{ margin: 0 }}>
+                <label>Hosted HTML URL</label>
+                <input className="cd-input" value={l.url || ""} onChange={e => onChange({ url: e.target.value })} placeholder="https://example.com/course/index.html" />
+              </div>
+            )}
+
+            {l.htmlMode === "inline" && (
+              <>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <label className="btn btn-ghost btn-sm" style={{ cursor: "pointer", margin: 0 }}>
+                    <Icon name="upload" size={14}/> Import .html
+                    <input type="file" accept=".html,.htm,text/html" style={{ display: "none" }} onChange={e => importHtmlFile(e.target.files?.[0])} />
+                  </label>
+                  {l.htmlFileName && <span className="chip chip-grey">{l.htmlFileName}</span>}
+                  <span className="text-xs text-muted">Best for self-contained HTML with inline CSS/scripts or remote assets.</span>
+                </div>
+                <textarea
+                  className="cd-input html-lesson-editor__code"
+                  value={l.htmlContent || ""}
+                  onChange={e => onChange({ htmlContent: e.target.value })}
+                  placeholder="Paste the full self-contained HTML document here..."
+                  rows={10}
+                />
+              </>
+            )}
+
+            {l.htmlMode === "zip" && (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 8 }}>
+                  <div className="cd-field" style={{ margin: 0 }}>
+                    <label>ZIP package URL</label>
+                    <input className="cd-input" value={l.packageUrl || ""} onChange={e => onChange({ packageUrl: e.target.value })} placeholder="Paste hosted .zip URL or upload below" />
+                  </div>
+                  <div className="cd-field" style={{ margin: 0 }}>
+                    <label>Entry file</label>
+                    <input className="cd-input" value={l.entryFile || "index.html"} onChange={e => onChange({ entryFile: e.target.value })} placeholder="index.html" />
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <label className="btn btn-ghost btn-sm" style={{ cursor: "pointer", margin: 0 }}>
+                    <Icon name="upload" size={14}/> Upload ZIP
+                    <input type="file" accept=".zip,application/zip,application/x-zip-compressed" style={{ display: "none" }} onChange={e => uploadZipPackage(e.target.files?.[0])} />
+                  </label>
+                  {l.packageFileName && <span className="chip chip-grey">{l.packageFileName}</span>}
+                  <span className="text-xs text-muted">Package should include an HTML entry file plus relative assets.</span>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
       {isQuiz && (

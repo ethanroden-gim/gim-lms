@@ -31,7 +31,7 @@ const AdminSortHeader = ({ label, sortKey, sort, onSort, style }) => (
       type="button"
       className="btn btn-ghost btn-sm"
       onClick={() => onSort(_adminNextSort(sort, sortKey))}
-      style={{ height: "auto", padding: "6px 8px", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em", gap: 8, width: style?.textAlign === "center" ? "100%" : "auto", justifyContent: style?.textAlign === "center" ? "center" : "flex-start" }}
+      style={{ height: "auto", padding: "8px 12px", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em", gap: 8, width: style?.textAlign === "center" ? "100%" : "auto", justifyContent: style?.textAlign === "center" ? "center" : "flex-start" }}
     >
       {label}<span aria-hidden="true" style={{ color: sort.key === sortKey ? "#111" : "#9a9d9a", fontSize: 10 }}>{sort.key === sortKey ? (sort.dir === "asc" ? "▲" : "▼") : "↕"}</span>
     </button>
@@ -74,6 +74,7 @@ const _adminBool = (v) => /^(true|yes|y|1|required)$/i.test(String(v || "").trim
 const _adminCourseImportTemplate = [
   { title: "Example Draft Course", category: "Compliance", description: "Short course overview", duration: "30", required: "yes", company_visibility: "all", allowed_companies: "", module: "Module 1", lesson_title: "Welcome", lesson_type: "article", lesson_duration: "5", lesson_url: "", lesson_source: "" },
   { title: "Example Draft Course", category: "Compliance", description: "Short course overview", duration: "30", required: "yes", company_visibility: "all", allowed_companies: "", module: "Module 1", lesson_title: "Policy video", lesson_type: "video", lesson_duration: "10", lesson_url: "https://example.com/video", lesson_source: "youtube" },
+  { title: "Example Draft Course", category: "Compliance", description: "Short course overview", duration: "30", required: "yes", company_visibility: "all", allowed_companies: "", module: "Module 2", lesson_title: "Interactive HTML lesson", lesson_type: "html", lesson_duration: "8", lesson_url: "https://example.com/index.html", lesson_source: "url", html_mode: "url", html_entry_file: "" },
 ];
 
 const _adminAssessmentImportTemplate = [
@@ -198,6 +199,26 @@ const AdminOverviewPage = ({ goRoute }) => {
     const pct = a ? Math.round((c / a) * 100) : null;
     return { dept: dept.name, company: companyName(dept.companyId), headcount: people.length, assigned: a, complete: pct, on_track: pct === null ? true : pct >= 85 };
   });
+  const duplicateProfiles = Object.values((ALL_USERS || []).reduce((acc, u) => {
+    const key = (u.emailLower || u.email || "").toLowerCase();
+    if (!key) return acc;
+    (acc[key] = acc[key] || []).push(u);
+    return acc;
+  }, {})).filter(list => list.length > 1);
+  const pendingAttempts = (window.ATTEMPTS || []).filter(a => a.status === "pending_review");
+  const contentHealthRows = COURSES
+    .filter(c => (c.status || "published") !== "archived")
+    .map(c => ({ course: c, issues: typeof courseHealthIssues === "function" ? courseHealthIssues(c) : [] }))
+    .filter(row => row.issues.length)
+    .sort((a, b) => b.issues.length - a.issues.length)
+    .slice(0, 6);
+  const actionItems = [
+    pendingAttempts.length && { label: "Assessment attempts need grading", count: pendingAttempts.length, route: "admin-attempts", tone: "amber" },
+    totals.overdue && { label: "Learners have overdue assignments", count: totals.learnersOverdue, route: "admin-users", tone: "red" },
+    duplicateProfiles.length && { label: "Duplicate user profiles detected", count: duplicateProfiles.length, route: "admin-users", tone: "amber" },
+    COURSES.filter(c => (c.status || "published") === "draft").length && { label: "Draft courses waiting to publish", count: COURSES.filter(c => (c.status || "published") === "draft").length, route: "admin-courses", tone: "blue" },
+    contentHealthRows.length && { label: "Course content issues to review", count: contentHealthRows.length, route: "admin-courses", tone: "amber" },
+  ].filter(Boolean);
 
   return (
     <div className="page page--wide">
@@ -235,6 +256,50 @@ const AdminOverviewPage = ({ goRoute }) => {
           <div className="stat__label">Courses published</div>
           <div className="stat__value">{COURSES.filter(c => c.status !== "archived").length}</div>
           <div className="stat__sub">{COURSES.length ? "in catalog" : "no courses yet"}</div>
+        </div>
+      </div>
+
+      <div className="dash-2col mt-8">
+        <div className="card card-pad-lg">
+          <div className="section-head" style={{ marginBottom: 12 }}>
+            <h3>Action needed</h3>
+            {goRoute && <a onClick={() => goRoute("admin-activity")}>View activity</a>}
+          </div>
+          {actionItems.length === 0 ? (
+            <div className="empty" style={{ padding: 24 }}>No urgent admin actions right now.</div>
+          ) : (
+            <div className="action-list">
+              {actionItems.map(item => (
+                <button key={item.label} className="action-row" onClick={() => goRoute && goRoute(item.route)}>
+                  <span className={`status-dot status-dot--${item.tone}`} />
+                  <span>{item.label}</span>
+                  <strong>{item.count}</strong>
+                  <Icon name="chevron-right" size={14}/>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="card card-pad-lg">
+          <div className="section-head" style={{ marginBottom: 12 }}>
+            <h3>Content health</h3>
+            {goRoute && <a onClick={() => goRoute("admin-courses")}>Open courses</a>}
+          </div>
+          {contentHealthRows.length === 0 ? (
+            <div className="empty" style={{ padding: 24 }}>Published and draft courses look connected.</div>
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
+              {contentHealthRows.map(({ course, issues }) => (
+                <div key={course.id} className="health-row">
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: 13 }}>{course.title}</div>
+                    <div className="text-xs text-muted">{issues.slice(0, 2).map(i => i.label).join(" | ")}</div>
+                  </div>
+                  <span className="chip chip-amber">{issues.length}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -373,6 +438,7 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
   const importInputRef = React.useRef(null);
   const [assignFor, setAssignFor] = React.useState(null); // courseId or null
   const [enrollmentsFor, setEnrollmentsFor] = React.useState(null); // course or null
+  const [detailsFor, setDetailsFor] = React.useState(null); // course or null
   const openAssign = (id) => setAssignFor(id);
   const categoryNames = getCategoryNames();
   const cats = ["All", ...categoryNames];
@@ -391,6 +457,23 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
     _adminEnrolled: ENROLLMENT_COUNTS[c.id] || 0,
     _adminStatus: c.status || "published",
   })), sort);
+  const courseExportDataset = () => ({
+    sheet: "Courses",
+    rows: sortedCourses,
+    columns: [
+      { key: "id", label: "Course ID" },
+      { key: "title", label: "Title" },
+      { key: "cat", label: "Category" },
+      { label: "Company visibility", get: r => (r.companyVisibility || "all") === "selected" ? "Selected companies" : "All companies" },
+      { label: "Allowed companies", get: r => (r.companyVisibility || "all") === "selected" ? companyNames(r.allowedCompanyIds || []) : "" },
+      { key: "lessons", label: "Lessons" },
+      { key: "_adminMinutes", label: "Duration (min)" },
+      { label: "Required", get: r => r.required ? "Yes" : "No" },
+      { key: "_adminStatus", label: "Status" },
+      { key: "_adminEnrolled", label: "Enrolled" },
+      { label: "Health issues", get: r => (typeof courseHealthIssues === "function" ? courseHealthIssues(r).map(i => i.label).join(" | ") : "") },
+    ],
+  });
   const importCourses = async (file) => {
     if (!file) return;
     if (!window.fbReady) { alert("Firebase isn't configured - can't import."); return; }
@@ -414,15 +497,23 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
           if (!lessonTitle) return;
           const moduleName = r.module || r.module_title || "Module 1";
           if (!modulesByName.has(moduleName)) modulesByName.set(moduleName, { title: moduleName, lessons: [] });
-          modulesByName.get(moduleName).lessons.push({
+          const lessonType = r.lesson_type || r.type || "article";
+          const lesson = {
             id: "l-" + Math.random().toString(36).slice(2, 7),
             title: lessonTitle,
-            type: r.lesson_type || r.type || "article",
+            type: lessonType,
             dur: r.lesson_duration || r.duration_minutes || r.duration || "",
             source: r.lesson_source || r.source || "drive",
             url: r.lesson_url || r.url || "",
             body: r.lesson_body || r.body || "",
-          });
+          };
+          if (lessonType === "html") {
+            lesson.htmlMode = r.html_mode || r.lesson_source || "url";
+            lesson.htmlContent = r.html_content || "";
+            lesson.packageUrl = r.package_url || r.zip_url || (lesson.htmlMode === "zip" ? (r.lesson_url || r.url || "") : "");
+            lesson.entryFile = r.html_entry_file || r.entry_file || "index.html";
+          }
+          modulesByName.get(moduleName).lessons.push(lesson);
         });
         const modules = [...modulesByName.values()];
         const duration = parseInt(first.duration || first.duration_minutes || "", 10) || modules.reduce((sum, m) => (
@@ -467,7 +558,7 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
           <div className="page-head__sub">Add courses, manage lessons, publish to catalog.</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <ExportButton page="admin-courses" label="Export" />
+          <ExportButton page="admin-courses" label="Export" dataset={courseExportDataset} />
           <button className="btn btn-ghost" onClick={() => _adminDownloadCsvTemplate(`course-import-template-${stamp()}.csv`, _adminCourseImportTemplate)}>
             <Icon name="download" size={14}/> CSV template
           </button>
@@ -557,6 +648,7 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
                     const items = [
                       { label: "Assign to learners", icon: "plus", onClick: () => openAssign(c.id) },
                       { label: "Preview as learner", icon: "play-o", onClick: () => onPreview && onPreview(c.id) },
+                      { label: "View course details", icon: "chart", onClick: () => setDetailsFor(c) },
                       { label: "Duplicate", icon: "edit", onClick: async () => {
                           try { await duplicateCourse(c.id); showToast?.(`Duplicated "${c.title}"`); }
                           catch (err) { alert("Duplicate failed: " + err.message); }
@@ -616,7 +708,67 @@ const AdminCoursesPage = ({ onNew, onEdit, onPreview }) => {
         onClose={() => setEnrollmentsFor(null)}
         course={enrollmentsFor}
       />
+      <CourseDetailsModal
+        open={!!detailsFor}
+        onClose={() => setDetailsFor(null)}
+        course={detailsFor}
+      />
     </div>
+  );
+};
+
+const CourseDetailsModal = ({ open, onClose, course }) => {
+  if (!open || !course) return null;
+  const enrollments = (window.ALL_ENROLLMENTS || []).filter(e => e.courseId === course.id);
+  const completed = enrollments.filter(e => e.status === "completed").length;
+  const inProgress = enrollments.filter(e => e.status === "in_progress").length;
+  const issues = typeof courseHealthIssues === "function" ? courseHealthIssues(course) : [];
+  const finalAssessment = typeof courseFinalAssessment === "function" ? courseFinalAssessment(course) : null;
+  const avgScoreRows = enrollments.filter(e => typeof e.score === "number");
+  const avgScore = avgScoreRows.length ? Math.round(avgScoreRows.reduce((s, e) => s + e.score, 0) / avgScoreRows.length) : null;
+  return (
+    <Modal open={open} onClose={onClose} width={720}>
+      <div style={{ padding: "20px 24px", borderBottom: "1px solid #ececec", display: "flex", justifyContent: "space-between", gap: 16 }}>
+        <div>
+          <div className="eyebrow-sm">Course details</div>
+          <h2 style={{ margin: "4px 0 0", fontSize: 20, fontWeight: 800 }}>{course.title}</h2>
+          <div className="text-xs text-muted" style={{ marginTop: 4 }}>ID: {course.id}</div>
+        </div>
+        <button className="btn-icon" onClick={onClose}><Icon name="close" size={18}/></button>
+      </div>
+      <div style={{ padding: 24, display: "grid", gap: 18 }}>
+        <div className="dash-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+          <div className="stat"><div className="stat__label">Enrolled</div><div className="stat__value">{enrollments.length}</div><div className="stat__sub">{inProgress} in progress</div></div>
+          <div className="stat"><div className="stat__label">Completed</div><div className="stat__value">{completed}</div><div className="stat__sub">{enrollments.length ? Math.round((completed / enrollments.length) * 100) : 0}% complete</div></div>
+          <div className="stat"><div className="stat__label">Avg score</div><div className="stat__value">{avgScore == null ? "-" : `${avgScore}%`}</div><div className="stat__sub">{avgScoreRows.length} scored</div></div>
+          <div className="stat"><div className="stat__label">Duration</div><div className="stat__value">{adminCourseMinutes(course)}</div><div className="stat__sub">minutes</div></div>
+        </div>
+        <div className="card card-pad">
+          <div className="eyebrow-sm">Configuration</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12, fontSize: 13 }}>
+            <div><strong>Status:</strong> {course.status || "published"}</div>
+            <div><strong>Category:</strong> {course.cat || "-"}</div>
+            <div><strong>Visibility:</strong> {(course.companyVisibility || "all") === "selected" ? companyNames(course.allowedCompanyIds || []) || "No companies selected" : "All companies"}</div>
+            <div><strong>Final assessment:</strong> {finalAssessment?.title || "Not linked"}</div>
+          </div>
+        </div>
+        <div className="card card-pad">
+          <div className="eyebrow-sm">Content health</div>
+          {issues.length === 0 ? (
+            <div className="text-sm text-muted" style={{ marginTop: 10 }}>No content issues found.</div>
+          ) : (
+            <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+              {issues.map((issue, idx) => (
+                <div key={idx} className="health-row">
+                  <span className={`status-dot status-dot--${issue.level === "critical" ? "red" : issue.level === "warning" ? "amber" : "blue"}`} />
+                  <span>{issue.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
   );
 };
 
@@ -699,6 +851,21 @@ const AdminUsersPage = () => {
       _company: companyName(u.companyId) || "",
     };
   }), sort);
+  const usersExportDataset = () => ({
+    sheet: "People",
+    rows: sortedUsers,
+    columns: [
+      { key: "name", label: "Name" },
+      { key: "email", label: "Email" },
+      { key: "role", label: "Role" },
+      { key: "dept", label: "Department" },
+      { key: "_company", label: "Company" },
+      { key: "_status", label: "Status" },
+      { key: "_assigned", label: "Assigned" },
+      { key: "_completed", label: "Completed" },
+      { key: "_overdue", label: "Overdue" },
+    ],
+  });
   const usersByEmail = React.useMemo(() => {
     const map = {};
     (ALL_USERS || []).forEach(u => {
@@ -745,7 +912,7 @@ const AdminUsersPage = () => {
           <div className="page-head__sub">Add new hires before first login, then set roles, departments, and assignments here.</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <ExportButton page="admin-users" label="Export CSV" />
+          <ExportButton page="admin-users" label="Export CSV" dataset={usersExportDataset} />
           <button className="btn btn-ghost" onClick={() => setAddUserOpen(true)}><Icon name="user" size={14}/> Add person</button>
           <button className="btn btn-primary" onClick={() => setAssignFor("all")}><Icon name="plus" size={14}/> Assign training</button>
         </div>
@@ -1305,6 +1472,7 @@ const AdminAssessmentsPage = () => {
     })
     .map(a => {
       const linked = COURSES.find(c => c.id === a.courseId);
+      const analytics = typeof assessmentAnalytics === "function" ? assessmentAnalytics(a) : null;
       return {
         ...a,
         _courseTitle: linked?.title || "",
@@ -1312,9 +1480,36 @@ const AdminAssessmentsPage = () => {
         _questionCount: a.questions?.length || 0,
         _passMark: a.passMark || 80,
         _status: a.status || "published",
+        _analytics: analytics,
+        _passRate: analytics?.passRate ?? -1,
       };
     }), sort);
   const totalAssessments = visible.length;
+  const visibleAnalytics = visible.map(a => a._analytics).filter(Boolean);
+  const gradedAnalytics = visibleAnalytics.filter(x => x.graded?.length);
+  const avgPassRate = gradedAnalytics.length
+    ? Math.round(gradedAnalytics.reduce((sum, x) => sum + (x.passRate || 0), 0) / gradedAnalytics.length)
+    : null;
+  const attemptsLast30 = visibleAnalytics.reduce((sum, x) => sum + (x.last30?.length || 0), 0);
+  const lowestScoring = visible
+    .filter(a => a._analytics?.avgScore != null)
+    .sort((a, b) => a._analytics.avgScore - b._analytics.avgScore)[0];
+  const assessmentExportDataset = () => ({
+    sheet: "Assessments",
+    rows: visible,
+    columns: [
+      { key: "title", label: "Assessment" },
+      { key: "_courseTitle", label: "Linked course" },
+      { key: "_typeLabel", label: "Type" },
+      { key: "_questionCount", label: "Questions" },
+      { key: "_passMark", label: "Pass mark %" },
+      { key: "_status", label: "Status" },
+      { label: "Attempts", get: r => r._analytics?.attempts?.length || 0 },
+      { label: "Graded attempts", get: r => r._analytics?.graded?.length || 0 },
+      { label: "Pass rate", get: r => r._analytics?.passRate == null ? "" : `${r._analytics.passRate}%` },
+      { label: "Average score", get: r => r._analytics?.avgScore == null ? "" : `${r._analytics.avgScore}%` },
+    ],
+  });
   const importAssessments = async (file) => {
     if (!file) return;
     if (!window.fbReady) { alert("Firebase isn't configured - can't import."); return; }
@@ -1394,6 +1589,7 @@ const AdminAssessmentsPage = () => {
           <div className="page-head__sub">Manage questions, pass thresholds, and review attempt analytics.</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <ExportButton page="admin-assess" label="Export" dataset={assessmentExportDataset} />
           <button className="btn btn-ghost" onClick={() => _adminDownloadCsvTemplate(`assessment-import-template-${stamp()}.csv`, _adminAssessmentImportTemplate)}>
             <Icon name="download" size={14}/> CSV template
           </button>
@@ -1430,18 +1626,18 @@ const AdminAssessmentsPage = () => {
         </div>
         <div className="stat">
           <div className="stat__label">Avg. pass rate</div>
-          <div className="stat__value">—</div>
-          <div className="stat__sub">Attempt tracking coming soon</div>
+          <div className="stat__value">{avgPassRate == null ? "-" : `${avgPassRate}%`}</div>
+          <div className="stat__sub">{gradedAnalytics.length ? "Across graded assessments" : "No graded attempts yet"}</div>
         </div>
         <div className="stat">
           <div className="stat__label">Attempts last 30d</div>
-          <div className="stat__value">0</div>
-          <div className="stat__sub">No activity</div>
+          <div className="stat__value">{attemptsLast30}</div>
+          <div className="stat__sub">{attemptsLast30 ? "Recent learner submissions" : "No recent attempts"}</div>
         </div>
         <div className="stat">
           <div className="stat__label">Lowest scoring</div>
-          <div className="stat__value" style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.3 }}>—</div>
-          <div className="stat__sub">No data</div>
+          <div className="stat__value" style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.3 }}>{lowestScoring?.title || "-"}</div>
+          <div className="stat__sub">{lowestScoring ? `${lowestScoring._analytics.avgScore}% average score` : "No score data"}</div>
         </div>
       </div>
 
@@ -1456,6 +1652,7 @@ const AdminAssessmentsPage = () => {
               <AdminSortHeader label="Type" sortKey="_typeLabel" sort={sort} onSort={setSort} />
               <AdminSortHeader label="Questions" sortKey="_questionCount" sort={sort} onSort={setSort} />
               <AdminSortHeader label="Pass mark" sortKey="_passMark" sort={sort} onSort={setSort} />
+              <AdminSortHeader label="Pass rate" sortKey="_passRate" sort={sort} onSort={setSort} />
               <AdminSortHeader label="Status" sortKey="_status" sort={sort} onSort={setSort} />
               <th></th>
             </tr>
@@ -1476,6 +1673,7 @@ const AdminAssessmentsPage = () => {
                   <td><span className="chip chip-grey">{a.type === "quiz" ? "Quiz" : "Final certification"}</span></td>
                   <td style={{ fontVariantNumeric: "tabular-nums" }}>{a.questions?.length || 0}</td>
                   <td style={{ fontVariantNumeric: "tabular-nums" }}>{a.passMark || 80}%</td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>{a._analytics?.passRate == null ? <span className="text-xs text-muted">No data</span> : `${a._analytics.passRate}%`}</td>
                   <td>
                     {a.status === "draft" ? <span className="chip chip-amber">Draft</span> :
                      a.status === "archived" ? <span className="chip chip-grey">Archived</span> :
@@ -1568,7 +1766,7 @@ const ActivitySortHeader = ({ label, sortKey, sort, onSort, style }) => {
         type="button"
         className="btn btn-ghost btn-sm"
         onClick={() => onSort(_activityNextSort(sort, sortKey))}
-        style={{ height: "auto", padding: "6px 8px", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em", gap: 8 }}
+        style={{ height: "auto", padding: "8px 12px", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".06em", gap: 8 }}
       >
         {label}<span aria-hidden="true" style={{ color: active ? "#111" : "#9a9d9a", fontSize: 10 }}>{active ? (desc ? "▼" : "▲") : "↕"}</span>
       </button>
@@ -1605,6 +1803,7 @@ const AdminActivityPage = () => {
       view === "admin" ? r.action : r.text,
       r.actorName, r.actorEmail, r.userName, r.userEmail,
       u.name, u.email, c.title, r.courseId, r.targetUserId, r.fields, r.status, r.type,
+      r.eventType, r.entityType, r.entityId,
     ].filter(Boolean).join(" ").toLowerCase();
     if (needle && !hay.includes(needle)) return false;
     if (courseId !== "All" && r.courseId !== courseId) return false;
@@ -1648,9 +1847,12 @@ const AdminActivityPage = () => {
           actorEmail: r.actorEmail || u.email || "",
           company: companyName(u.companyId) || "",
           action: r.action || "",
+          eventType: r.eventType || "",
+          entityType: r.entityType || "",
+          entityId: r.entityId || "",
           course: c.title || r.courseId || "",
           targetUserId: r.targetUserId || "",
-          details: [r.fields, r.status, r.type, r.count, r.userCount, r.courseCount].filter(v => v !== undefined && v !== "").join(" | "),
+          details: [r.fields, r.status, r.type, r.count, r.userCount, r.courseCount, r.before && `Before: ${JSON.stringify(r.before)}`, r.after && `After: ${JSON.stringify(r.after)}`].filter(v => v !== undefined && v !== "").join(" | "),
         };
       }
       return {
@@ -1658,6 +1860,8 @@ const AdminActivityPage = () => {
         learner: u.name || r.userName || id || "",
         learnerEmail: u.email || r.userEmail || "",
         company: companyName(u.companyId) || "",
+        eventType: r.eventType || "",
+        entityType: r.entityType || "",
         course: c.title || r.courseId || "",
         activity: r.text || "",
       };
@@ -1669,6 +1873,9 @@ const AdminActivityPage = () => {
           { key: "actorEmail", label: "Admin email" },
           { key: "company", label: "Company" },
           { key: "action", label: "Action" },
+          { key: "eventType", label: "Event type" },
+          { key: "entityType", label: "Entity type" },
+          { key: "entityId", label: "Entity ID" },
           { key: "course", label: "Course" },
           { key: "targetUserId", label: "Target user ID" },
           { key: "details", label: "Details" },
@@ -1678,6 +1885,8 @@ const AdminActivityPage = () => {
           { key: "learner", label: "Learner" },
           { key: "learnerEmail", label: "Learner email" },
           { key: "company", label: "Company" },
+          { key: "eventType", label: "Event type" },
+          { key: "entityType", label: "Entity type" },
           { key: "course", label: "Course" },
           { key: "activity", label: "Activity" },
         ];
@@ -1767,6 +1976,15 @@ const AdminActivityPage = () => {
                   <td>{u.companyId ? <span className="chip chip-grey">{companyName(u.companyId) || u.companyId}</span> : <span className="text-xs text-muted">Unmatched</span>}</td>
                   <td>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{view === "admin" ? r.action : r.text}</div>
+                    {view === "admin" && (r.eventType || r.entityType || r.before || r.after) && (
+                      <details style={{ marginTop: 6, fontSize: 11, color: "#5f635f" }}>
+                        <summary style={{ cursor: "pointer", fontWeight: 700 }}>Audit metadata</summary>
+                        {r.eventType && <div style={{ marginTop: 4 }}>Type: {r.eventType}</div>}
+                        {r.entityType && <div>Entity: {r.entityType}{r.entityId ? ` / ${r.entityId}` : ""}</div>}
+                        {r.before && <div>Before: {JSON.stringify(r.before)}</div>}
+                        {r.after && <div>After: {JSON.stringify(r.after)}</div>}
+                      </details>
+                    )}
                     {view === "admin" && (
                       <div style={{ fontSize: 11, color: "#5f635f", marginTop: 2 }}>
                         {[r.fields && `Fields: ${r.fields}`, r.status && `Status: ${r.status}`, r.count != null && `Count: ${r.count}`, r.userCount != null && `${r.userCount} users`, r.courseCount != null && `${r.courseCount} courses`].filter(Boolean).join(" · ")}

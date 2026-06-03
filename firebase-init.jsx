@@ -457,9 +457,23 @@ const hydrateUserFromFirebase = async (fbUser) => {
 // ---- Generic field updates ------------------------------------------------
 const updateUser = async (uid, fields) => {
   if (!fbReady) throw new Error("Firebase not configured");
+  const beforeSnap = window.CURRENT_USER?.isAdmin
+    ? await fbDb.collection("users").doc(uid).get().catch(() => null)
+    : null;
+  const before = beforeSnap?.exists ? beforeSnap.data() : {};
   await fbDb.collection("users").doc(uid).set(fields, { merge: true });
   if (window.CURRENT_USER?.isAdmin) {
-    recordAdminActivity("Updated user", { targetUserId: uid, fields: Object.keys(fields || {}).join(", ") }).catch(() => {});
+    const fieldKeys = Object.keys(fields || {});
+    const beforeFields = Object.fromEntries(fieldKeys.map(key => [key, before?.[key] ?? null]));
+    const afterFields = Object.fromEntries(fieldKeys.map(key => [key, fields?.[key] ?? null]));
+    recordAdminActivity("Updated user", {
+      targetUserId: uid,
+      entityType: "user",
+      entityId: uid,
+      fields: fieldKeys.join(", "),
+      before: beforeFields,
+      after: afterFields,
+    }).catch(() => {});
   }
 };
 
@@ -515,7 +529,13 @@ const recordActivity = (text, courseId, extra = {}) => {
   if (!fbReady || !fbAuth.currentUser) return Promise.resolve();
   return fbDb.collection("activity").add({
     userId: fbAuth.currentUser.uid,
+    userName: window.CURRENT_USER?.name || "",
+    userEmail: window.CURRENT_USER?.email || "",
+    companyId: window.CURRENT_USER?.companyId || "",
     text,
+    eventType: extra.eventType || "activity",
+    entityType: extra.entityType || (courseId ? "course" : "system"),
+    entityId: extra.entityId || courseId || null,
     courseId: courseId || null,
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     ...extra,
@@ -528,7 +548,11 @@ const recordAdminActivity = (action, extra = {}) => {
     actorId: fbAuth.currentUser.uid,
     actorName: window.CURRENT_USER?.name || "",
     actorEmail: window.CURRENT_USER?.email || "",
+    companyId: window.CURRENT_USER?.companyId || "",
     action,
+    eventType: extra.eventType || "admin_audit",
+    entityType: extra.entityType || "system",
+    entityId: extra.entityId || extra.courseId || extra.assessmentId || extra.targetUserId || null,
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     ...extra,
   });
@@ -880,8 +904,8 @@ const saveCertificateTemplate = async (template) => {
 };
 
 // ---- Bulk training assignment --------------------------------------------
-// payload = { userIds:[], courseIds:[], dueDays?, required? }
-const assignTraining = async ({ userIds, courseIds, dueDays, required }) => {
+// payload = { userIds:[], courseIds:[], dueDays?, required?, reminderCadence?, notify? }
+const assignTraining = async ({ userIds, courseIds, dueDays, required, reminderCadence = "none", notify = false }) => {
   if (!fbReady) throw new Error("Firebase not configured");
   if (!userIds?.length || !courseIds?.length) return 0;
   const batch = fbDb.batch();
@@ -901,6 +925,8 @@ const assignTraining = async ({ userIds, courseIds, dueDays, required }) => {
         progress: 0,
         dueAt: dueAt,
         required: !!required,
+        reminderCadence: notify ? reminderCadence : "none",
+        notifyOnAssign: !!notify,
         assignedBy: window.CURRENT_USER?.uid || null,
         assignedAt: now,
       }, { merge: true });
@@ -908,7 +934,7 @@ const assignTraining = async ({ userIds, courseIds, dueDays, required }) => {
     }
   }
   await batch.commit();
-  recordAdminActivity("Assigned training", { userCount: userIds.length, courseCount: courseIds.length, required: !!required }).catch(() => {});
+  recordAdminActivity("Assigned training", { userCount: userIds.length, courseCount: courseIds.length, required: !!required, reminderCadence: notify ? reminderCadence : "none" }).catch(() => {});
   return n;
 };
 

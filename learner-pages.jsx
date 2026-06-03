@@ -88,6 +88,23 @@ const DashboardPage = ({ goCourse, setRoute }) => {
   const firstName = (CURRENT_USER.name || "there").split(" ")[0];
   const company = getCurrentUserCompany() || DEFAULT_COMPANY;
   const companyLogo = company.logoUrl && company.logoUrl !== DEFAULT_COMPANY.logoUrl ? company.logoUrl : "";
+  const nextAction = (() => {
+    const overdue = assigned
+      .filter(a => a.dueDays != null && a.dueDays <= 0)
+      .sort((a, b) => (a.dueDays ?? 999) - (b.dueDays ?? 999))[0];
+    if (overdue?.course) return { label: "Overdue assignment", title: overdue.course.title, sub: "Start this required training now.", courseId: overdue.course.id, tone: "red" };
+    const finalReady = inProgress.find(c => {
+      const lessons = learnerCourseLessons(c);
+      const done = new Set(ENROLLMENTS[c.id]?.completedLessons || []);
+      return lessons.length > 0 && lessons.every(l => done.has(l.id)) && typeof courseFinalAssessment === "function" && courseFinalAssessment(c);
+    });
+    if (finalReady) return { label: "Final assessment ready", title: finalReady.title, sub: "All lessons are complete. Finish the course by taking the final certification assessment.", courseId: finalReady.id, tone: "blue" };
+    const resume = inProgress[0];
+    if (resume) return { label: "Continue learning", title: resume.title, sub: learnerNextLessonTitle(resume, ENROLLMENTS[resume.id]) || "Pick up where you left off.", courseId: resume.id, tone: "blue" };
+    const nextAssigned = [...assigned].sort((a, b) => (a.dueDays ?? 9999) - (b.dueDays ?? 9999))[0];
+    if (nextAssigned?.course) return { label: "Next assignment", title: nextAssigned.course.title, sub: nextAssigned.dueDays != null ? `Due in ${nextAssigned.dueDays} days` : "Ready to start.", courseId: nextAssigned.course.id, tone: "blue" };
+    return null;
+  })();
 
   return (
     <div className="page">
@@ -122,6 +139,18 @@ const DashboardPage = ({ goCourse, setRoute }) => {
           </div>
         </div>
       </div>
+
+      {nextAction && (
+        <div className="next-action-card mt-6" onClick={() => goCourse(nextAction.courseId)}>
+          <span className={`status-dot status-dot--${nextAction.tone}`} />
+          <div className="next-action-card__body">
+            <div className="eyebrow-sm">{nextAction.label}</div>
+            <div className="next-action-card__title">{nextAction.title}</div>
+            <div className="text-sm text-muted">{nextAction.sub}</div>
+          </div>
+          <button className="btn btn-primary btn-sm">Open <Icon name="arrow-right" size={14}/></button>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="dash-grid mt-6">
@@ -195,6 +224,7 @@ const DashboardPage = ({ goCourse, setRoute }) => {
           <div className="card">
             <div style={{ padding: 8 }}>
               {assigned.map(a => {
+                const overdue = a.dueDays != null && a.dueDays <= 0;
                 const soon = a.dueDays != null && a.dueDays <= 14;
                 if (!a.course) return null; // silently skip if course was deleted
                 return (
@@ -207,7 +237,7 @@ const DashboardPage = ({ goCourse, setRoute }) => {
                     <div className="assigned-row__due">
                       {a.dueDays != null && (
                         <div className={classNames("assigned-row__due-date", soon && "assigned-row__due-soon")}>
-                          Due in {a.dueDays}d
+                          {overdue ? `${Math.abs(a.dueDays)}d overdue` : `Due in ${a.dueDays}d`}
                         </div>
                       )}
                       <div>{a.required ? "Required" : "Optional"}</div>
@@ -404,6 +434,20 @@ const MyLearningPage = ({ goCourse }) => {
 // ============================================================
 const CertificatesPage = ({ goCert }) => {
   const completed = visibleLearnerCourses().filter(c => ENROLLMENTS[c.id]?.status === "completed");
+  const downloadCertificate = (course) => {
+    const e = ENROLLMENTS[course.id] || {};
+    const certCompany = getCurrentUserCompany() || getBrandCompany("learner");
+    const initials = (certCompany.name || "OneSource").split(/\s+/).map(w => w[0]).join("").slice(0, 4);
+    const template = {
+      ...(window.CERTIFICATE_TEMPLATE || CERTIFICATE_DEFAULTS),
+      accent: certCompany.accent || (window.CERTIFICATE_TEMPLATE || CERTIFICATE_DEFAULTS).accent,
+      logoUrl: certCompany.certificateLogoUrl || certCompany.logoUrl || (window.CERTIFICATE_TEMPLATE || CERTIFICATE_DEFAULTS).logoUrl,
+      brandTag: certCompany.certificateName || certCompany.name || (window.CERTIFICATE_TEMPLATE || CERTIFICATE_DEFAULTS).brandTag,
+      sealText: initials,
+    };
+    const certNo = "OS-" + (course.id.toUpperCase().replace(/[^A-Z]/g, "")) + "-" + (1000 + Math.abs(course.id.length * 137) % 9000);
+    printCertificate(template, course, CURRENT_USER.name, formatDate(e.completedOn) || new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }), e.score ?? null, certNo);
+  };
   return (
     <div className="page">
       <div className="page-head">
@@ -423,8 +467,8 @@ const CertificatesPage = ({ goCert }) => {
                 background: "#fff", border: "1px solid #ececec", margin: 16, borderRadius: 8,
                 padding: 18, position: "relative", aspectRatio: "1.414", display: "flex", flexDirection: "column",
               }}>
-                <div style={{ position: "absolute", inset: 6, border: "2px solid #7ac142", borderRadius: 6, pointerEvents: "none" }} />
-                <div style={{ fontFamily: "var(--font-accent)", fontSize: 9, letterSpacing: "0.18em", color: "#2e5a12", fontWeight: 700, textTransform: "uppercase" }}>Certificate</div>
+                <div style={{ position: "absolute", inset: 6, border: `2px solid ${(getCurrentUserCompany() || DEFAULT_COMPANY).accent || "#2D7FF9"}`, borderRadius: 6, pointerEvents: "none" }} />
+                <div style={{ fontFamily: "var(--font-accent)", fontSize: 9, letterSpacing: "0.18em", color: (getCurrentUserCompany() || DEFAULT_COMPANY).accent || "#2D7FF9", fontWeight: 700, textTransform: "uppercase" }}>Certificate</div>
                 <div style={{ fontFamily: "var(--font-display)", fontSize: 18, lineHeight: 1.1, marginTop: 8 }}>{c.title}</div>
                 <div style={{ marginTop: "auto", fontSize: 11, color: "#5f635f" }}>
                   Awarded {formatDate(e.completedOn) || "—"}{e.score != null ? ` · Score ${e.score}%` : ""}
@@ -434,7 +478,7 @@ const CertificatesPage = ({ goCert }) => {
                 <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={(ev) => { ev.stopPropagation(); goCert(c.id); }}>
                   <Icon name="external" size={14} /> View
                 </button>
-                <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={(ev) => ev.stopPropagation()}>
+                <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={(ev) => { ev.stopPropagation(); downloadCertificate(c); }}>
                   <Icon name="download" size={14} /> Download
                 </button>
               </div>

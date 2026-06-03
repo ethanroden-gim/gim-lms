@@ -34,6 +34,115 @@ const toEmbedUrl = (url, source) => {
   return url;
 };
 
+const normalizeHtmlPackagePath = (path) => {
+  const parts = String(path || "").replace(/\\/g, "/").split("/");
+  const out = [];
+  parts.forEach(part => {
+    if (!part || part === ".") return;
+    if (part === "..") out.pop();
+    else out.push(part);
+  });
+  return out.join("/");
+};
+
+const HtmlPackageFrame = ({ lesson }) => {
+  const [state, setState] = React.useState({ status: "loading", srcDoc: "", error: "" });
+  React.useEffect(() => {
+    let cancelled = false;
+    const objectUrls = [];
+    const run = async () => {
+      if (!lesson?.packageUrl) {
+        setState({ status: "error", srcDoc: "", error: "No ZIP package URL is configured." });
+        return;
+      }
+      if (!window.JSZip) {
+        setState({ status: "error", srcDoc: "", error: "ZIP support is still loading. Refresh and try again." });
+        return;
+      }
+      try {
+        setState({ status: "loading", srcDoc: "", error: "" });
+        const res = await fetch(lesson.packageUrl);
+        if (!res.ok) throw new Error(`Could not load ZIP package (${res.status})`);
+        const zip = await window.JSZip.loadAsync(await res.arrayBuffer());
+        const files = Object.values(zip.files).filter(f => !f.dir);
+        const preferredEntry = normalizeHtmlPackagePath(lesson.entryFile || "index.html");
+        const entry = zip.file(preferredEntry)
+          || files.find(f => /(^|\/)index\.html?$/i.test(f.name))
+          || files.find(f => /\.html?$/i.test(f.name));
+        if (!entry) throw new Error("No HTML entry file found in the ZIP package.");
+
+        const entryDir = entry.name.includes("/") ? entry.name.split("/").slice(0, -1).join("/") : "";
+        const urlByPath = {};
+        const resolveAssetFrom = (baseDir, raw) => {
+          const value = String(raw || "").trim();
+          if (!value || /^(https?:|mailto:|tel:|data:|blob:|#)/i.test(value)) return value;
+          const joined = value.startsWith("/")
+            ? normalizeHtmlPackagePath(value)
+            : normalizeHtmlPackagePath(`${baseDir}/${value}`);
+          return urlByPath[joined] || urlByPath[normalizeHtmlPackagePath(value)] || value;
+        };
+        const resolveAsset = (raw) => resolveAssetFrom(entryDir, raw);
+        const cssFiles = [];
+        for (const file of files) {
+          if (file.name === entry.name) continue;
+          if (/\.css$/i.test(file.name)) {
+            cssFiles.push(file);
+            continue;
+          }
+          const blob = await file.async("blob");
+          const url = URL.createObjectURL(blob);
+          objectUrls.push(url);
+          urlByPath[normalizeHtmlPackagePath(file.name)] = url;
+        }
+        for (const file of cssFiles) {
+          const cssDir = file.name.includes("/") ? file.name.split("/").slice(0, -1).join("/") : "";
+          const cssText = await file.async("text");
+          const rewritten = cssText.replace(/url\((['"]?)(?!data:|https?:|blob:|#)([^'")]+)\1\)/gi, (_m, quote, assetPath) =>
+            `url(${quote || ""}${resolveAssetFrom(cssDir, assetPath)}${quote || ""})`
+          );
+          const url = URL.createObjectURL(new Blob([rewritten], { type: "text/css" }));
+          objectUrls.push(url);
+          urlByPath[normalizeHtmlPackagePath(file.name)] = url;
+        }
+        const html = await entry.async("text");
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        doc.querySelectorAll("[src]").forEach(el => el.setAttribute("src", resolveAsset(el.getAttribute("src"))));
+        doc.querySelectorAll("link[href],a[href]").forEach(el => el.setAttribute("href", resolveAsset(el.getAttribute("href"))));
+        doc.querySelectorAll("[poster]").forEach(el => el.setAttribute("poster", resolveAsset(el.getAttribute("poster"))));
+        const srcDoc = "<!doctype html>\n" + doc.documentElement.outerHTML;
+        if (!cancelled) setState({ status: "ready", srcDoc, error: "" });
+      } catch (err) {
+        if (!cancelled) setState({ status: "error", srcDoc: "", error: err.message });
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+      objectUrls.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [lesson?.packageUrl, lesson?.entryFile]);
+
+  if (state.status !== "ready") {
+    return (
+      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#fff", color: "#163A5F", padding: 24, textAlign: "center" }}>
+        <div>
+          <Icon name={state.status === "error" ? "flag" : "code"} size={40} />
+          <div style={{ marginTop: 10, fontWeight: 800 }}>{state.status === "error" ? "HTML package could not load" : "Loading HTML package"}</div>
+          <div className="text-sm text-muted" style={{ marginTop: 6 }}>{state.error || "Preparing the lesson assets..."}</div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <iframe
+      srcDoc={state.srcDoc}
+      sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin"
+      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0, background: "#fff" }}
+      title={lesson.title}
+    />
+  );
+};
+
 // ============================================================
 // Course player
 // ============================================================
@@ -59,6 +168,16 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
           <Icon name="arrow-left" size={12}/> Back
         </button>
         <div className="empty">This course is not available for your company.</div>
+      </div>
+    );
+  }
+  if (!CURRENT_USER.isAdmin && CURRENT_USER.status === "onboarding" && !enrollment) {
+    return (
+      <div className="page">
+        <button className="btn btn-ghost btn-sm" onClick={goBack} style={{ marginBottom: 12 }}>
+          <Icon name="arrow-left" size={12}/> Back
+        </button>
+        <div className="empty">During onboarding, only courses assigned to you are available.</div>
       </div>
     );
   }
@@ -244,6 +363,22 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
                 style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0, background: "#fff" }}
                 title={active.title}
               />
+            ) : active.type === "html" && (active.htmlMode || "url") === "zip" ? (
+              <HtmlPackageFrame lesson={active} />
+            ) : active.type === "html" && (active.htmlMode || "url") === "inline" && active.htmlContent ? (
+              <iframe
+                srcDoc={active.htmlContent}
+                sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin"
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0, background: "#fff" }}
+                title={active.title}
+              />
+            ) : active.type === "html" && active.url ? (
+              <iframe
+                src={active.url}
+                sandbox="allow-scripts allow-forms allow-popups allow-modals allow-same-origin"
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0, background: "#fff" }}
+                title={active.title}
+              />
             ) : active.type === "link" && active.url ? (
               <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#fff", textAlign: "center", padding: 32 }}>
                 <Icon name="external" size={42} />
@@ -253,10 +388,10 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
                 </a>
               </div>
             ) : active.type === "quiz" ? (
-              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg,#17320b,#0f1f08)", color: "#fff", padding: 32 }}>
+              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg,#163A5F,#0b1d33 58%,#00A6A6 140%)", color: "#fff", padding: 32 }}>
                 <div style={{ maxWidth: 620, textAlign: "center" }}>
                   <Icon name="quiz" size={46} />
-                  <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em", color: "#b8e986" }}>Knowledge check</div>
+                  <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em", color: "#bfe0ff" }}>Knowledge check</div>
                   <div style={{ marginTop: 6, fontSize: 24, fontWeight: 800, lineHeight: 1.2 }}>{activeAssessment?.title || active.title}</div>
                   <div style={{ marginTop: 10, fontSize: 14, color: "rgba(255,255,255,.78)" }}>
                     {activeAssessment ? `${activeAssessment.questions?.length || 0} question${activeAssessment.questions?.length === 1 ? "" : "s"} - 100% required` : "No quiz is linked to this lesson yet."}
@@ -348,8 +483,8 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
 
             {/* Resources */}
             {(course.resources?.length > 0) && (
-              <div style={{ marginTop: 18, padding: 14, border: "1px solid #dfead4", borderRadius: 10, background: "#f6fbf0" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#2e5a12", fontSize: 13, fontWeight: 800 }}>
+              <div style={{ marginTop: 18, padding: 14, border: "1px solid #bfe0ff", borderRadius: 10, background: "#eaf4ff" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#163A5F", fontSize: 13, fontWeight: 800 }}>
                   <Icon name="download" size={15} />
                   Course resources available
                 </div>
@@ -369,6 +504,12 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
                     </a>
                   ))}
                 </div>
+              </div>
+            )}
+            {active.type === "html" && !active.url && !active.htmlContent && !active.packageUrl && (
+              <div style={{ position: "relative", color: "#fff", textAlign: "center" }}>
+                <Icon name="code" size={42} />
+                <div style={{ marginTop: 8, fontSize: 14, fontWeight: 600 }}>HTML content not configured</div>
               </div>
             )}
 
@@ -472,6 +613,26 @@ const CoursePage = ({ courseId, goBack, goAssessment }) => {
               </div>
             ))}
           </div>
+          {(course.resources?.length > 0) && (
+            <div className="lesson-list__head" style={{ borderTop: "1px solid #ececec" }}>
+              <div className="lesson-list__title">Resources</div>
+              <div className="lesson-list__sub">Supporting files and links</div>
+              <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                {course.resources.map((r, i) => (
+                  <a key={i}
+                    href={r.url || "#"}
+                    target={r.url ? "_blank" : undefined}
+                    rel={r.url ? "noopener noreferrer" : undefined}
+                    onClick={r.url ? undefined : (e) => e.preventDefault()}
+                    className="btn btn-ghost btn-sm"
+                    style={{ justifyContent: "flex-start", textDecoration: "none", whiteSpace: "normal" }}>
+                    <Icon name={r.type === "link" ? "external" : "download"} size={14} />
+                    {r.name || (r.type === "link" ? "Reference" : "Resource")}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
         </aside>
       </div>
     </div>
@@ -572,6 +733,16 @@ const AssessmentPage = ({ courseId, target, goCert, goBack }) => {
           <Icon name="arrow-left" size={12}/> Back
         </button>
         <div className="empty">This assessment is not available for your company.</div>
+      </div>
+    );
+  }
+  if (!CURRENT_USER.isAdmin && CURRENT_USER.status === "onboarding" && !ENROLLMENTS[courseId]) {
+    return (
+      <div className="page">
+        <button className="btn btn-ghost btn-sm" onClick={goBack} style={{ marginBottom: 12 }}>
+          <Icon name="arrow-left" size={12}/> Back
+        </button>
+        <div className="empty">During onboarding, only assigned assessments are available.</div>
       </div>
     );
   }
