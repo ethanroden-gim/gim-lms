@@ -69,8 +69,6 @@ const Topbar = ({ mode, setMode, isAdmin, goCourse }) => {
   const [q, setQ] = React.useState("");
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef(null);
-  const brand = getBrandCompany(mode);
-
   React.useEffect(() => {
     const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", onClick);
@@ -99,11 +97,7 @@ const Topbar = ({ mode, setMode, isAdmin, goCourse }) => {
   return (
     <header className="app__topbar">
       <div className="app__brand">
-        {brand.logoUrl ? (
-          <img src={brand.logoUrl} alt={brand.name || "OneSource"} onError={(e) => { e.currentTarget.style.display = "none"; }} />
-        ) : (
-          <div className="app__brand-text">{brand.name || "OneSource"}</div>
-        )}
+        <img className="app__brand-logo" src="assets/onesource-logo.png" alt="OneSource" />
         <div className="app__brand-divider" />
         <span className="app__brand-tag">{mode === "admin" ? "Admin" : "Learning"}</span>
       </div>

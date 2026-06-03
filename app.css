@@ -40,6 +40,12 @@ input, textarea, select { font-family: inherit; font-size: inherit; color: inher
 }
 .app__brand { display: flex; align-items: center; gap: 12px; }
 .app__brand img { height: 28px; display: block; }
+.app__brand-logo {
+  width: 34px;
+  height: 34px !important;
+  object-fit: contain;
+  border-radius: 6px;
+}
 .app__brand-text {
   font-size: 19px;
   line-height: 1;
