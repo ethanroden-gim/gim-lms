@@ -874,7 +874,7 @@ const DEPT_PRESETS = [
   { icon: "shield",  bg: "#fee2e2", color: "#991b1b", label: "Compliance"  },
 ];
 
-const DepartmentEditModal = ({ open, onClose, initial }) => {
+const DepartmentEditModal = ({ open, onClose, initial, fixedCompanyId = "" }) => {
   const isNew = !initial;
   const [name, setName] = React.useState("");
   const [autoAssign, setAutoAssign] = React.useState(true);
@@ -883,21 +883,26 @@ const DepartmentEditModal = ({ open, onClose, initial }) => {
 
   React.useEffect(() => {
     if (!open) return;
-    const fallbackCompany = initial?.companyId || getAdminBrandCompany()?.id || getCompanyDocs()[0]?.id || "";
+    const fallbackCompany = fixedCompanyId || initial?.companyId || getAdminBrandCompany()?.id || getCompanyDocs()[0]?.id || "";
     const fallbackIcon = initial?.icon || (DEPT_PRESETS[initial?.iconIdx ?? 0] || DEPT_PRESETS[0]).icon || "house";
     setName(initial?.name || "");
     setAutoAssign(initial?.autoAssign ?? true);
     setIcon(fallbackIcon);
     setCompanyId(fallbackCompany);
-  }, [open, initial]);
+  }, [open, initial, fixedCompanyId]);
 
   const companies = getCompanyDocs();
   const iconChoices = getIconChoices();
   const selectedCompany = companyId ? getCompanyById(companyId) : null;
   const peopleCount = initial ? (ALL_USERS.filter(u =>
-    u.dept === initial.name && (!initial.companyId || u.companyId === initial.companyId)
+    u.departmentId ? u.departmentId === initial.id : (u.dept === initial.name && (!initial.companyId || u.companyId === initial.companyId))
   ).length) : 0;
-  const valid = name.trim().length >= 2 && !!companyId;
+  const duplicateDepartment = DEPARTMENT_DOCS.find(d =>
+    d.id !== initial?.id &&
+    String(d.companyId || "") === String(companyId || "") &&
+    String(d.name || "").trim().toLowerCase() === name.trim().toLowerCase()
+  );
+  const valid = name.trim().length >= 2 && !!companyId && !duplicateDepartment;
   const [busy, setBusy] = React.useState(false);
 
   const save = async () => {
@@ -905,6 +910,7 @@ const DepartmentEditModal = ({ open, onClose, initial }) => {
     if (!window.fbReady) { alert("Firebase isn't configured — can't save."); return; }
     setBusy(true);
     try {
+      if (duplicateDepartment) throw new Error(`"${name.trim()}" already exists for ${companyName(companyId) || "this company"}.`);
       await saveDepartment({
         id: initial?.id,
         name: name.trim(),
@@ -958,13 +964,24 @@ const DepartmentEditModal = ({ open, onClose, initial }) => {
 
         <div style={{ marginBottom: 18 }}>
           <FieldLabel required>Company</FieldLabel>
-          <select className="cd-input" value={companyId} onChange={e => setCompanyId(e.target.value)}>
-            <option value="">Choose company...</option>
-            {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          {fixedCompanyId ? (
+            <div style={{ padding: "10px 12px", border: "1px solid #d8d9d8", borderRadius: 8, background: "#f8f9fb", fontSize: 13, fontWeight: 700 }}>
+              {selectedCompany?.name || companyId || "Company"}
+            </div>
+          ) : (
+            <select className="cd-input" value={companyId} onChange={e => setCompanyId(e.target.value)}>
+              <option value="">Choose company...</option>
+              {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
           {selectedCompany && (
             <div className="text-xs text-muted" style={{ marginTop: 6 }}>
               Department choices will only appear for people matched to {selectedCompany.name}.
+            </div>
+          )}
+          {duplicateDepartment && (
+            <div className="text-xs" style={{ marginTop: 6, color: "#a8232b", fontWeight: 700 }}>
+              A department with this name already exists for this company.
             </div>
           )}
         </div>

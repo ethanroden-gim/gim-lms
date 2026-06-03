@@ -71,7 +71,7 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
       (companyName(a.companyId) || "").localeCompare(companyName(b.companyId) || "") ||
       (a.name || "").localeCompare(b.name || "")
     );
-  const deptKey = (d) => `${d.companyId || "all"}::${d.name}`;
+  const deptKey = (d) => d.id || `${d.companyId || "all"}::${d.name}`;
   const deptLabel = (d) => `${d.name}${d.companyId ? ` (${companyName(d.companyId) || "Company"})` : ""}`;
   const selectedDeptRows = deptRows.filter(d => depts.includes(deptKey(d)));
 
@@ -81,7 +81,7 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
     if (audience === "department")     return ALL_USERS.filter(u =>
       u.status !== "leave" &&
       u.status !== "inactive" &&
-      selectedDeptRows.some(d => u.dept === d.name && (!d.companyId || u.companyId === d.companyId))
+      selectedDeptRows.some(d => u.departmentId ? u.departmentId === d.id : (u.dept === d.name && (!d.companyId || u.companyId === d.companyId)))
     ).map(u => u.id);
     if (audience === "role-onboarding")return ALL_USERS.filter(u => u.status === "onboarding").map(u => u.id);
     if (audience === "people")         return people;
@@ -262,7 +262,7 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
                     <div className="text-xs text-muted">No departments yet — create one in Admin → Roles &amp; departments.</div>
                   ) : deptRows.map(d => {
                     const key = deptKey(d);
-                    const count = ALL_USERS.filter(u => u.dept === d.name && (!d.companyId || u.companyId === d.companyId)).length;
+                    const count = ALL_USERS.filter(u => u.departmentId ? u.departmentId === d.id : (u.dept === d.name && (!d.companyId || u.companyId === d.companyId))).length;
                     return (
                     <button key={key} onClick={() => toggleDept(key)} style={{
                       padding: "6px 12px", borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: "pointer",

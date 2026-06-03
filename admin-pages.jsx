@@ -193,7 +193,7 @@ const AdminOverviewPage = ({ goRoute }) => {
     (a.name || "").localeCompare(b.name || "")
   );
   const deptCompliance = departmentRows.map(dept => {
-    const people = ALL_USERS.filter(u => u.dept === dept.name && (!dept.companyId || u.companyId === dept.companyId));
+    const people = ALL_USERS.filter(u => u.departmentId ? u.departmentId === dept.id : (u.dept === dept.name && (!dept.companyId || u.companyId === dept.companyId)));
     let a = 0, c = 0;
     people.forEach(u => { const s = userStats(u.id); a += s.assigned; c += s.completed; });
     const pct = a ? Math.round((c / a) * 100) : null;
@@ -831,10 +831,12 @@ const AdminUsersPage = () => {
   const clearSelection = () => setSelectedIds([]);
   const bulkMove = async (newDept) => {
     if (!selectedIds.length) return;
-    if (!confirm(`Move ${selectedIds.length} ${selectedIds.length === 1 ? "person" : "people"} to "${newDept}"?`)) return;
+    const targetDept = departmentOptions.find(d => d.id === newDept);
+    if (!targetDept) { alert("Department not found."); return; }
+    if (!confirm(`Move ${selectedIds.length} ${selectedIds.length === 1 ? "person" : "people"} to "${departmentLabel(targetDept)}"?`)) return;
     try {
-      await Promise.all(selectedIds.map(id => updateUser(id, { dept: newDept })));
-      showToast?.(`Moved ${selectedIds.length} ${selectedIds.length === 1 ? "person" : "people"} to ${newDept}`);
+      await Promise.all(selectedIds.map(id => updateUser(id, { dept: targetDept.name, departmentId: targetDept.id })));
+      showToast?.(`Moved ${selectedIds.length} ${selectedIds.length === 1 ? "person" : "people"} to ${targetDept.name}`);
       clearSelection();
     } catch (err) { alert("Bulk move failed: " + err.message); }
   };
@@ -859,9 +861,16 @@ const AdminUsersPage = () => {
   };
 
   const statusMap = { "Active": "active", "Onboarding": "onboarding", "On leave": "leave", "Inactive": "inactive" };
-  const departmentOptions = [...DEPARTMENT_DOCS].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const departmentOptions = [...DEPARTMENT_DOCS].sort((a, b) =>
+    (companyName(a.companyId) || "").localeCompare(companyName(b.companyId) || "") ||
+    (a.name || "").localeCompare(b.name || "")
+  );
   const departmentLabel = (d) => `${d.name}${d.companyId ? ` (${companyName(d.companyId) || "Company"})` : ""}`;
   const deptAppliesToUser = (d, u) => !d.companyId || !u.companyId || d.companyId === u.companyId;
+  const departmentForUser = (u) =>
+    departmentOptions.find(d => u.departmentId && d.id === u.departmentId) ||
+    departmentOptions.find(d => d.name === u.dept && deptAppliesToUser(d, u)) ||
+    null;
   const selectedUsers = selectedIds.map(id => ALL_USERS.find(u => u.id === id)).filter(Boolean);
   const bulkDepartmentOptions = departmentOptions.filter(d =>
     selectedUsers.length === 0 || selectedUsers.every(u => deptAppliesToUser(d, u))
@@ -869,9 +878,16 @@ const AdminUsersPage = () => {
   const filtered = ALL_USERS.filter(u => {
     if (q && !(u.name?.toLowerCase().includes(q.toLowerCase()) || u.email?.toLowerCase().includes(q.toLowerCase()))) return false;
     if (dept !== "All") {
-      const [deptCompanyId, deptName] = String(dept).split("::");
-      if (u.dept !== deptName) return false;
-      if (deptCompanyId !== "all" && u.companyId !== deptCompanyId) return false;
+      const deptDoc = departmentOptions.find(d => d.id === dept);
+      if (deptDoc) {
+        if (u.departmentId) {
+          if (u.departmentId !== deptDoc.id) return false;
+        } else if (u.dept !== deptDoc.name || (deptDoc.companyId && u.companyId !== deptDoc.companyId)) return false;
+      } else {
+        const [deptCompanyId, deptName] = String(dept).split("::");
+        if (u.dept !== deptName) return false;
+        if (deptCompanyId !== "all" && u.companyId !== deptCompanyId) return false;
+      }
     }
     if (role !== "All" && u.role !== role) return false;
     if (statusFilter !== "All" && (u.status || "active") !== statusMap[statusFilter]) return false;
@@ -946,7 +962,7 @@ const AdminUsersPage = () => {
       <div className="page-head">
         <div>
           <div className="page-head__eyebrow">Admin · People</div>
-          <h1 className="page-head__title">People & enrollments</h1>
+          <h1 className="page-head__title">People</h1>
           <div className="page-head__sub">Add new hires before first login, then set roles, departments, and assignments here.</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -960,7 +976,7 @@ const AdminUsersPage = () => {
         <input type="search" placeholder="Search by name or email…" value={q} onChange={e => setQ(e.target.value)} />
         <select value={dept} onChange={e => setDept(e.target.value)}>
           <option value="All">Department: All</option>
-          {departmentOptions.map(d => <option key={d.id} value={`${d.companyId || "all"}::${d.name}`}>Department: {departmentLabel(d)}</option>)}
+          {departmentOptions.map(d => <option key={d.id} value={d.id}>Department: {departmentLabel(d)}</option>)}
         </select>
         <select value={role} onChange={e => setRole(e.target.value)}>
           <option value="All">Role: All</option><option value="Learner">Role: Learner</option><option value="Manager">Role: Manager</option><option value="Admin">Role: Admin</option>
@@ -985,7 +1001,7 @@ const AdminUsersPage = () => {
           <select onChange={e => { if (e.target.value) { bulkMove(e.target.value); e.target.value = ""; } }}
             style={{ fontSize: 12, padding: "4px 10px", borderRadius: 6, border: "1px solid #cfeab0", background: "#fff" }}>
             <option value="">Pick department…</option>
-            {bulkDepartmentOptions.map(d => <option key={d.id} value={d.name}>{departmentLabel(d)}</option>)}
+            {bulkDepartmentOptions.map(d => <option key={d.id} value={d.id}>{departmentLabel(d)}</option>)}
           </select>
           <div style={{ flex: 1 }} />
           <button className="btn btn-ghost btn-sm" onClick={clearSelection}>Clear selection</button>
@@ -1015,6 +1031,7 @@ const AdminUsersPage = () => {
         <tbody>
           {sortedUsers.map((u) => {
             const deptOptions = departmentOptions.filter(d => deptAppliesToUser(d, u));
+            const selectedDepartment = departmentForUser(u);
             const stats = userStats(u.id);
             const duplicatePlan = mergePlanFor(u);
             const updateRole = async (e) => {
@@ -1026,8 +1043,9 @@ const AdminUsersPage = () => {
             };
             const updateDept = async (e) => {
               try {
-                await updateUser(u.id, { dept: e.target.value });
-                showToast?.(`${u.name} moved to ${e.target.value}`);
+                const nextDept = deptOptions.find(d => d.id === e.target.value);
+                await updateUser(u.id, nextDept ? { dept: nextDept.name, departmentId: nextDept.id } : { dept: "", departmentId: "" });
+                showToast?.(nextDept ? `${u.name} moved to ${nextDept.name}` : `${u.name} marked unassigned`);
               } catch (err) { alert("Update failed: " + err.message); }
             };
             const updateStatus = async (e) => {
@@ -1036,6 +1054,20 @@ const AdminUsersPage = () => {
                 await updateUser(u.id, { status: newStatus });
                 showToast?.(`${u.name} status updated`);
               } catch (err) { alert("Status update failed: " + err.message); }
+            };
+            const updateCompany = async (e) => {
+              const newCompanyId = e.target.value;
+              const currentDept = departmentForUser({ ...u, companyId: newCompanyId });
+              const patch = {
+                companyId: newCompanyId,
+                ...(currentDept && currentDept.companyId === newCompanyId
+                  ? { dept: currentDept.name, departmentId: currentDept.id }
+                  : { dept: "", departmentId: "" }),
+              };
+              try {
+                await updateUser(u.id, patch);
+                showToast?.(`${u.name} company updated${patch.departmentId ? "" : "; department reset"}`);
+              } catch (err) { alert("Company update failed: " + err.message); }
             };
             return (
             <tr key={u.id}>
@@ -1081,17 +1113,28 @@ const AdminUsersPage = () => {
                 </div>
               </td>
               <td>
-                <select value={u.dept || ""} onChange={updateDept} style={{
+                <select value={selectedDepartment?.id || ""} onChange={updateDept} style={{
                   border: "1px solid transparent", background: "transparent", borderRadius: 6, padding: "3px 22px 3px 8px",
                   fontSize: 12, cursor: "pointer", appearance: "none",
                   backgroundImage: 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" stroke="%235f635f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>\')',
                   backgroundRepeat: "no-repeat", backgroundPosition: "right 4px center",
                 }}>
                   <option value="">Unassigned</option>
-                  {deptOptions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                  {deptOptions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </td>
-              <td>{u.companyId ? <span className="chip chip-grey">{companyName(u.companyId) || u.companyId}</span> : <span className="text-xs text-muted">Unmatched</span>}</td>
+              <td>
+                <select value={u.companyId || ""} onChange={updateCompany} style={{
+                  border: "1px solid #d8d9d8", background: "#fff", borderRadius: 999, padding: "4px 24px 4px 10px",
+                  fontSize: 12, fontWeight: 700, cursor: "pointer", appearance: "none", maxWidth: 190,
+                  color: u.companyId ? "#334155" : "#8a5a00",
+                  backgroundImage: 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" stroke="%235f635f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>\')',
+                  backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center",
+                }}>
+                  <option value="">Unmatched</option>
+                  {getCompanyDocs().map(co => <option key={co.id} value={co.id}>{co.name}</option>)}
+                </select>
+              </td>
               <td>
                 <select value={u.status || "active"} onChange={updateStatus} style={{
                   border: "1px solid #d8d9d8", background: "#fff", borderRadius: 999, padding: "4px 24px 4px 10px",
@@ -1203,6 +1246,7 @@ const AddDirectoryUserModal = ({ open, onClose, onCreated }) => {
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [dept, setDept] = React.useState("");
+  const [departmentId, setDepartmentId] = React.useState("");
   const [role, setRole] = React.useState("Learner");
   const [status, setStatus] = React.useState("onboarding");
   const [saving, setSaving] = React.useState(false);
@@ -1212,22 +1256,32 @@ const AddDirectoryUserModal = ({ open, onClose, onCreated }) => {
     setName("");
     setEmail("");
     setDept("");
+    setDepartmentId("");
     setRole("Learner");
     setStatus("onboarding");
     setSaving(false);
   }, [open]);
 
-  if (!open) return null;
   const matchedCompany = getCompanyForEmail(email);
   const departmentOptions = [...DEPARTMENT_DOCS]
-    .filter(d => !matchedCompany || !d.companyId || d.companyId === matchedCompany.id)
+    .filter(d => matchedCompany && d.companyId === matchedCompany.id)
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  React.useEffect(() => {
+    if (!open || !departmentId) return;
+    if (!departmentOptions.some(d => d.id === departmentId)) {
+      setDepartmentId("");
+      setDept("");
+    }
+  }, [open, email, departmentId, DEPARTMENT_DOCS.length]);
+
+  if (!open) return null;
   const submit = async () => {
     if (saving) return;
     if (!email.trim()) { alert("Email is required."); return; }
     setSaving(true);
     try {
-      const id = await createDirectoryUser({ name, email, dept, role, status });
+      const selectedDept = departmentOptions.find(d => d.id === departmentId);
+      const id = await createDirectoryUser({ name, email, dept: selectedDept?.name || "", departmentId: selectedDept?.id || "", role, status });
       showToast?.("Person added. Choose courses to assign now.");
       onCreated?.(id);
     } catch (err) {
@@ -1277,13 +1331,22 @@ const AddDirectoryUserModal = ({ open, onClose, onCreated }) => {
         </div>
         <div>
           <FieldLabel>Department</FieldLabel>
-          <select className="cd-input" value={dept} onChange={e => setDept(e.target.value)}>
+          <select className="cd-input" value={departmentId} onChange={e => {
+            const selectedDept = departmentOptions.find(d => d.id === e.target.value);
+            setDepartmentId(selectedDept?.id || "");
+            setDept(selectedDept?.name || "");
+          }} disabled={!matchedCompany}>
             <option value="">Unassigned</option>
-            {departmentOptions.map(d => <option key={d.id} value={d.name}>{d.name}{d.companyId ? ` (${companyName(d.companyId)})` : ""}</option>)}
+            {departmentOptions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
           {matchedCompany && (
             <div className="text-xs text-muted" style={{ marginTop: 6 }}>
               Showing departments for {matchedCompany.name}.
+            </div>
+          )}
+          {!matchedCompany && (
+            <div className="text-xs text-muted" style={{ marginTop: 6 }}>
+              Enter a company email domain before choosing a department.
             </div>
           )}
         </div>
@@ -2053,7 +2116,7 @@ const DEFAULT_ROLES = [
   { name: "Admin",   desc: "Full access — manage courses, assessments, people, and reports.",              perms: ["all"], chips: ["Everything"] },
 ];
 
-const AdminSettingsPage = () => {
+const AdminSettingsPage = ({ goRoute } = {}) => {
   const [deptModal, setDeptModal] = React.useState({ open: false, initial: null });
   const [categoryModal, setCategoryModal] = React.useState({ open: false, initial: null });
   const [roleModal, setRoleModal] = React.useState({ open: false, initial: null });
@@ -2066,6 +2129,9 @@ const AdminSettingsPage = () => {
   const [savingIcons, setSavingIcons] = React.useState(false);
   const [uploadingIconId, setUploadingIconId] = React.useState("");
   const [editingIconId, setEditingIconId] = React.useState("");
+  const [settingsSection, setSettingsSection] = React.useState("companies");
+  const [selectedCompanyId, setSelectedCompanyId] = React.useState("");
+  const [iconQuery, setIconQuery] = React.useState("");
   const sortedDepartments = [...DEPARTMENT_DOCS].sort((a, b) =>
     (companyName(a.companyId) || "").localeCompare(companyName(b.companyId) || "") ||
     (a.name || "").localeCompare(b.name || "")
@@ -2076,26 +2142,44 @@ const AdminSettingsPage = () => {
     setCompanyDrafts(getCompanyDocs());
   }, [COMPANY_DOCS.length]);
   React.useEffect(() => {
+    if (selectedCompanyId && companyDrafts.some(c => c.id === selectedCompanyId)) return;
+    setSelectedCompanyId(companyDrafts[0]?.id || "");
+  }, [companyDrafts.length, selectedCompanyId]);
+  React.useEffect(() => {
     setIconDrafts(getCustomIconDocs());
     setNavIconDrafts({ ...(ICON_SETTINGS.navIcons || {}) });
     setSystemIconDrafts({ ...(ICON_SETTINGS.iconOverrides || {}) });
   }, [ICON_DOCS.length, JSON.stringify(ICON_SETTINGS.navIcons || {}), JSON.stringify(ICON_SETTINGS.iconOverrides || {})]);
   const updateCompanyDraft = (idx, patch) => setCompanyDrafts(prev => prev.map((c, i) => i === idx ? { ...c, ...patch } : c));
-  const addCompanyDraft = () => setCompanyDrafts(prev => [...prev, {
-    id: `co-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    name: "",
-    domains: [],
-    logoUrl: "",
-    certificateLogoUrl: "",
-    certificateName: "",
-    accent: "#1d4ed8",
-    secondary: "#0f2f6b",
-    active: true,
-    adminBrand: prev.length === 0,
-  }]);
+  const addCompanyDraft = () => {
+    const id = `co-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setCompanyDrafts(prev => [...prev, {
+      id,
+      name: "",
+      domains: [],
+      logoUrl: "",
+      certificateLogoUrl: "",
+      certificateName: "",
+      accent: "#1d4ed8",
+      secondary: "#0f2f6b",
+      active: true,
+      adminBrand: prev.length === 0,
+    }]);
+    setSelectedCompanyId(id);
+    setSettingsSection("companies");
+  };
   const removeCompanyDraft = (idx) => setCompanyDrafts(prev => {
+    const removed = prev[idx];
+    const hasPeople = ALL_USERS.some(u => u.companyId === removed?.id);
+    const hasDepartments = DEPARTMENT_DOCS.some(d => d.companyId === removed?.id);
+    const hasCourses = COURSES.some(c => (c.allowedCompanyIds || []).includes(removed?.id));
+    if (hasPeople || hasDepartments || hasCourses) {
+      alert("This company is linked to people, departments, or course visibility. Deactivate it instead of deleting it.");
+      return prev;
+    }
     const next = prev.filter((_, i) => i !== idx);
     if (next.length && !next.some(c => c.adminBrand)) next[0] = { ...next[0], adminBrand: true };
+    if (selectedCompanyId === removed?.id) setSelectedCompanyId(next[0]?.id || "");
     return next;
   });
   const companyLogoPreview = (url, label) => (
@@ -2262,531 +2346,467 @@ const AdminSettingsPage = () => {
     }
   };
 
+  const selectedCompanyIdx = Math.max(0, companyDrafts.findIndex(c => c.id === selectedCompanyId));
+  const selectedCompany = companyDrafts[selectedCompanyIdx] || companyDrafts[0] || null;
+  const companyDepartments = selectedCompany ? sortedDepartments.filter(d => d.companyId === selectedCompany.id) : [];
+  const legacyDepartments = sortedDepartments.filter(d => !d.companyId);
+  const companyCourses = (co) => COURSES.filter(c => (c.allowedCompanyIds || []).includes(co.id));
+  const companyPeople = (co) => ALL_USERS.filter(u => u.companyId === co.id);
+  const deptPeopleCount = (dept) => ALL_USERS.filter(u =>
+    u.departmentId ? u.departmentId === dept.id : (u.dept === dept.name && u.companyId === dept.companyId)
+  ).length;
+  const duplicateDomains = Object.values(companyDrafts.reduce((acc, co) => {
+    (Array.isArray(co.domains) ? co.domains : String(co.domains || "").split(/[,\n|]/))
+      .map(normalizeDomain)
+      .filter(Boolean)
+      .forEach(domain => {
+        (acc[domain] = acc[domain] || []).push(co.name || co.id);
+      });
+    return acc;
+  }, {})).filter(list => list.length > 1);
+  const settingsWarnings = [
+    ...companyDrafts.filter(co => !(co.domains || []).length).map(co => `${co.name || "Untitled company"} is missing email domains.`),
+    ...companyDrafts.filter(co => !co.logoUrl || !(co.certificateLogoUrl || co.logoUrl)).map(co => `${co.name || "Untitled company"} is missing learner or certificate logos.`),
+    ...companyDrafts.filter(co => co.active !== false && !co.adminBrand && !companyDrafts.some(c => c.adminBrand && c.active !== false)).map(() => "No active admin-brand company is selected.").slice(0, 1),
+    ...duplicateDomains.map(list => `Duplicate email domain across companies: ${list.join(", ")}.`),
+    ...COURSES.filter(c => (c.allowedCompanyIds || []).some(id => companyDrafts.find(co => co.id === id)?.active === false)).map(c => `${c.title} is limited to an inactive company.`),
+  ];
+  const filteredIconOptions = iconSelectOptions.filter(opt => {
+    const q = iconQuery.trim().toLowerCase();
+    if (!q) return true;
+    const draft = iconDrafts.find(i => i.id === opt.id);
+    return [opt.label, opt.id, draft?.tags].some(v => String(v || "").toLowerCase().includes(q));
+  });
+  const settingsNav = [
+    { id: "companies", label: "Companies", icon: "building" },
+    { id: "categories", label: "Training categories", icon: "tag" },
+    { id: "icons", label: "Icon library", icon: "upload" },
+    { id: "roles", label: "Roles & permissions", icon: "shield" },
+    { id: "access", label: "Admin access", icon: "lock" },
+  ];
+
   return (
-    <div className="page" style={{ maxWidth: 980 }}>
+    <div className="page page--wide">
       <div className="page-head">
         <div>
-          <div className="page-head__eyebrow">Admin · Settings</div>
-          <h1 className="page-head__title">Companies, roles, departments & categories</h1>
-          <div className="page-head__sub">Manage branding, LMS access, user attributes, and learner catalog navigation.</div>
+          <div className="page-head__eyebrow">Admin - Settings</div>
+          <h1 className="page-head__title">Platform settings</h1>
+          <div className="page-head__sub">Manage company branding, company departments, shared categories, icons, and access controls.</div>
         </div>
       </div>
 
-      <div className="dash-2col">
-        <div>
-          <div className="card card-pad-lg mt-4">
-            <div className="eyebrow-sm" style={{ marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>Companies</span>
-              <button className="btn btn-ghost btn-sm" style={{ padding: "4px 10px", fontSize: 11 }} onClick={addCompanyDraft}>
-                <Icon name="plus" size={12}/> New company
+      <div style={{ display: "grid", gridTemplateColumns: "240px minmax(0, 1fr)", gap: 18, alignItems: "start" }}>
+        <div className="card card-pad" style={{ position: "sticky", top: 18 }}>
+          <div className="eyebrow-sm" style={{ marginBottom: 10 }}>Settings</div>
+          <div style={{ display: "grid", gap: 4 }}>
+            {settingsNav.map(item => (
+              <button
+                key={item.id}
+                className={classNames("sidebar-link", settingsSection === item.id && "active")}
+                onClick={() => setSettingsSection(item.id)}
+                style={{ width: "100%" }}
+              >
+                <Icon name={item.icon} size={16}/>
+                <span>{item.label}</span>
               </button>
-            </div>
-            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Sister-company branding</h3>
-            <p className="text-muted text-sm" style={{ marginBottom: 18 }}>
-              Match learners by email domain, control learner branding, and choose the employment-entity brand for admin pages.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {companyDrafts.map((co, idx) => (
-                <div key={co.id || idx} style={{ border: "1px solid #ececec", borderRadius: 10, padding: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <div className="cd-field" style={{ margin: 0 }}>
-                    <label>Name</label>
-                    <input className="cd-input" value={co.name || ""} onChange={e => updateCompanyDraft(idx, { name: e.target.value, id: co.id || companyDocId(e.target.value) })} placeholder="Company name" />
-                  </div>
-                  <div className="cd-field" style={{ margin: 0 }}>
-                    <label>Email domains</label>
-                    <input className="cd-input" value={(co.domains || []).join(", ")} onChange={e => updateCompanyDraft(idx, { domains: e.target.value.split(/[,\n|]/).map(normalizeDomain).filter(Boolean) })} placeholder="example.com, sisterco.com" />
-                  </div>
-                  <div className="cd-field" style={{ margin: 0 }}>
-                    <label>Learner logo URL</label>
-                    <input className="cd-input" value={co.logoUrl || ""} onChange={e => updateCompanyDraft(idx, { logoUrl: e.target.value })} placeholder="https://..." />
-                  </div>
-                  <div className="cd-field" style={{ margin: 0 }}>
-                    <label>Certificate logo URL</label>
-                    <input className="cd-input" value={co.certificateLogoUrl || ""} onChange={e => updateCompanyDraft(idx, { certificateLogoUrl: e.target.value })} placeholder="Defaults to learner logo" />
-                  </div>
-                  <div className="cd-field" style={{ margin: 0 }}>
-                    <label>Learner logo preview</label>
-                    {companyLogoPreview(co.logoUrl, co.name)}
-                  </div>
-                  <div className="cd-field" style={{ margin: 0 }}>
-                    <label>Certificate logo preview</label>
-                    {companyLogoPreview(co.certificateLogoUrl || co.logoUrl, co.name)}
-                  </div>
-                  <div className="cd-field" style={{ margin: 0 }}>
-                    <label>Certificate display name</label>
-                    <input className="cd-input" value={co.certificateName || ""} onChange={e => updateCompanyDraft(idx, { certificateName: e.target.value })} placeholder="Defaults to company name" />
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    {companyColorField(idx, co, "accent", "Accent", "#1d4ed8")}
-                    {companyColorField(idx, co, "secondary", "Secondary", "#0f2f6b")}
-                  </div>
-                  <div style={{ gridColumn: "1 / -1", display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
-                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      <label className="chip chip-grey" style={{ cursor: "pointer" }}>
-                        <input type="checkbox" checked={co.active !== false} onChange={e => updateCompanyDraft(idx, { active: e.target.checked })} /> Active
-                      </label>
-                      <label className="chip chip-green" style={{ cursor: "pointer" }}>
-                        <input type="radio" name="adminBrandCompany" checked={!!co.adminBrand} onChange={() => setCompanyDrafts(prev => prev.map((c, i) => ({ ...c, adminBrand: i === idx })))} /> Admin brand
-                      </label>
-                    </div>
-                    <button className="btn-icon" title="Remove company" disabled={companyDrafts.length <= 1} onClick={() => removeCompanyDraft(idx)}><Icon name="trash" size={14}/></button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button className="btn btn-primary btn-sm" style={{ marginTop: 14 }} disabled={savingCompanies} onClick={saveCompanyDrafts}>
-              <Icon name="check" size={14}/> {savingCompanies ? "Saving..." : "Save company settings"}
-            </button>
+            ))}
           </div>
-
-          <div className="card card-pad-lg mt-4">
-            <div className="eyebrow-sm" style={{ marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>Icon library</span>
-              <button className="btn btn-ghost btn-sm" style={{ padding: "4px 10px", fontSize: 11 }} onClick={addIconDraft}>
-                <Icon name="plus" size={12}/> New icon
-              </button>
-            </div>
-            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>System icons</h3>
-            <p className="text-muted text-sm" style={{ marginBottom: 18 }}>
-              Link a hosted icon or import a small PNG/SVG, then reuse it for categories, departments, and sidebar tabs.
-            </p>
-            <div style={{ marginBottom: 18, padding: 12, border: "1px solid #ececec", borderRadius: 10, background: "#fafafa" }}>
-              <div className="eyebrow-sm" style={{ marginBottom: 10 }}>Icon gallery</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(76px, 1fr))", gap: 8 }}>
-                {iconSelectOptions.map(opt => {
-                  const draftIdx = iconDrafts.findIndex(i => i.id === opt.id);
-                  const isCustom = draftIdx >= 0;
-                  const isSystem = !!opt.builtin;
-                  const hasSystemOverride = isSystem && !!systemIconDrafts[opt.id];
-                  return (
-                  <div key={`gallery-${opt.id}`} title={opt.label} style={{
-                    minHeight: isCustom || isSystem ? 92 : 70,
-                    padding: 8,
-                    border: editingIconId === opt.id || editingIconId === `system:${opt.id}` ? "2px solid #1d4ed8" : "1px solid #e6e6e6",
-                    borderRadius: 8,
-                    background: "#fff",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 6,
-                  }}>
-                    {(systemIconDrafts[opt.id] || opt.url) ? (
-                      <img src={systemIconDrafts[opt.id] || opt.url} alt="" style={{ width: 24, height: 24, objectFit: "contain" }} onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
-                    ) : (
-                      <Icon name={opt.icon || opt.id} size={22}/>
-                    )}
-                    <div style={{ fontSize: 10, color: "#5f635f", textAlign: "center", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {opt.label}
-                    </div>
-                    {isSystem && (
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <button
-                          className="btn-icon"
-                          title="Replace system icon"
-                          onClick={() => setEditingIconId(`system:${opt.id}`)}
-                          style={{ width: 24, height: 24, borderRadius: 6 }}
-                        >
-                          <Icon name="edit" size={12}/>
-                        </button>
-                        {hasSystemOverride && (
-                          <button
-                            className="btn-icon"
-                            title="Reset system icon"
-                            onClick={() => {
-                              setSystemIconDrafts(prev => {
-                                const next = { ...prev };
-                                delete next[opt.id];
-                                return next;
-                              });
-                              if (editingIconId === `system:${opt.id}`) setEditingIconId("");
-                            }}
-                            style={{ width: 24, height: 24, borderRadius: 6, color: "#a8232b" }}
-                          >
-                            <Icon name="refresh" size={12}/>
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {isCustom && (
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <button
-                          className="btn-icon"
-                          title="Edit icon"
-                          onClick={() => setEditingIconId(opt.id)}
-                          style={{ width: 24, height: 24, borderRadius: 6 }}
-                        >
-                          <Icon name="edit" size={12}/>
-                        </button>
-                        <button
-                          className="btn-icon"
-                          title="Remove icon"
-                          onClick={() => {
-                            if (confirm(`Remove icon "${opt.label}"? Remember to save icon settings after removing it.`)) removeIconDraft(draftIdx);
-                          }}
-                          style={{ width: 24, height: 24, borderRadius: 6, color: "#a8232b" }}
-                        >
-                          <Icon name="trash" size={12}/>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );})}
+          {settingsWarnings.length > 0 && (
+            <div style={{ marginTop: 16, padding: 12, border: "1px solid #f3d999", borderRadius: 10, background: "#fffaf0" }}>
+              <div className="text-sm" style={{ fontWeight: 800, marginBottom: 6 }}>Health checks</div>
+              <div style={{ display: "grid", gap: 6 }}>
+                {settingsWarnings.slice(0, 5).map((warning, idx) => (
+                  <div key={idx} className="text-xs" style={{ color: "#7a4b00", lineHeight: 1.35 }}>{warning}</div>
+                ))}
+                {settingsWarnings.length > 5 && <div className="text-xs text-muted">+{settingsWarnings.length - 5} more</div>}
               </div>
-              {editingSystemIcon && (
-                <div style={{ marginTop: 12, padding: 12, border: "1px solid #dbeafe", borderRadius: 10, background: "#eff6ff" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                    <div style={{ width: 34, height: 34, borderRadius: 8, background: "#fff", border: "1px solid #dbeafe", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      {systemIconDrafts[editingSystemIcon] ? (
-                        <img src={systemIconDrafts[editingSystemIcon]} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} />
-                      ) : (
-                        <Icon name={editingSystemIcon} size={18}/>
-                      )}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 800, fontSize: 13 }}>Replace system icon</div>
-                      <div className="text-xs text-muted">This replaces every use of the built-in "{editingSystemIcon}" icon across the app.</div>
-                    </div>
-                    <button className="btn-icon" title="Close editor" onClick={() => setEditingIconId("")}><Icon name="close" size={14}/></button>
+            </div>
+          )}
+        </div>
+
+        <div>
+          {settingsSection === "companies" && (
+            <div style={{ display: "grid", gap: 18 }}>
+              <div className="card card-pad-lg">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+                  <div>
+                    <div className="eyebrow-sm">Companies</div>
+                    <h3 style={{ fontSize: 20, fontWeight: 800, margin: "4px 0 4px" }}>Company branding & departments</h3>
+                    <p className="text-muted text-sm" style={{ margin: 0 }}>Choose a company to edit learner branding, certificate branding, domains, and departments.</p>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1.4fr auto auto", gap: 10, alignItems: "end" }}>
-                    <div className="cd-field" style={{ margin: 0 }}>
-                      <label>Replacement PNG/SVG URL</label>
-                      <input className="cd-input" value={systemIconDrafts[editingSystemIcon] || ""} onChange={e => setSystemIconDrafts(prev => ({ ...prev, [editingSystemIcon]: e.target.value }))} placeholder="https://... or imported data URL" />
-                    </div>
-                    <label className="btn btn-ghost btn-sm" style={{ cursor: "pointer", margin: 0 }}>
-                      <Icon name="upload" size={14}/> {uploadingIconId === `system:${editingSystemIcon}` ? "Importing..." : "Import file"}
-                      <input
-                        type="file"
-                        accept=".png,.svg,image/png,image/svg+xml,image/*"
-                        style={{ display: "none" }}
-                        disabled={!!uploadingIconId}
-                        onChange={e => uploadSystemIconDraft(editingSystemIcon, e.target.files?.[0])}
-                      />
-                    </label>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      disabled={!systemIconDrafts[editingSystemIcon]}
-                      onClick={() => {
-                        setSystemIconDrafts(prev => {
-                          const next = { ...prev };
-                          delete next[editingSystemIcon];
-                          return next;
-                        });
-                      }}
-                    >
-                      <Icon name="refresh" size={14}/> Reset
-                    </button>
-                  </div>
+                  <button className="btn btn-ghost btn-sm" onClick={addCompanyDraft}><Icon name="plus" size={14}/> New company</button>
                 </div>
-              )}
-              {editingIcon && (
-                <div style={{ marginTop: 12, padding: 12, border: "1px solid #dbeafe", borderRadius: 10, background: "#eff6ff" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                    <div style={{ width: 34, height: 34, borderRadius: 8, background: "#fff", border: "1px solid #dbeafe", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      {editingIcon.url ? <img src={editingIcon.url} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} /> : <Icon name="upload" size={16}/>}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 800, fontSize: 13 }}>Edit icon</div>
-                      <div className="text-xs text-muted">Changes apply after you save icon settings.</div>
-                    </div>
-                    <button className="btn-icon" title="Close editor" onClick={() => setEditingIconId("")}><Icon name="close" size={14}/></button>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 10 }}>
-                    <div className="cd-field" style={{ margin: 0 }}>
-                      <label>Name</label>
-                      <input className="cd-input" value={editingIcon.label || ""} onChange={e => updateIconDraft(editingIconIdx, { label: e.target.value })} />
-                    </div>
-                    <div className="cd-field" style={{ margin: 0 }}>
-                      <label>PNG/SVG URL</label>
-                      <input className="cd-input" value={editingIcon.url || ""} onChange={e => updateIconDraft(editingIconIdx, { url: e.target.value })} />
-                    </div>
-                    <div className="cd-field" style={{ margin: 0 }}>
-                      <label>Tags / use</label>
-                      <input className="cd-input" value={editingIcon.tags || ""} onChange={e => updateIconDraft(editingIconIdx, { tags: e.target.value })} />
-                    </div>
-                    <div style={{ display: "flex", alignItems: "end", gap: 8 }}>
-                      <label className="btn btn-ghost btn-sm" style={{ cursor: "pointer", margin: 0 }}>
-                        <Icon name="upload" size={14}/> {uploadingIconId === editingIcon.id ? "Importing..." : "Replace file"}
-                        <input
-                          type="file"
-                          accept=".png,.svg,image/png,image/svg+xml,image/*"
-                          style={{ display: "none" }}
-                          disabled={!!uploadingIconId}
-                          onChange={e => uploadIconDraft(editingIconIdx, e.target.files?.[0])}
-                        />
-                      </label>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+                  {companyDrafts.map((co, idx) => {
+                    const peopleCount = companyPeople(co).length;
+                    const deptCount = DEPARTMENT_DOCS.filter(d => d.companyId === co.id).length;
+                    const visibleCount = companyCourses(co).length;
+                    const active = selectedCompany?.id === co.id;
+                    return (
                       <button
-                        className="btn btn-ghost btn-sm"
-                        style={{ color: "#a8232b" }}
-                        onClick={() => {
-                          if (confirm(`Remove icon "${editingIcon.label || "Untitled icon"}"? Remember to save icon settings after removing it.`)) removeIconDraft(editingIconIdx);
+                        key={co.id || idx}
+                        onClick={() => setSelectedCompanyId(co.id)}
+                        style={{
+                          textAlign: "left",
+                          border: active ? "2px solid #2D7FF9" : "1px solid #ececec",
+                          background: "#fff",
+                          borderRadius: 12,
+                          padding: 14,
+                          cursor: "pointer",
+                          display: "grid",
+                          gap: 10,
                         }}
                       >
-                        <Icon name="trash" size={14}/> Remove
+                        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                          <div style={{ width: 58, height: 42, borderRadius: 8, border: "1px solid #e8e8e8", background: "#111", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                            {co.logoUrl ? <img src={co.logoUrl} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} /> : <Icon name="building" size={20} color="#fff" />}
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 14, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{co.name || "Untitled company"}</div>
+                            <div className="text-xs text-muted">{(co.domains || []).join(", ") || "No domains"}</div>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          <span className={co.active === false ? "chip chip-grey" : "chip chip-green"}>{co.active === false ? "Inactive" : "Active"}</span>
+                          {co.adminBrand && <span className="chip chip-blue">Admin brand</span>}
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                          <div><strong>{deptCount}</strong><div className="text-xs text-muted">Departments</div></div>
+                          <div><strong>{peopleCount}</strong><div className="text-xs text-muted">People</div></div>
+                          <div><strong>{visibleCount}</strong><div className="text-xs text-muted">Limited courses</div></div>
+                        </div>
                       </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {selectedCompany && (
+                <div className="card card-pad-lg">
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 18 }}>
+                    <div>
+                      <div className="eyebrow-sm">Company detail</div>
+                      <h3 style={{ fontSize: 20, fontWeight: 800, margin: "4px 0" }}>{selectedCompany.name || "New company"}</h3>
+                      <div className="text-sm text-muted">{companyPeople(selectedCompany).length} people · {companyDepartments.length} departments · {companyCourses(selectedCompany).length} limited courses</div>
+                      {goRoute && (
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                          <button className="btn btn-ghost btn-sm" onClick={() => goRoute("admin-users")}><Icon name="users" size={14}/> View people</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => goRoute({ route: "admin-courses", courseIntent: { companyId: selectedCompany.id } })}><Icon name="book" size={14}/> View courses</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => goRoute("admin-activity")}><Icon name="clock" size={14}/> View activity</button>
+                        </div>
+                      )}
                     </div>
+                    <button className="btn-icon" title="Remove company" disabled={companyDrafts.length <= 1} onClick={() => removeCompanyDraft(selectedCompanyIdx)}><Icon name="trash" size={14}/></button>
                   </div>
-                </div>
-              )}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {iconDrafts.length === 0 && (
-                <div className="text-xs text-muted" style={{ padding: "10px 4px" }}>
-                  No custom icons yet. Built-in icons remain available everywhere.
-                </div>
-              )}
-              {iconDrafts.map((iconItem, idx) => (
-                <div key={iconItem.id || idx} style={{ border: "1px solid #ececec", borderRadius: 10, padding: 12, display: "grid", gridTemplateColumns: "44px 1fr", gap: 12, alignItems: "center" }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 10, background: "#f6f7f5", border: "1px solid #ececec", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {iconItem.url ? (
-                      <img src={iconItem.url} alt="" style={{ width: 26, height: 26, objectFit: "contain" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
-                    ) : <Icon name="upload" size={18} />}
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 10 }}>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                     <div className="cd-field" style={{ margin: 0 }}>
                       <label>Name</label>
-                      <input className="cd-input" value={iconItem.label || ""} onChange={e => updateIconDraft(idx, { label: e.target.value, id: iconItem.id || iconDocId(e.target.value) })} placeholder="Maintenance detailed" />
+                      <input className="cd-input" value={selectedCompany.name || ""} onChange={e => updateCompanyDraft(selectedCompanyIdx, { name: e.target.value, id: selectedCompany.id || companyDocId(e.target.value) })} placeholder="Company name" />
                     </div>
                     <div className="cd-field" style={{ margin: 0 }}>
-                      <label>PNG/SVG URL</label>
-                      <input className="cd-input" value={iconItem.url || ""} onChange={e => updateIconDraft(idx, { url: e.target.value })} placeholder="https://drive.google.com/... or /assets/icon.svg" />
+                      <label>Email domains</label>
+                      <input className="cd-input" value={(selectedCompany.domains || []).join(", ")} onChange={e => updateCompanyDraft(selectedCompanyIdx, { domains: e.target.value.split(/[,\n|]/).map(normalizeDomain).filter(Boolean) })} placeholder="example.com, sisterco.com" />
                     </div>
                     <div className="cd-field" style={{ margin: 0 }}>
-                      <label>Tags / use</label>
-                      <input className="cd-input" value={iconItem.tags || ""} onChange={e => updateIconDraft(idx, { tags: e.target.value })} placeholder="category, department, tab" />
+                      <label>Learner logo URL</label>
+                      <input className="cd-input" value={selectedCompany.logoUrl || ""} onChange={e => updateCompanyDraft(selectedCompanyIdx, { logoUrl: e.target.value })} placeholder="https://..." />
                     </div>
-                    <div style={{ display: "flex", alignItems: "end", gap: 8 }}>
-                      <label className="btn btn-ghost btn-sm" style={{ cursor: "pointer", margin: 0 }}>
-                        <Icon name="upload" size={14}/> {uploadingIconId === iconItem.id ? "Importing..." : "Import file"}
-                        <input
-                          type="file"
-                          accept=".png,.svg,image/png,image/svg+xml,image/*"
-                          style={{ display: "none" }}
-                          disabled={!!uploadingIconId}
-                          onChange={e => uploadIconDraft(idx, e.target.files?.[0])}
-                        />
-                      </label>
+                    <div className="cd-field" style={{ margin: 0 }}>
+                      <label>Certificate logo URL</label>
+                      <input className="cd-input" value={selectedCompany.certificateLogoUrl || ""} onChange={e => updateCompanyDraft(selectedCompanyIdx, { certificateLogoUrl: e.target.value })} placeholder="Defaults to learner logo" />
+                    </div>
+                    <div className="cd-field" style={{ margin: 0 }}>
+                      <label>Learner logo preview</label>
+                      {companyLogoPreview(selectedCompany.logoUrl, selectedCompany.name)}
+                    </div>
+                    <div className="cd-field" style={{ margin: 0 }}>
+                      <label>Certificate logo preview</label>
+                      {companyLogoPreview(selectedCompany.certificateLogoUrl || selectedCompany.logoUrl, selectedCompany.name)}
+                    </div>
+                    <div className="cd-field" style={{ margin: 0 }}>
+                      <label>Certificate display name</label>
+                      <input className="cd-input" value={selectedCompany.certificateName || ""} onChange={e => updateCompanyDraft(selectedCompanyIdx, { certificateName: e.target.value })} placeholder="Defaults to company name" />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      {companyColorField(selectedCompanyIdx, selectedCompany, "accent", "Accent", "#1d4ed8")}
+                      {companyColorField(selectedCompanyIdx, selectedCompany, "secondary", "Secondary", "#0f2f6b")}
+                    </div>
+                    <div style={{ gridColumn: "1 / -1", display: "flex", gap: 10, flexWrap: "wrap" }}>
                       <label className="chip chip-grey" style={{ cursor: "pointer" }}>
-                        <input type="checkbox" checked={iconItem.active !== false} onChange={e => updateIconDraft(idx, { active: e.target.checked })} /> Active
+                        <input type="checkbox" checked={selectedCompany.active !== false} onChange={e => updateCompanyDraft(selectedCompanyIdx, { active: e.target.checked })} /> Active
                       </label>
-                      <button className="btn-icon" title="Remove icon" onClick={() => removeIconDraft(idx)}><Icon name="trash" size={14}/></button>
+                      <label className="chip chip-green" style={{ cursor: "pointer" }}>
+                        <input type="radio" name="adminBrandCompany" checked={!!selectedCompany.adminBrand} onChange={() => setCompanyDrafts(prev => prev.map((c, i) => ({ ...c, adminBrand: i === selectedCompanyIdx })))} /> Admin brand
+                      </label>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
 
-            <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid #ececec" }}>
-              <div className="eyebrow-sm" style={{ marginBottom: 10 }}>Sidebar tab icons</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                {NAV_ICON_TARGETS.map(target => (
-                  <div key={target.id} style={{ display: "grid", gridTemplateColumns: "24px 1fr", gap: 8, alignItems: "center" }}>
-                    <Icon name={navIconDrafts[target.id] || target.fallback} size={18}/>
-                    <select
-                      className="cd-input"
-                      value={navIconDrafts[target.id] || ""}
-                      onChange={e => setNavIconDrafts(prev => ({ ...prev, [target.id]: e.target.value }))}
-                    >
-                      <option value="">{target.label}: Default</option>
-                      {iconSelectOptions.map(opt => <option key={`${target.id}-${opt.id}`} value={opt.id}>{target.label}: {opt.label}</option>)}
-                    </select>
+                  <div style={{ marginTop: 22, paddingTop: 18, borderTop: "1px solid #ececec" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+                      <div>
+                        <div className="eyebrow-sm">Departments</div>
+                        <div className="text-sm text-muted">Departments are scoped to {selectedCompany.name || "this company"}.</div>
+                      </div>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setDeptModal({ open: true, initial: null, companyId: selectedCompany.id })}><Icon name="plus" size={14}/> Add department</button>
+                    </div>
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {companyDepartments.length === 0 && <div className="empty" style={{ padding: 18 }}>No departments for this company yet.</div>}
+                      {companyDepartments.map(d => {
+                        const preset = (window.DEPT_PRESETS || [])[d.iconIdx ?? 0] || { bg: "#f0f9e6", color: "#2e5a12" };
+                        return (
+                          <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", border: "1px solid #ececec", borderRadius: 10 }}>
+                            <div style={{ width: 36, height: 36, borderRadius: 8, background: preset.bg, color: preset.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <Icon name={d.icon || "building"} size={16}/>
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 800, fontSize: 13 }}>{d.name}</div>
+                              <div className="text-xs text-muted">{deptPeopleCount(d)} people</div>
+                            </div>
+                            <button className="btn-icon" title="Edit department" onClick={() => setDeptModal({ open: true, initial: d, companyId: selectedCompany.id })}><Icon name="edit" size={14}/></button>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                ))}
-              </div>
-            </div>
 
-            <button className="btn btn-primary btn-sm" style={{ marginTop: 14 }} disabled={savingIcons} onClick={saveIconDrafts}>
-              <Icon name="check" size={14}/> {savingIcons ? "Saving..." : "Save icon settings"}
-            </button>
-          </div>
-
-          <div className="card card-pad-lg">
-            <div className="eyebrow-sm" style={{ marginBottom: 6 }}>Departments</div>
-            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Organizational departments</h3>
-            <p className="text-muted text-sm" style={{ marginBottom: 18 }}>
-              Used in reporting, filtering, and assignment rules. Each department belongs to one company.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {DEPARTMENT_DOCS.length === 0 && (
-                <div className="text-xs text-muted" style={{ padding: "10px 4px" }}>
-                  No departments yet. Click "Add department" to create your first one.
+                  <button className="btn btn-primary btn-sm" style={{ marginTop: 18 }} disabled={savingCompanies} onClick={saveCompanyDrafts}>
+                    <Icon name="check" size={14}/> {savingCompanies ? "Saving..." : "Save company settings"}
+                  </button>
                 </div>
               )}
-              {sortedDepartments.map(d => {
-                const preset = (window.DEPT_PRESETS || [])[d.iconIdx ?? 0] || { icon: "house", bg: "#f0f9e6", color: "#2e5a12" };
-                const departmentIcon = d.icon || preset.icon;
-                const departmentCompany = companyName(d.companyId) || "No company";
-                const peopleCount = ALL_USERS.filter(u => u.dept === d.name && (!d.companyId || u.companyId === d.companyId)).length;
-                return (
-                  <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", border: "1px solid #ececec", borderRadius: 10 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 8, background: preset.bg, color: preset.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <Icon name={departmentIcon} size={16} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{d.name}</div>
-                        <span className="chip chip-grey">{departmentCompany}</span>
-                      </div>
-                      <div style={{ fontSize: 11, color: "#5f635f" }}>{peopleCount} people</div>
-                    </div>
-                    <button className="btn-icon" title="Edit department" onClick={() => setDeptModal({ open: true, initial: d })}><Icon name="edit" size={14}/></button>
-                  </div>
-                );
-              })}
-              <button className="btn btn-ghost btn-sm" style={{ alignSelf: "flex-start", marginTop: 4 }} onClick={() => setDeptModal({ open: true, initial: null })}>
-                <Icon name="plus" size={14}/> Add department
-              </button>
-            </div>
-          </div>
 
-          <div className="card card-pad-lg mt-4">
-            <div className="eyebrow-sm" style={{ marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>Categories</span>
-              <button className="btn btn-ghost btn-sm" style={{ padding: "4px 10px", fontSize: 11 }} onClick={() => {
-                if (CATEGORY_DOCS.length === 0) { alert("Click \"Make presets editable\" first, then add new categories."); return; }
-                setCategoryModal({ open: true, initial: null });
-              }}>
-                <Icon name="plus" size={12}/> New category
-              </button>
+              {legacyDepartments.length > 0 && (
+                <div className="card card-pad">
+                  <div className="eyebrow-sm" style={{ marginBottom: 6 }}>Cleanup</div>
+                  <div style={{ fontWeight: 800, marginBottom: 4 }}>Legacy departments without a company</div>
+                  <div className="text-sm text-muted">These departments need to be edited and assigned to a company before they will appear in a company detail page.</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+                    {legacyDepartments.map(d => <button key={d.id} className="btn btn-ghost btn-sm" onClick={() => setDeptModal({ open: true, initial: d, companyId: "" })}>{d.name}</button>)}
+                  </div>
+                </div>
+              )}
             </div>
-            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Course categories</h3>
-            <p className="text-muted text-sm" style={{ marginBottom: 18 }}>
-              Used by course filters and optional Browse tabs on the learner sidebar.
-            </p>
-            {CATEGORY_DOCS.length === 0 && (
-              <div style={{ marginBottom: 12, padding: 12, border: "1px solid #f3d999", borderRadius: 10, background: "#fffaf0" }}>
-                <div className="text-sm" style={{ fontWeight: 700, marginBottom: 4 }}>Preset categories are still in use.</div>
-                <div className="text-xs text-muted" style={{ marginBottom: 10 }}>Create editable category records before deleting or changing the preset list.</div>
-                <button className="btn btn-ghost btn-sm" onClick={seedCategories} disabled={seedingCategories}>
-                  <Icon name="check" size={14}/> {seedingCategories ? "Creating..." : "Make presets editable"}
-                </button>
+          )}
+
+          {settingsSection === "categories" && (
+            <div className="card card-pad-lg">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <div>
+                  <div className="eyebrow-sm">Training categories</div>
+                  <h3 style={{ fontSize: 20, fontWeight: 800, margin: "4px 0" }}>Platform course categories</h3>
+                  <p className="text-muted text-sm" style={{ margin: 0 }}>Categories are shared across all companies and can optionally appear as learner Browse tabs.</p>
+                </div>
+                <button className="btn btn-ghost btn-sm" onClick={() => {
+                  if (CATEGORY_DOCS.length === 0) { alert("Click \"Make presets editable\" first, then add new categories."); return; }
+                  setCategoryModal({ open: true, initial: null });
+                }}><Icon name="plus" size={14}/> New category</button>
               </div>
-            )}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {sortedCategories.map(c => {
-                const courseCount = COURSES.filter(course => course.cat === c.name).length;
-                return (
-                  <div key={c.id || c.name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", border: "1px solid #ececec", borderRadius: 10 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 8, ...getCategoryChipStyle(c), display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <Icon name={c.icon || "tag"} size={17} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{c.name}</div>
-                        {c.showInBrowse ? <span className="chip" style={getCategoryChipStyle(c)}>Browse tab</span> : <span className="chip chip-grey">Catalog only</span>}
-                        {c.preset ? <span className="chip chip-grey">Preset</span> : null}
+              {CATEGORY_DOCS.length === 0 && (
+                <div style={{ marginBottom: 12, padding: 12, border: "1px solid #f3d999", borderRadius: 10, background: "#fffaf0" }}>
+                  <div className="text-sm" style={{ fontWeight: 700, marginBottom: 4 }}>Preset categories are still in use.</div>
+                  <div className="text-xs text-muted" style={{ marginBottom: 10 }}>Create editable category records before deleting or changing the preset list.</div>
+                  <button className="btn btn-ghost btn-sm" onClick={seedCategories} disabled={seedingCategories}>
+                    <Icon name="check" size={14}/> {seedingCategories ? "Creating..." : "Make presets editable"}
+                  </button>
+                </div>
+              )}
+              <div style={{ display: "grid", gap: 8 }}>
+                {sortedCategories.map(c => {
+                  const courseCount = COURSES.filter(course => course.cat === c.name).length;
+                  return (
+                    <div key={c.id || c.name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", border: "1px solid #ececec", borderRadius: 10 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 8, ...getCategoryChipStyle(c), display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <Icon name={c.icon || "tag"} size={17}/>
                       </div>
-                      <div style={{ fontSize: 11, color: "#5f635f" }}>{courseCount} {courseCount === 1 ? "course" : "courses"}</div>
-                    </div>
-                    <button
-                      className="btn-icon"
-                      title={c.preset ? "Make presets editable first" : "Edit category"}
-                      disabled={c.preset}
-                      style={c.preset ? { opacity: 0.4, cursor: "not-allowed" } : null}
-                      onClick={() => setCategoryModal({ open: true, initial: c })}
-                    >
-                      <Icon name="edit" size={14}/>
-                    </button>
-                    {!c.preset && (
-                      <button className="btn-icon" title="Delete category" style={{ color: "#a8232b" }} onClick={async () => {
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          <div style={{ fontWeight: 700, fontSize: 13 }}>{c.name}</div>
+                          {c.showInBrowse ? <span className="chip" style={getCategoryChipStyle(c)}>Browse tab</span> : <span className="chip chip-grey">Catalog only</span>}
+                          {c.preset ? <span className="chip chip-grey">Preset</span> : null}
+                        </div>
+                        <div className="text-xs text-muted">{courseCount} {courseCount === 1 ? "course" : "courses"}</div>
+                      </div>
+                      <button className="btn-icon" title={c.preset ? "Make presets editable first" : "Edit category"} disabled={c.preset} style={c.preset ? { opacity: 0.4, cursor: "not-allowed" } : null} onClick={() => setCategoryModal({ open: true, initial: c })}><Icon name="edit" size={14}/></button>
+                      {!c.preset && <button className="btn-icon" title="Delete category" style={{ color: "#a8232b" }} onClick={async () => {
                         if (courseCount > 0) { alert(`Cannot delete: ${courseCount} ${courseCount === 1 ? "course uses" : "courses use"} this category. Move those courses first.`); return; }
                         if (!confirm(`Delete category "${c.name}"?`)) return;
                         try { await deleteCategory(c.id); showToast?.(`Category "${c.name}" deleted`); }
                         catch (err) { alert("Delete failed: " + err.message); }
-                      }}><Icon name="trash" size={14}/></button>
+                      }}><Icon name="trash" size={14}/></button>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {settingsSection === "icons" && (
+            <div className="card card-pad-lg">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 16 }}>
+                <div>
+                  <div className="eyebrow-sm">Icon library</div>
+                  <h3 style={{ fontSize: 20, fontWeight: 800, margin: "4px 0" }}>Reusable system icons</h3>
+                  <p className="text-muted text-sm" style={{ margin: 0 }}>Search, add, replace, reset, or assign icons across categories, departments, and sidebar tabs.</p>
+                </div>
+                <button className="btn btn-ghost btn-sm" onClick={addIconDraft}><Icon name="plus" size={14}/> New icon</button>
+              </div>
+              <input className="cd-input" type="search" placeholder="Search icons by name, id, or tag..." value={iconQuery} onChange={e => setIconQuery(e.target.value)} style={{ marginBottom: 14 }} />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(92px, 1fr))", gap: 10, marginBottom: 16 }}>
+                {filteredIconOptions.map(opt => {
+                  const draftIdx = iconDrafts.findIndex(i => i.id === opt.id);
+                  const isCustom = draftIdx >= 0;
+                  const isSystem = !!opt.builtin;
+                  const active = editingIconId === opt.id || editingIconId === `system:${opt.id}`;
+                  const hasSystemOverride = isSystem && !!systemIconDrafts[opt.id];
+                  return (
+                    <button key={`gallery-${opt.id}`} title={opt.label} onClick={() => setEditingIconId(isSystem ? `system:${opt.id}` : opt.id)} style={{
+                      minHeight: 92,
+                      padding: 8,
+                      border: active ? "2px solid #2D7FF9" : "1px solid #e6e6e6",
+                      borderRadius: 10,
+                      background: "#fff",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                      cursor: "pointer",
+                    }}>
+                      {(systemIconDrafts[opt.id] || opt.url) ? <img src={systemIconDrafts[opt.id] || opt.url} alt="" style={{ width: 26, height: 26, objectFit: "contain" }} /> : <Icon name={opt.icon || opt.id} size={24}/>}
+                      <div style={{ fontSize: 10, color: "#5f635f", textAlign: "center", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{opt.label}</div>
+                      {hasSystemOverride && <span className="chip chip-blue" style={{ fontSize: 9 }}>Replaced</span>}
+                      {isCustom && <span className="chip chip-grey" style={{ fontSize: 9 }}>Custom</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              {editingSystemIcon && (
+                <div style={{ padding: 14, border: "1px solid #dbeafe", borderRadius: 10, background: "#eff6ff", marginBottom: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                    <Icon name={editingSystemIcon} size={22}/>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 800, fontSize: 13 }}>Replace system icon</div>
+                      <div className="text-xs text-muted">This replaces every use of "{editingSystemIcon}" across the app.</div>
+                    </div>
+                    <button className="btn-icon" title="Close editor" onClick={() => setEditingIconId("")}><Icon name="close" size={14}/></button>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10, alignItems: "end" }}>
+                    <input className="cd-input" value={systemIconDrafts[editingSystemIcon] || ""} onChange={e => setSystemIconDrafts(prev => ({ ...prev, [editingSystemIcon]: e.target.value }))} placeholder="Replacement PNG/SVG URL" />
+                    <label className="btn btn-ghost btn-sm" style={{ cursor: "pointer", margin: 0 }}>
+                      <Icon name="upload" size={14}/> {uploadingIconId === `system:${editingSystemIcon}` ? "Importing..." : "Import file"}
+                      <input type="file" accept=".png,.svg,image/png,image/svg+xml,image/*" style={{ display: "none" }} disabled={!!uploadingIconId} onChange={e => uploadSystemIconDraft(editingSystemIcon, e.target.files?.[0])}/>
+                    </label>
+                    <button className="btn btn-ghost btn-sm" disabled={!systemIconDrafts[editingSystemIcon]} onClick={() => setSystemIconDrafts(prev => { const next = { ...prev }; delete next[editingSystemIcon]; return next; })}><Icon name="refresh" size={14}/> Reset</button>
+                  </div>
+                </div>
+              )}
+              {editingIcon && (
+                <div style={{ padding: 14, border: "1px solid #dbeafe", borderRadius: 10, background: "#eff6ff", marginBottom: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                    {editingIcon.url ? <img src={editingIcon.url} alt="" style={{ width: 26, height: 26, objectFit: "contain" }} /> : <Icon name="upload" size={18}/>}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 800, fontSize: 13 }}>Edit custom icon</div>
+                      <div className="text-xs text-muted">Changes apply after you save icon settings.</div>
+                    </div>
+                    <button className="btn-icon" title="Close editor" onClick={() => setEditingIconId("")}><Icon name="close" size={14}/></button>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr 1fr auto", gap: 10, alignItems: "end" }}>
+                    <input className="cd-input" value={editingIcon.label || ""} onChange={e => updateIconDraft(editingIconIdx, { label: e.target.value })} placeholder="Name" />
+                    <input className="cd-input" value={editingIcon.url || ""} onChange={e => updateIconDraft(editingIconIdx, { url: e.target.value })} placeholder="PNG/SVG URL" />
+                    <input className="cd-input" value={editingIcon.tags || ""} onChange={e => updateIconDraft(editingIconIdx, { tags: e.target.value })} placeholder="Tags / use" />
+                    <label className="btn btn-ghost btn-sm" style={{ cursor: "pointer", margin: 0 }}>
+                      <Icon name="upload" size={14}/> {uploadingIconId === editingIcon.id ? "Importing..." : "Replace"}
+                      <input type="file" accept=".png,.svg,image/png,image/svg+xml,image/*" style={{ display: "none" }} disabled={!!uploadingIconId} onChange={e => uploadIconDraft(editingIconIdx, e.target.files?.[0])}/>
+                    </label>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10 }}>
+                    <label className="chip chip-grey" style={{ cursor: "pointer" }}><input type="checkbox" checked={editingIcon.active !== false} onChange={e => updateIconDraft(editingIconIdx, { active: e.target.checked })} /> Active</label>
+                    <button className="btn btn-ghost btn-sm" style={{ color: "#a8232b" }} onClick={() => { if (confirm(`Remove icon "${editingIcon.label || "Untitled icon"}"? Remember to save icon settings after removing it.`)) removeIconDraft(editingIconIdx); }}><Icon name="trash" size={14}/> Remove</button>
+                  </div>
+                </div>
+              )}
+              <div style={{ paddingTop: 16, borderTop: "1px solid #ececec" }}>
+                <div className="eyebrow-sm" style={{ marginBottom: 10 }}>Sidebar tab icons</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  {NAV_ICON_TARGETS.map(target => (
+                    <div key={target.id} style={{ display: "grid", gridTemplateColumns: "24px 1fr", gap: 8, alignItems: "center" }}>
+                      <Icon name={navIconDrafts[target.id] || target.fallback} size={18}/>
+                      <select className="cd-input" value={navIconDrafts[target.id] || ""} onChange={e => setNavIconDrafts(prev => ({ ...prev, [target.id]: e.target.value }))}>
+                        <option value="">{target.label}: Default</option>
+                        {iconSelectOptions.map(opt => <option key={`${target.id}-${opt.id}`} value={opt.id}>{target.label}: {opt.label}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <button className="btn btn-primary btn-sm" style={{ marginTop: 16 }} disabled={savingIcons} onClick={saveIconDrafts}>
+                <Icon name="check" size={14}/> {savingIcons ? "Saving..." : "Save icon settings"}
+              </button>
+            </div>
+          )}
+
+          {settingsSection === "roles" && (
+            <div className="card card-pad-lg">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <div>
+                  <div className="eyebrow-sm">Roles & permissions</div>
+                  <h3 style={{ fontSize: 20, fontWeight: 800, margin: "4px 0" }}>LMS roles</h3>
+                  <p className="text-muted text-sm" style={{ margin: 0 }}>What someone can do inside OneSource.</p>
+                </div>
+                <button className="btn btn-ghost btn-sm" onClick={() => setRoleModal({ open: true, initial: null })}><Icon name="plus" size={14}/> New role</button>
+              </div>
+              {[...DEFAULT_ROLES.map(r => ({ ...r, builtIn: true })), ...sortedRoles].map(r => {
+                const count = ALL_USERS.filter(u => u.role === r.name).length;
+                return (
+                  <div key={r.id || r.name} style={{ padding: "14px 0", borderBottom: "1px solid #ececec", display: "flex", gap: 12, justifyContent: "space-between" }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                        <div style={{ fontWeight: 800, fontSize: 14 }}>{r.name}</div>
+                        <span className="chip chip-grey">{count} {count === 1 ? "person" : "people"}</span>
+                        {r.builtIn && <span className="chip chip-green">Built-in</span>}
+                      </div>
+                      {r.desc && <div className="text-muted text-sm">{r.desc}</div>}
+                    </div>
+                    {!r.builtIn && (
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button className="btn-icon" title="Edit role" onClick={() => setRoleModal({ open: true, initial: r })}><Icon name="edit" size={14}/></button>
+                        <button className="btn-icon" title="Delete role" style={{ color: "#a8232b" }} onClick={async () => {
+                          if (count > 0) { alert(`Cannot delete: ${count} ${count === 1 ? "person has" : "people have"} this role. Reassign them first.`); return; }
+                          if (!confirm(`Delete role "${r.name}"?`)) return;
+                          try { await deleteRole(r.id); showToast?.(`Role "${r.name}" deleted`); }
+                          catch (err) { alert("Delete failed: " + err.message); }
+                        }}><Icon name="trash" size={14}/></button>
+                      </div>
                     )}
                   </div>
                 );
               })}
             </div>
-          </div>
-        </div>
+          )}
 
-        <div>
-          <div className="card card-pad-lg">
-            <div className="eyebrow-sm" style={{ marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>Roles</span>
-              <button className="btn btn-ghost btn-sm" style={{ padding: "4px 10px", fontSize: 11 }} onClick={() => setRoleModal({ open: true, initial: null })}>
-                <Icon name="plus" size={12}/> New role
-              </button>
-            </div>
-            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>LMS roles</h3>
-            <p className="text-muted text-sm" style={{ marginBottom: 18 }}>What someone can do inside the LMS.</p>
-            {DEFAULT_ROLES.map(r => {
-              const count = ALL_USERS.filter(u => u.role === r.name).length;
-              return (
-                <div key={r.name} style={{ padding: "14px 0", borderBottom: "1px solid #ececec" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                        <div style={{ fontWeight: 700, fontSize: 14 }}>{r.name}</div>
-                        <span className="chip chip-grey">{count} {count === 1 ? "person" : "people"}</span>
-                        <span className="chip chip-grey" style={{ background: "#f0f9e6", color: "#2e5a12", borderColor: "#cfeab0" }}>Built-in</span>
-                      </div>
-                      <div className="text-muted text-sm">{r.desc}</div>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-                        {r.chips.map(p => <span key={p} className="chip chip-green">{p}</span>)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-            {sortedRoles.map(r => {
-              const count = ALL_USERS.filter(u => u.role === r.name).length;
-              return (
-                <div key={r.id} style={{ padding: "14px 0", borderBottom: "1px solid #ececec" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                        <div style={{ fontWeight: 700, fontSize: 14 }}>{r.name}</div>
-                        <span className="chip chip-grey">{count} {count === 1 ? "person" : "people"}</span>
-                      </div>
-                      {r.desc && <div className="text-muted text-sm">{r.desc}</div>}
-                      <div className="text-xs text-muted" style={{ marginTop: 6 }}>
-                        {r.perms?.length || 0} permission{r.perms?.length === 1 ? "" : "s"}
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", gap: 4 }}>
-                      <button className="btn-icon" title="Edit role" onClick={() => setRoleModal({ open: true, initial: r })}><Icon name="edit" size={14}/></button>
-                      <button className="btn-icon" title="Delete role" style={{ color: "#a8232b" }} onClick={async () => {
-                        if (count > 0) { alert(`Cannot delete: ${count} ${count === 1 ? "person has" : "people have"} this role. Reassign them first.`); return; }
-                        if (!confirm(`Delete role "${r.name}"?`)) return;
-                        try { await deleteRole(r.id); showToast?.(`Role "${r.name}" deleted`); }
-                        catch (err) { alert("Delete failed: " + err.message); }
-                      }}><Icon name="trash" size={14}/></button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="card card-pad mt-4">
-            <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-              <div style={{ width: 36, height: 36, borderRadius: 8, background: "#111", color: "#7ac142", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <Icon name="shield" size={16} />
+          {settingsSection === "access" && (
+            <div className="card card-pad-lg">
+              <div className="eyebrow-sm">Admin access</div>
+              <h3 style={{ fontSize: 20, fontWeight: 800, margin: "4px 0 10px" }}>Google Workspace admin inheritance</h3>
+              <div className="text-muted text-sm" style={{ lineHeight: 1.55 }}>
+                Anyone with the <strong>Super Admin</strong> role in Google Workspace is automatically granted LMS Admin on first sign-in. Admins can promote other users to LMS Admin or Manager from the People page, and those roles persist inside OneSource.
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 13 }}>Admin access &amp; Google Workspace</div>
-                <div className="text-muted text-sm" style={{ marginTop: 4 }}>
-                  Anyone with the <strong>Super Admin</strong> role in Google Workspace is automatically granted LMS Admin on first sign-in. From there, those admins can promote any other user to LMS Admin or Manager from the People page — those roles persist in the LMS regardless of Google group changes.
-                </div>
-                <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <span className="chip chip-green">{ALL_USERS.filter(u => u.adminSource === "google").length} inherited from Google</span>
-                  <span className="chip chip-grey">{ALL_USERS.filter(u => u.adminSource === "granted").length} manually granted</span>
-                </div>
+              <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span className="chip chip-green">{ALL_USERS.filter(u => u.adminSource === "google").length} inherited from Google</span>
+                <span className="chip chip-grey">{ALL_USERS.filter(u => u.adminSource === "granted").length} manually granted</span>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
       <DepartmentEditModal
         open={deptModal.open}
-        onClose={() => setDeptModal({ open: false, initial: null })}
+        onClose={() => setDeptModal({ open: false, initial: null, companyId: "" })}
         initial={deptModal.initial}
+        fixedCompanyId={deptModal.companyId || ""}
       />
       <CategoryEditModal
         open={categoryModal.open}
@@ -2800,6 +2820,7 @@ const AdminSettingsPage = () => {
       />
     </div>
   );
+
 };
 
 // ============================================================

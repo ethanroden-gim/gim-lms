@@ -20,11 +20,11 @@ const Sidebar = ({ route, setRoute, mode, goCategory }) => {
   const adminLinks = [
     { id: "admin-overview", label: "Overview", icon: getNavIcon("admin-overview", "chart") },
     { id: "admin-courses", label: "Courses", icon: getNavIcon("admin-courses", "book") },
-    { id: "admin-users", label: "People & enrollments", icon: getNavIcon("admin-users", "users") },
+    { id: "admin-users", label: "People", icon: getNavIcon("admin-users", "users") },
     { id: "admin-assess", label: "Assessments", icon: getNavIcon("admin-assess", "quiz") },
     { id: "admin-attempts", label: "Attempts", icon: getNavIcon("admin-attempts", "list"), badge: (window.ATTEMPTS || []).filter(a => a.status === "pending_review").length || null },
     { id: "admin-activity", label: "Activity", icon: getNavIcon("admin-activity", "clock") },
-    { id: "admin-cert", label: "Certificate designer", icon: getNavIcon("admin-cert", "award") },
+    { id: "admin-cert", label: "Certificate", icon: getNavIcon("admin-cert", "award") },
     { id: "admin-settings", label: "Settings", icon: getNavIcon("admin-settings", "settings") },
   ];
   const links = mode === "admin" ? adminLinks : learnerLinks;

@@ -477,7 +477,7 @@ const updateUser = async (uid, fields) => {
   }
 };
 
-const createDirectoryUser = async ({ name, email, role = "Learner", dept = "", status = "onboarding" }) => {
+const createDirectoryUser = async ({ name, email, role = "Learner", dept = "", departmentId = "", status = "onboarding" }) => {
   if (!fbReady) throw new Error("Firebase not configured");
   const cleanEmail = (email || "").trim();
   const emailLower = cleanEmail.toLowerCase();
@@ -496,6 +496,7 @@ const createDirectoryUser = async ({ name, email, role = "Learner", dept = "", s
     companyId,
     role,
     dept,
+    departmentId,
     status,
     isAdmin: role === "Admin",
     isManager: role !== "Learner",
@@ -520,7 +521,7 @@ const createDirectoryUser = async ({ name, email, role = "Learner", dept = "", s
     }
     throw err;
   }
-  recordAdminActivity("Created directory user", { targetUserId: ref.id, email: cleanEmail, role, dept }).catch(() => {});
+  recordAdminActivity("Created directory user", { targetUserId: ref.id, email: cleanEmail, role, dept, departmentId }).catch(() => {});
   return ref.id;
 };
 
@@ -679,9 +680,20 @@ const unassignCourse = async (userId, courseId) => {
 const saveDepartment = async (dept) => {
   if (!fbReady) throw new Error("Firebase not configured");
   const { id, ...data } = dept;
+  if (!data.companyId) throw new Error("Choose a company for this department.");
   data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
   if (id) {
+    const beforeSnap = await fbDb.collection("departments").doc(id).get().catch(() => null);
+    const beforeName = beforeSnap?.exists ? beforeSnap.data()?.name : "";
     await fbDb.collection("departments").doc(id).set(data, { merge: true });
+    if (data.name && beforeName && beforeName !== data.name) {
+      const usersSnap = await fbDb.collection("users").where("departmentId", "==", id).get();
+      if (!usersSnap.empty) {
+        const batch = fbDb.batch();
+        usersSnap.forEach(doc => batch.set(doc.ref, { dept: data.name }, { merge: true }));
+        await batch.commit();
+      }
+    }
     recordAdminActivity("Updated department", { departmentId: id, name: data.name || "" }).catch(() => {});
     return id;
   }

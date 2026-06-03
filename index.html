@@ -223,7 +223,7 @@
         if (route === "admin-assess")      body = <AdminAssessmentsPage />;
         if (route === "admin-attempts")    body = <AdminAttemptsPage />;
         if (route === "admin-activity")    body = <AdminActivityPage />;
-        if (route === "admin-settings")    body = <AdminSettingsPage />;
+        if (route === "admin-settings")    body = <AdminSettingsPage goRoute={goAdminRoute} />;
         if (route === "admin-cert")        body = <AdminCertificateDesignerPage />;
       }
       if (!body) body = <div className="page"><div className="empty">Page not found.</div></div>;

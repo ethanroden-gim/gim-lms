@@ -153,11 +153,11 @@ const NAV_ICON_TARGETS = [
   { id: "team", label: "My team", fallback: "users" },
   { id: "admin-overview", label: "Admin overview", fallback: "chart" },
   { id: "admin-courses", label: "Admin courses", fallback: "book" },
-  { id: "admin-users", label: "People & enrollments", fallback: "users" },
+  { id: "admin-users", label: "People", fallback: "users" },
   { id: "admin-assess", label: "Assessments", fallback: "quiz" },
   { id: "admin-attempts", label: "Attempts", fallback: "list" },
   { id: "admin-activity", label: "Activity", fallback: "clock" },
-  { id: "admin-cert", label: "Certificate designer", fallback: "award" },
+  { id: "admin-cert", label: "Certificate", fallback: "award" },
   { id: "admin-settings", label: "Settings", fallback: "settings" },
 ];
 const CATEGORY_COLOR_CHOICES = [
