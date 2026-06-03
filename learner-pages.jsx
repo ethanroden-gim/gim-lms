@@ -86,6 +86,8 @@ const DashboardPage = ({ goCourse, setRoute }) => {
     ? Math.round(scoredCourses.reduce((s, c) => s + ENROLLMENTS[c.id].score, 0) / scoredCourses.length)
     : null;
   const firstName = (CURRENT_USER.name || "there").split(" ")[0];
+  const company = getCurrentUserCompany() || DEFAULT_COMPANY;
+  const companyLogo = company.logoUrl && company.logoUrl !== DEFAULT_COMPANY.logoUrl ? company.logoUrl : "";
 
   return (
     <div className="page">
@@ -107,10 +109,17 @@ const DashboardPage = ({ goCourse, setRoute }) => {
             )}
           </div>
         </div>
-        <div className="hero-card__progress">
-          <div className="hero-card__progress-num">{completedCount}<span>/{completedCount + totalAssigned}</span></div>
-          <div className="hero-card__progress-label">Courses complete</div>
-          <div className="hero-card__bar"><div style={{ width: `${overallPct}%` }} /></div>
+        <div className="hero-card__aside">
+          {companyLogo && (
+            <div className="hero-card__company">
+              <img src={companyLogo} alt={company.name || "Company"} onError={(e) => { e.currentTarget.parentElement.style.display = "none"; }} />
+            </div>
+          )}
+          <div className="hero-card__progress">
+            <div className="hero-card__progress-num">{completedCount}<span>/{completedCount + totalAssigned}</span></div>
+            <div className="hero-card__progress-label">Courses complete</div>
+            <div className="hero-card__bar"><div style={{ width: `${overallPct}%` }} /></div>
+          </div>
         </div>
       </div>
 
