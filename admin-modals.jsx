@@ -351,7 +351,7 @@ const NewAssessmentModal = ({ open, onClose, initial, onSaved }) => {
                 <FieldLabel required>Linked course</FieldLabel>
                 <SelectInput value={courseId} onChange={e => setCourseId(e.target.value)}>
                   <option value="">Select a course…</option>
-                  {COURSES.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                  {[...COURSES].sort((a, b) => (a.title || "").localeCompare(b.title || "")).map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
                 </SelectInput>
               </div>
               <div>
