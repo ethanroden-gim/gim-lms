@@ -222,14 +222,22 @@ const AdminCourseEditorPage = ({ mode, courseId, goBack }) => {
           <h1 className="page-head__title">{isNew ? "New course" : "Edit course"}</h1>
           <div className="page-head__sub">{isNew ? "Build a new training module from scratch." : c.title || "Untitled course"}</div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-ghost btn-sm" onClick={goBack} disabled={saving}>Cancel</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => onSave(false)} disabled={saving}>
-            <Icon name="check" size={14}/> {saving ? "Saving…" : "Save draft"}
-          </button>
-          <button className="btn btn-primary btn-sm" onClick={() => onSave(true)} disabled={saving}>
-            <Icon name="check" size={14}/> {saving ? "Saving…" : (isNew ? "Publish course" : "Save changes")}
-          </button>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" }}>
+          {!isNew && c.id && c.id !== "new" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#5f635f" }}>
+              <span style={{ fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: "#334155" }}>Course ID</span>
+              <code style={{ padding: "4px 8px", border: "1px solid #d8d9d8", borderRadius: 999, background: "#fff", color: "#111", fontSize: 12 }}>{c.id}</code>
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-ghost btn-sm" onClick={goBack} disabled={saving}>Cancel</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => onSave(false)} disabled={saving}>
+              <Icon name="check" size={14}/> {saving ? "Saving…" : "Save draft"}
+            </button>
+            <button className="btn btn-primary btn-sm" onClick={() => onSave(true)} disabled={saving}>
+              <Icon name="check" size={14}/> {saving ? "Saving…" : (isNew ? "Publish course" : "Save changes")}
+            </button>
+          </div>
         </div>
       </div>
 
