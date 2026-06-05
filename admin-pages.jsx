@@ -1329,27 +1329,24 @@ const AddDirectoryUserModal = ({ open, onClose, onCreated }) => {
             </select>
           </div>
         </div>
-        <div>
-          <FieldLabel>Department</FieldLabel>
-          <select className="cd-input" value={departmentId} onChange={e => {
-            const selectedDept = departmentOptions.find(d => d.id === e.target.value);
-            setDepartmentId(selectedDept?.id || "");
-            setDept(selectedDept?.name || "");
-          }} disabled={!matchedCompany}>
-            <option value="">Unassigned</option>
-            {departmentOptions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
-          {matchedCompany && (
-            <div className="text-xs text-muted" style={{ marginTop: 6 }}>
-              Showing departments for {matchedCompany.name}.
-            </div>
-          )}
-          {!matchedCompany && (
-            <div className="text-xs text-muted" style={{ marginTop: 6 }}>
-              Enter a company email domain before choosing a department.
-            </div>
-          )}
-        </div>
+        {departmentOptions.length > 0 && (
+          <div>
+            <FieldLabel>Department</FieldLabel>
+            <select className="cd-input" value={departmentId} onChange={e => {
+              const selectedDept = departmentOptions.find(d => d.id === e.target.value);
+              setDepartmentId(selectedDept?.id || "");
+              setDept(selectedDept?.name || "");
+            }}>
+              <option value="">Unassigned</option>
+              {departmentOptions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+            {matchedCompany && (
+              <div className="text-xs text-muted" style={{ marginTop: 6 }}>
+                Showing departments for {matchedCompany.name}.
+              </div>
+            )}
+          </div>
+        )}
         <div style={{ padding: 12, border: "1px solid #dfead4", background: "#f6fbf0", borderRadius: 10, fontSize: 12, color: "#3a3a3a", lineHeight: 1.5 }}>
           After saving, you can assign courses immediately. On first login, this profile and its assignments will be linked to the employee's Google account.
         </div>

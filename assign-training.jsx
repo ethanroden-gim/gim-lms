@@ -34,6 +34,7 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
   const [notify, setNotify] = React.useState(true);
   const [reminderCadence, setReminderCadence] = React.useState("weekly");
   const [courseQuery, setCourseQuery] = React.useState("");
+  const [courseCategory, setCourseCategory] = React.useState("All");
   const [peopleQuery, setPeopleQuery] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -50,7 +51,7 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
     setRequired(true);
     setNotify(true);
     setReminderCadence("weekly");
-    setCourseQuery(""); setPeopleQuery("");
+    setCourseQuery(""); setCourseCategory("All"); setPeopleQuery("");
     setSubmitting(false);
   }, [open, preset]);
 
@@ -59,8 +60,13 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
   const togglePerson = (id) => setPeople(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
   const filteredCourses = COURSES
-    .filter(c => (c.status !== "archived") && (!courseQuery || c.title.toLowerCase().includes(courseQuery.toLowerCase())))
+    .filter(c =>
+      (c.status !== "archived") &&
+      (courseCategory === "All" || c.cat === courseCategory) &&
+      (!courseQuery || c.title.toLowerCase().includes(courseQuery.toLowerCase()))
+    )
     .sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+  const courseCategories = ["All", ...Array.from(new Set(COURSES.map(c => c.cat).filter(Boolean))).sort((a, b) => a.localeCompare(b))];
   const filteredPeople  = ALL_USERS
     .filter(u => !peopleQuery || u.name.toLowerCase().includes(peopleQuery.toLowerCase()))
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
@@ -202,9 +208,17 @@ const AssignTrainingModal = ({ open, onClose, preset }) => {
       <div style={{ padding: "20px 24px", overflow: "auto", flex: 1 }}>
         {step === 1 && (
           <div>
-            <div className="cd-field">
-              <label>Search courses</label>
-              <input className="cd-input" placeholder="Search by title…" value={courseQuery} onChange={e => setCourseQuery(e.target.value)} />
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.4fr) minmax(180px, .8fr)", gap: 10 }}>
+              <div className="cd-field">
+                <label>Search courses</label>
+                <input className="cd-input" placeholder="Search by title..." value={courseQuery} onChange={e => setCourseQuery(e.target.value)} />
+              </div>
+              <div className="cd-field">
+                <label>Category</label>
+                <select className="cd-input" value={courseCategory} onChange={e => setCourseCategory(e.target.value)}>
+                  {courseCategories.map(cat => <option key={cat} value={cat}>{cat === "All" ? "All categories" : cat}</option>)}
+                </select>
+              </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12, maxHeight: 360, overflow: "auto" }}>
               {filteredCourses.map(c => (
