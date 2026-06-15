@@ -2129,6 +2129,9 @@ const AdminSettingsPage = ({ goRoute } = {}) => {
   const [settingsSection, setSettingsSection] = React.useState("companies");
   const [selectedCompanyId, setSelectedCompanyId] = React.useState("");
   const [iconQuery, setIconQuery] = React.useState("");
+  const [adminGrantName, setAdminGrantName] = React.useState("");
+  const [adminGrantEmail, setAdminGrantEmail] = React.useState("");
+  const [grantingAdmin, setGrantingAdmin] = React.useState(false);
   const sortedDepartments = [...DEPARTMENT_DOCS].sort((a, b) =>
     (companyName(a.companyId) || "").localeCompare(companyName(b.companyId) || "") ||
     (a.name || "").localeCompare(b.name || "")
@@ -2340,6 +2343,48 @@ const AdminSettingsPage = ({ goRoute } = {}) => {
       alert("Create defaults failed: " + err.message);
     } finally {
       setSeedingCategories(false);
+    }
+  };
+  const grantAdminAccess = async (e) => {
+    e?.preventDefault?.();
+    if (grantingAdmin) return;
+    if (!window.fbReady) { alert("Firebase isn't configured - can't save admin access."); return; }
+    const cleanEmail = adminGrantEmail.trim();
+    const emailLower = cleanEmail.toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      alert("Enter a valid email address.");
+      return;
+    }
+    const existing = ALL_USERS.find(u =>
+      String(u.emailLower || "").toLowerCase() === emailLower ||
+      String(u.email || "").toLowerCase() === emailLower
+    );
+    setGrantingAdmin(true);
+    try {
+      if (existing) {
+        await updateUser(existing.id, {
+          role: "Admin",
+          isAdmin: true,
+          isManager: true,
+          adminSource: existing.adminSource === "google" ? "google" : "granted",
+          status: existing.status === "inactive" ? "active" : (existing.status || "active"),
+        });
+        showToast?.(`${existing.name || cleanEmail} is now an LMS Admin`);
+      } else {
+        await createDirectoryUser({
+          name: adminGrantName.trim() || cleanEmail,
+          email: cleanEmail,
+          role: "Admin",
+          status: "active",
+        });
+        showToast?.(`${cleanEmail} will be an LMS Admin on first sign-in`);
+      }
+      setAdminGrantName("");
+      setAdminGrantEmail("");
+    } catch (err) {
+      alert("Admin access update failed: " + err.message);
+    } finally {
+      setGrantingAdmin(false);
     }
   };
 
@@ -2793,6 +2838,57 @@ const AdminSettingsPage = ({ goRoute } = {}) => {
               <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <span className="chip chip-green">{ALL_USERS.filter(u => u.adminSource === "google").length} inherited from Google</span>
                 <span className="chip chip-grey">{ALL_USERS.filter(u => u.adminSource === "granted").length} manually granted</span>
+              </div>
+              <div style={{ marginTop: 22, paddingTop: 18, borderTop: "1px solid #ececec" }}>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+                  <div>
+                    <div className="eyebrow-sm">Manual admin grant</div>
+                    <h3 style={{ fontSize: 18, fontWeight: 800, margin: "4px 0 4px" }}>Add an LMS admin</h3>
+                    <p className="text-muted text-sm" style={{ margin: 0 }}>
+                      Promote an existing person by email, or create a pre-login admin record for someone who has not signed in yet.
+                    </p>
+                  </div>
+                  {goRoute && (
+                    <button className="btn btn-ghost btn-sm" onClick={() => goRoute("admin-users")}>
+                      <Icon name="users" size={14}/> Open People
+                    </button>
+                  )}
+                </div>
+                <form onSubmit={grantAdminAccess} style={{ display: "grid", gridTemplateColumns: "minmax(180px, .8fr) minmax(260px, 1fr) auto", gap: 10, alignItems: "end" }}>
+                  <div className="cd-field" style={{ margin: 0 }}>
+                    <label>Name <span className="text-muted" style={{ fontWeight: 500 }}>(optional)</span></label>
+                    <input className="cd-input" value={adminGrantName} onChange={e => setAdminGrantName(e.target.value)} placeholder="Jane Admin" />
+                  </div>
+                  <div className="cd-field" style={{ margin: 0 }}>
+                    <label>Email</label>
+                    <input className="cd-input" type="email" value={adminGrantEmail} onChange={e => setAdminGrantEmail(e.target.value)} placeholder="admin@example.com" required />
+                  </div>
+                  <button className="btn btn-primary btn-sm" type="submit" disabled={grantingAdmin}>
+                    <Icon name="plus" size={14}/> {grantingAdmin ? "Adding..." : "Add admin"}
+                  </button>
+                </form>
+              </div>
+              <div style={{ marginTop: 22, paddingTop: 18, borderTop: "1px solid #ececec" }}>
+                <div className="eyebrow-sm" style={{ marginBottom: 10 }}>Current LMS admins</div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {ALL_USERS.filter(u => u.isAdmin).length === 0 && (
+                    <div className="empty" style={{ padding: 14 }}>No LMS admins found in the user directory.</div>
+                  )}
+                  {ALL_USERS.filter(u => u.isAdmin).map(u => (
+                    <div key={u.id || u.email} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", border: "1px solid #ececec", borderRadius: 10 }}>
+                      <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#f0f9e6", color: "#2e5a12", display: "grid", placeItems: "center", fontWeight: 900, fontSize: 12 }}>
+                        {(u.name || u.email || "?").split(" ").slice(0, 2).map(part => part[0]).join("").toUpperCase()}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 800, fontSize: 13 }}>{u.name || u.email || "Unnamed admin"}</div>
+                        <div className="text-xs text-muted">{u.email || "No email"}{u.needsFirstLogin ? " - pending first sign-in" : ""}</div>
+                      </div>
+                      <span className={u.adminSource === "google" ? "chip chip-green" : "chip chip-grey"}>
+                        {u.adminSource === "google" ? "Google inherited" : "Manual"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
