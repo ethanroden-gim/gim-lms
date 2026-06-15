@@ -3,12 +3,33 @@
 // =========================================================
 
 const courseEditorCategoryNames = () => window.getCategoryNames?.() || window.CATEGORIES || [];
+const courseEditorCompanyName = (companyId) =>
+  (window.getCompanyById?.(companyId) || getCompanyDocs().find(c => c.id === companyId))?.name || "";
+const courseEditorDepartmentLabel = (department) => {
+  const co = courseEditorCompanyName(department?.companyId);
+  return co ? `${co} - ${department.name}` : department?.name || "";
+};
+const courseEditorSelectedCompanyIds = (course) =>
+  (course?.companyVisibility || "all") === "selected"
+    ? (course.allowedCompanyIds || [])
+    : getCompanyDocs().map(co => co.id);
+const courseEditorDepartmentOptions = (course) => {
+  const selectedCompanyIds = new Set(courseEditorSelectedCompanyIds(course));
+  const options = (DEPARTMENT_DOCS || [])
+    .filter(d => !d.companyId || selectedCompanyIds.has(d.companyId))
+    .sort((a, b) => courseEditorDepartmentLabel(a).localeCompare(courseEditorDepartmentLabel(b)));
+  if (!course?.departmentId && course?.dept && course.dept !== "all" && !options.some(d => d.name === course.dept)) {
+    options.unshift({ id: `legacy-${course.dept}`, name: course.dept, companyId: "", legacy: true });
+  }
+  return options;
+};
 
 const blankCourse = () => ({
   id: "new",
   title: "",
   cat: courseEditorCategoryNames()[0] || "",
   dept: "",
+  departmentId: "",
   required: false,
   duration: 30,
   description: "",
@@ -34,6 +55,7 @@ const loadEditCourse = (id) => {
     title: c.title || "",
     cat: c.cat || "",
     dept: c.dept || "",
+    departmentId: c.departmentId || "",
     required: !!c.required,
     duration: c.duration || 30,
     description: c.description || "",
@@ -282,7 +304,38 @@ const AdminCourseEditorPage = ({ mode, courseId, goBack }) => {
 // Tabs
 // =========================================================
 
-const DetailsTab = ({ c, set }) => (
+const DetailsTab = ({ c, set }) => {
+  const companyDocs = getCompanyDocs();
+  const departmentOptions = courseEditorDepartmentOptions(c);
+  const onVisibilityChange = (value) => {
+    const patch = {
+      companyVisibility: value,
+      allowedCompanyIds: value === "all" ? [] : (c.allowedCompanyIds || []),
+    };
+    const nextDepartments = courseEditorDepartmentOptions({ ...c, ...patch });
+    if (c.departmentId && !nextDepartments.some(d => d.id === c.departmentId)) {
+      patch.departmentId = "";
+      patch.dept = "";
+    } else if (!c.departmentId && c.dept && c.dept !== "all" && !nextDepartments.some(d => d.name === c.dept)) {
+      patch.dept = "";
+    }
+    set(patch);
+  };
+  const onToggleCompany = (companyId, checked) => {
+    const current = c.allowedCompanyIds || [];
+    const nextIds = checked ? [...current, companyId] : current.filter(id => id !== companyId);
+    const patch = { allowedCompanyIds: nextIds };
+    const nextDepartments = courseEditorDepartmentOptions({ ...c, companyVisibility: "selected", allowedCompanyIds: nextIds });
+    if (c.departmentId && !nextDepartments.some(d => d.id === c.departmentId)) {
+      patch.departmentId = "";
+      patch.dept = "";
+    } else if (!c.departmentId && c.dept && c.dept !== "all" && !nextDepartments.some(d => d.name === c.dept)) {
+      patch.dept = "";
+    }
+    set(patch);
+  };
+
+  return (
   <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24 }}>
     <div className="card card-pad">
       <div className="cd-section-title">Basic info</div>
@@ -298,41 +351,21 @@ const DetailsTab = ({ c, set }) => (
           placeholder="What learners will get out of this course." />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gap: 14 }}>
         <div className="cd-field">
-          <label>Category</label>
-          <select className="cd-input" value={c.cat} onChange={e => set({ cat: e.target.value })}>
-            {Array.from(new Set([c.cat, ...courseEditorCategoryNames()].filter(Boolean))).map(x => <option key={x}>{x}</option>)}
-          </select>
-        </div>
-        <div className="cd-field">
-          <label>Department</label>
-          <select className="cd-input" value={c.dept || ""} onChange={e => set({ dept: e.target.value })}>
-            <option value="">— Pick a department —</option>
-            {DEPARTMENT_DOCS.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-            <option value="all">All departments</option>
-          </select>
-        </div>
-        <div className="cd-field" style={{ gridColumn: "1 / -1" }}>
           <label>Company visibility</label>
-          <select className="cd-input" value={c.companyVisibility || "all"} onChange={e => set({
-            companyVisibility: e.target.value,
-            allowedCompanyIds: e.target.value === "all" ? [] : (c.allowedCompanyIds || []),
-          })}>
+          <select className="cd-input" value={c.companyVisibility || "all"} onChange={e => onVisibilityChange(e.target.value)}>
             <option value="all">All companies</option>
             <option value="selected">Selected companies only</option>
           </select>
           {(c.companyVisibility || "all") === "selected" && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-              {getCompanyDocs().map(co => (
+              {companyDocs.map(co => (
                 <label key={co.id} className="chip chip-grey" style={{ cursor: "pointer" }}>
                   <input
                     type="checkbox"
                     checked={(c.allowedCompanyIds || []).includes(co.id)}
-                    onChange={e => {
-                      const current = c.allowedCompanyIds || [];
-                      set({ allowedCompanyIds: e.target.checked ? [...current, co.id] : current.filter(id => id !== co.id) });
-                    }}
+                    onChange={e => onToggleCompany(co.id, e.target.checked)}
                   /> {co.name}
                 </label>
               ))}
@@ -342,7 +375,46 @@ const DetailsTab = ({ c, set }) => (
             Learners only see courses available to their email-domain company.
           </div>
         </div>
-        <div className="cd-field">
+        <div className="cd-field" style={{ order: 2 }}>
+          <label>Department</label>
+          <select
+            className="cd-input"
+            value={c.departmentId || (c.dept === "all" ? "all" : "")}
+            onChange={e => {
+              if (e.target.value === "all") {
+                set({ dept: "all", departmentId: "" });
+                return;
+              }
+              const selectedDept = departmentOptions.find(d => d.id === e.target.value);
+              set(selectedDept ? { dept: selectedDept.name, departmentId: selectedDept.legacy ? "" : selectedDept.id } : { dept: "", departmentId: "" });
+            }}
+          >
+            <option value="">— Pick a department —</option>
+            {departmentOptions.map(d => (
+              <option key={d.id || `${d.companyId || "legacy"}-${d.name}`} value={d.id}>
+                {courseEditorDepartmentLabel(d)}{d.legacy ? " (current value)" : ""}
+              </option>
+            ))}
+            <option value="all">All departments</option>
+          </select>
+          <div className="text-xs text-muted" style={{ marginTop: 4 }}>
+            Department options are filtered to the selected company visibility above.
+          </div>
+        </div>
+        <div style={{ order: 3, padding: 14, border: "1px solid #e6e6e6", borderRadius: 10, background: "#fafafa" }}>
+          <div className="eyebrow-sm" style={{ marginBottom: 8 }}>Course taxonomy</div>
+          <div className="cd-field" style={{ margin: 0 }}>
+            <label>Training category</label>
+            <select className="cd-input" value={c.cat} onChange={e => set({ cat: e.target.value })}>
+              {Array.from(new Set([c.cat, ...courseEditorCategoryNames()].filter(Boolean))).map(x => <option key={x}>{x}</option>)}
+            </select>
+            <div className="text-xs text-muted" style={{ marginTop: 4 }}>
+              Categories organize the catalog and browse experience. They are separate from company departments.
+            </div>
+          </div>
+        </div>
+
+        <div className="cd-field" style={{ order: 4 }}>
           <label>Duration (minutes)</label>
           <input className="cd-input" type="number" min="0"
             value={Math.round(courseRollupMinutes(c.modules) || c.duration || 0)}
@@ -380,7 +452,8 @@ const DetailsTab = ({ c, set }) => (
       </div>
     </div>
   </div>
-);
+  );
+};
 
 // Convert common Drive / hosted image URLs into a direct-loadable image URL
 const normaliseImageUrl = (url) => {
