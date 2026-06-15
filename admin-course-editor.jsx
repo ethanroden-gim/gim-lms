@@ -60,6 +60,15 @@ const LESSON_TYPES = [
   { id: "gform",   label: "Google Form", icon: "doc" },
 ];
 
+const isKnowledgeCheckAssessment = (assessment) => assessment?.type === "quiz";
+const isFinalCourseAssessment = (assessment) => assessment && assessment.status !== "archived" && !isKnowledgeCheckAssessment(assessment);
+const courseEditorAssessments = (courseId) =>
+  (window.ASSESSMENTS || []).filter(a => a.courseId === courseId && a.status !== "archived");
+const courseEditorFinalAssessment = (courseId) =>
+  courseEditorAssessments(courseId).find(isFinalCourseAssessment) || null;
+const courseEditorKnowledgeChecks = (courseId) =>
+  courseEditorAssessments(courseId).filter(isKnowledgeCheckAssessment);
+
 // Parse a lesson's `dur` value into minutes for the course-duration rollup.
 // Video format: "M:SS" or "H:MM:SS" (e.g. "5:23", "1:23:45").
 // Article / PDF / external link / Google Form: a whole number of minutes.
@@ -619,8 +628,7 @@ const LessonRow = ({ l, course, moduleIndex, lessonIndex, onChange, onRemove, on
   const showUrlField = l.type === "video" || l.type === "link" || l.type === "pdf" || l.type === "gform";
   const showBodyButton = l.type === "article";
   const showHtmlButton = l.type === "html";
-  const courseAssessments = (window.ASSESSMENTS || [])
-    .filter(a => a.courseId === course?.id && a.status !== "archived");
+  const courseAssessments = courseEditorKnowledgeChecks(course?.id);
   const selectedAssessment = courseAssessments.find(a => a.id === l.assessmentId);
   const canLinkQuiz = course?.id && course.id !== "new";
   const openNewKnowledgeCheck = () => {
@@ -850,10 +858,10 @@ const LessonRow = ({ l, course, moduleIndex, lessonIndex, onChange, onRemove, on
                   });
                 }}
               >
-                <option value="">Choose a quiz / assessment...</option>
+                <option value="">Choose a knowledge-check quiz...</option>
                 {courseAssessments.map(a => (
                   <option key={a.id} value={a.id}>
-                    {a.title} ({a.type === "quiz" ? "quiz" : "final certification"}, {a.questions?.length || 0} q, {a.passMark || 100}%)
+                    {a.title} (quiz, {a.questions?.length || 0} q, {a.passMark || 100}%)
                   </option>
                 ))}
               </select>
@@ -878,7 +886,7 @@ const LessonRow = ({ l, course, moduleIndex, lessonIndex, onChange, onRemove, on
 };
 
 const AssessmentTab = ({ c, set, isNew, onOpenAssessment }) => {
-  const linked = !isNew && c.id ? (window.ASSESSMENTS || []).find(a => a.courseId === c.id && a.status !== "archived") : null;
+  const linked = !isNew && c.id ? courseEditorFinalAssessment(c.id) : null;
   const cantEditYet = isNew || c.id === "new" || !c.id;
 
   return (
